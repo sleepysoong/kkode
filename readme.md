@@ -37,7 +37,7 @@ Implemented:
 - `providers/omniroute`
   - OmniRoute OpenAI-compatible `/v1/responses` adapter
   - OmniRoute session/cache/idempotency/progress headers
-  - model listing, health check, and A2A `message/send` helper
+  - model listing, health check, thinking-budget, fallback-chain, cache/rate/session, translator, and A2A `message/send` helpers
 - `workspace`
   - sandboxed workspace file/list/search tools
   - command execution with approval policy
@@ -97,7 +97,7 @@ router := llm.NewRouter()
 router.Register("openai", openai.New(openai.Config{APIKey: key}))
 router.Register("copilot", copilot.New(copilot.Config{}))
 router.Register("codex", codexcli.New(codexcli.Config{Ephemeral: true}))
-router.Register("omniroute", omniroute.New(omniroute.Config{BaseURL: "http://localhost:20128/v1"}))
+router.Register("omniroute", omniroute.NewFromGatewayBase("http://localhost:20128", omniroute.Config{}))
 
 resp, err := router.Generate(ctx, llm.Request{
     Model: "openai/gpt-5-mini",

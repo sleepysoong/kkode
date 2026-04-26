@@ -118,10 +118,13 @@ It does not own local tools; local tools stay in `llm.ToolRegistry` or `workspac
 
 `providers/omniroute` wraps OmniRoute as a gateway provider. It delegates generation and streaming to the OpenAI-compatible `/v1/responses` surface, then adds OmniRoute-specific control-plane helpers:
 
-- `ListModels` for `/v1/models`
+- `ListModels` for `/v1/models` or OpenAPI `/api/v1/models`
 - `Health` for `/api/monitoring/health`
+- thinking-budget, fallback-chain, cache/rate/session, and translator helpers from `docs/openapi.yaml`
 - `A2ASend` for JSON-RPC `message/send` on `/a2a`
 - headers for sticky sessions, cache bypass, progress, and idempotency
+
+The provider has two constructors because OmniRoute docs expose both external gateway-style `/v1` paths and OpenAPI `/api/v1` paths: `NewFromGatewayBase` and `NewFromOpenAPIServer`.
 
 OmniRoute MCP integration should usually be modeled as an `llm.MCPServer` attached to session providers, while normal inference should use the OpenAI-compatible gateway path.
 

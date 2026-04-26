@@ -276,3 +276,70 @@ resp, err := router.Generate(ctx, llm.Request{
 - Auto-Combo: https://github.com/diegosouzapw/OmniRoute/blob/main/docs/AUTO-COMBO.md
 - Context Relay: https://github.com/diegosouzapw/OmniRoute/blob/main/docs/features/context-relay.md
 - Environment Config: https://github.com/diegosouzapw/OmniRoute/blob/main/docs/ENVIRONMENT.md
+
+## 추가 확인: docs/openapi.yaml 분석
+
+요청에 따라 `docs/openapi.yaml`도 별도로 파싱했다. clone 시점의 spec 정보:
+
+- OpenAPI version: `3.1.0`
+- OmniRoute API version: `3.7.0`
+- paths: `113`
+- component schemas: `15`
+
+### 우리 프로젝트에 도움이 되는 점
+
+#### 1. `/v1` 문서와 `/api/v1` OpenAPI path 차이를 흡수해야 함
+
+User Guide/README는 CLI integration에서 `http://localhost:20128/v1`을 강조한다. 반면 `docs/openapi.yaml`은 server root `http://localhost:20128` 아래 path를 `/api/v1/responses`, `/api/v1/chat/completions`, `/api/v1/models`처럼 정의한다.
+
+OmniRoute codebase에는 Next.js route가 `src/app/api/v1/...`에 실제로 존재하고, UI 문서/rewriter는 외부 친화 path `/v1/...`도 보여준다. 따라서 kkode provider는 둘 다 받아야 한다.
+
+반영:
+
+- `omniroute.New(...)` 기본값은 사용자/CLI guide 친화 `http://localhost:20128/v1` 유지.
+- `omniroute.NewFromOpenAPIServer("http://localhost:20128", cfg)` 추가: OpenAPI spec 기준 `http://localhost:20128/api/v1` 사용.
+- `omniroute.NewFromGatewayBase("http://localhost:20128", cfg)` 추가: User Guide 기준 `http://localhost:20128/v1` 사용.
+
+#### 2. Responses schema는 느슨하므로 OpenAI adapter 재사용이 맞음
+
+`/api/v1/responses` spec은 request schema를 `type: object`, response를 “Response object or SSE stream”으로만 둔다. 즉 OmniRoute가 Responses payload를 넓게 proxy/translate하는 구조라서, 별도 강한 OmniRoute-specific Responses type을 만들기보다 기존 `providers/openai` request/response/SSE mapping을 재사용하는 것이 맞다.
+
+#### 3. Management/control-plane helper 후보가 명확해짐
+
+OpenAPI에서 kkode에 특히 도움이 되는 endpoint:
+
+- `GET /api/models/catalog` — provider/model catalog 동기화 후보.
+- `GET/POST /api/combos` — routing combo 생성/조회.
+- `GET /api/combos/metrics` — combo 성능 관찰.
+- `GET /api/rate-limits` — account/provider rate limit 상태.
+- `GET /api/sessions` — active session tracking.
+- `GET /api/cache/stats` — cache 상태.
+- `GET/PUT /api/settings/thinking-budget` — reasoning/thinking budget 제어.
+- `GET/PATCH /api/resilience` — queue/cooldown/circuit breaker 설정.
+- `GET/POST/DELETE /api/fallback/chains` — model fallback chain 관리.
+- `POST /api/translator/translate` — Anthropic/OpenAI/Gemini 등 format 변환 debug에 유용.
+
+이번 반영:
+
+- `GetThinkingBudget`
+- `UpdateThinkingBudget`
+- `Translate`
+- `ListFallbackChains`
+- `CreateFallbackChain`
+- `DeleteFallbackChain`
+- `CacheStats`
+- `RateLimits`
+- `Sessions`
+
+#### 4. 향후 codegen 후보
+
+OpenAPI spec은 113개 path를 포함하지만 schema가 상세하지 않은 endpoint도 많다. 지금 당장 전체 client codegen은 과하고, 다음 전략이 좋다.
+
+1. kkode core에 직접 필요한 generation path는 손작성 adapter 유지.
+2. management API는 endpoint별로 필요한 것만 thin helper 추가.
+3. `/api/models/catalog`, `/api/combos`, `/api/combos/metrics`, `/api/resilience`는 다음 우선순위.
+4. spec이 더 정교해지면 `oapi-codegen` 같은 도구로 management client를 분리 검토.
+
+### 결론
+
+`docs/openapi.yaml`은 우리 프로젝트에 **도움 된다**. 특히 `/api/v1` path variant, management API 목록, thinking-budget/fallback/resilience/translator endpoint를 확인하는 데 유용했다. 다만 Responses schema가 느슨하므로 provider 핵심 generation은 기존 OpenAI-compatible adapter를 재사용하고, OmniRoute-specific 기능은 control-plane helper로 추가하는 방향이 맞다.

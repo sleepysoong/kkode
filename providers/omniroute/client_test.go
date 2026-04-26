@@ -67,3 +67,67 @@ func TestDeriveAdminBaseURL(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestOpenAPIConstructorAndManagementHelpers(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(ModelList{Object: "list", Data: []Model{{ID: "auto"}}})
+		case "/api/settings/thinking-budget":
+			if r.Method == http.MethodGet {
+				_, _ = w.Write([]byte(`{"mode":"auto","customBudget":1024,"effortLevel":"medium"}`))
+			} else {
+				_, _ = w.Write([]byte(`{"mode":"manual","customBudget":2048,"effortLevel":"high"}`))
+			}
+		case "/api/translator/translate":
+			_, _ = w.Write([]byte(`{"targetFormat":"openai","body":{"model":"auto"}}`))
+		case "/api/fallback/chains":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/api/cache/stats", "/api/rate-limits", "/api/sessions":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	client := NewFromOpenAPIServer(server.URL, Config{})
+	models, err := client.ListModels(context.Background())
+	if err != nil || models.Data[0].ID != "auto" {
+		t.Fatalf("models=%#v err=%v", models, err)
+	}
+	budget, err := client.GetThinkingBudget(context.Background())
+	if err != nil || budget.EffortLevel != "medium" || budget.CustomBudget != 1024 {
+		t.Fatalf("budget=%#v err=%v", budget, err)
+	}
+	budget, err = client.UpdateThinkingBudget(context.Background(), ThinkingBudget{Mode: "manual", CustomBudget: 2048, EffortLevel: "high"})
+	if err != nil || budget.EffortLevel != "high" {
+		t.Fatalf("updated budget=%#v err=%v", budget, err)
+	}
+	translated, err := client.Translate(context.Background(), TranslateRequest{SourceFormat: "anthropic", TargetFormat: "openai", Body: map[string]any{"model": "auto"}})
+	if err != nil || translated["targetFormat"] != "openai" {
+		t.Fatalf("translated=%#v err=%v", translated, err)
+	}
+	if _, err := client.ListFallbackChains(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.CreateFallbackChain(context.Background(), CreateFallbackChainRequest{Model: "auto", Chain: []FallbackChain{{Provider: "openai", Priority: 1, Enabled: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.DeleteFallbackChain(context.Background(), "auto"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.CacheStats(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RateLimits(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Sessions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if paths[0] != "/api/v1/models" {
+		t.Fatalf("constructor used wrong model path: %v", paths)
+	}
+}
