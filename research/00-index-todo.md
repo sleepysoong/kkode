@@ -13,6 +13,7 @@ Git: `git init` 완료
 - [x] `05-openai-compatible-provider-design.md` — OpenAI Responses API 중심 multi-provider 설계/구현 메모
 - [x] `06-copilot-sdk-provider-followup.md` — Copilot SDK tool/session/hook 후속 조사 및 provider adapter 메모
 - [x] `07-implementation-todo.md` — 구현 TODO와 검증 명령
+- [x] `08-omniroute-provider.md` — OmniRoute API/MCP/A2A 조사 및 provider 구현 메모
 
 ## 검증 원칙
 

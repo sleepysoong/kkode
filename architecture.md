@@ -23,6 +23,7 @@ llm/                 Provider-neutral contracts and loops
 providers/openai/    OpenAI-compatible /v1/responses provider
 providers/copilot/   GitHub Copilot SDK session adapter
 providers/codexcli/  Codex CLI subprocess adapter
+providers/omniroute/ OmniRoute gateway adapter
 workspace/           Local workspace tools and safety boundaries
 transcript/          JSON transcript persistence
 research/            Investigation notes and TODOs
@@ -111,6 +112,18 @@ This avoids losing reasoning/tool-call state between turns.
 - response item parsing
 
 It does not own local tools; local tools stay in `llm.ToolRegistry` or `workspace`.
+
+
+### OmniRoute
+
+`providers/omniroute` wraps OmniRoute as a gateway provider. It delegates generation and streaming to the OpenAI-compatible `/v1/responses` surface, then adds OmniRoute-specific control-plane helpers:
+
+- `ListModels` for `/v1/models`
+- `Health` for `/api/monitoring/health`
+- `A2ASend` for JSON-RPC `message/send` on `/a2a`
+- headers for sticky sessions, cache bypass, progress, and idempotency
+
+OmniRoute MCP integration should usually be modeled as an `llm.MCPServer` attached to session providers, while normal inference should use the OpenAI-compatible gateway path.
 
 ### GitHub Copilot SDK
 

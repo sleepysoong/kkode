@@ -20,6 +20,16 @@
 - [x] Copilot tool adapter 테스트
 - [x] Copilot live smoke test: `gpt-5-mini` -> `OK`
 
+## 추가 완료: OmniRoute
+
+- [x] OmniRoute 문서 조사 및 `research/08-omniroute-provider.md` 저장
+- [x] `providers/omniroute` 추가
+- [x] OpenAI-compatible `/v1/responses` delegation
+- [x] `X-Session-Id`, `X-OmniRoute-No-Cache`, `X-OmniRoute-Progress`, idempotency/request headers 지원
+- [x] `/v1/models`, `/api/monitoring/health`, `/a2a` helper 구현
+- [x] unit tests 추가
+- [x] `scripts/omniroute-smoke.sh` 추가: OmniRoute 미실행 시 skip
+
 ## 다음 구현 TODO
 
 ### Core

@@ -34,6 +34,10 @@ Implemented:
   - Codex CLI `codex exec --json` adapter
   - JSONL event stream parsing
   - smoke test script for ChatGPT/Codex-account Codex models
+- `providers/omniroute`
+  - OmniRoute OpenAI-compatible `/v1/responses` adapter
+  - OmniRoute session/cache/idempotency/progress headers
+  - model listing, health check, and A2A `message/send` helper
 - `workspace`
   - sandboxed workspace file/list/search tools
   - command execution with approval policy
@@ -54,6 +58,7 @@ Additional smoke checks:
 ./scripts/copilot-smoke.sh gpt-5-mini
 ./scripts/copilot-tool-smoke.sh gpt-5-mini
 ./scripts/codexcli-smoke.sh gpt-5.3-codex
+./scripts/omniroute-smoke.sh   # skips if OmniRoute is not running
 ```
 
 OpenAI live test is skipped unless `OPENAI_API_KEY` is set:
@@ -92,6 +97,7 @@ router := llm.NewRouter()
 router.Register("openai", openai.New(openai.Config{APIKey: key}))
 router.Register("copilot", copilot.New(copilot.Config{}))
 router.Register("codex", codexcli.New(codexcli.Config{Ephemeral: true}))
+router.Register("omniroute", omniroute.New(omniroute.Config{BaseURL: "http://localhost:20128/v1"}))
 
 resp, err := router.Generate(ctx, llm.Request{
     Model: "openai/gpt-5-mini",
@@ -102,6 +108,7 @@ resp, err := router.Generate(ctx, llm.Request{
 ## Docs
 
 - [`architecture.md`](architecture.md) — implementation architecture and provider boundaries.
+- [`research/08-omniroute-provider.md`](research/08-omniroute-provider.md) — OmniRoute API/MCP/A2A research and adapter notes.
 - [`research/`](research/) — source-backed research notes and implementation TODOs.
 
 ## Commit policy
