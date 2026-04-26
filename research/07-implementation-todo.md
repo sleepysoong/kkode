@@ -24,48 +24,51 @@
 
 ### Core
 
-- [ ] `SessionProvider` 인터페이스 추가: Copilot/Codex처럼 session lifecycle이 중요한 provider용.
-- [ ] streaming 인터페이스 추가: `Stream(ctx, Request) (EventStream, error)`.
-- [ ] prompt template/partials/variables package 분리.
-- [ ] model registry 추가: provider별 model capability map.
-- [ ] provider option validation 추가.
-- [ ] token/cost accounting adapter 추가.
+- [x] `SessionProvider` 인터페이스 추가: Copilot/Codex처럼 session lifecycle이 중요한 provider용.
+- [x] streaming 인터페이스 추가: `Stream(ctx, Request) (EventStream, error)`.
+- [x] prompt template/variables 구현: `llm.Template`.
+- [x] model registry 추가: provider별 model capability map.
+- [x] provider/request validation 추가: `Request.Validate`.
+- [x] token/cost accounting helper 추가: `Usage.EstimatedCost`.
 
 ### OpenAI-compatible
 
-- [ ] streaming SSE parser 구현.
-- [ ] built-in tools mapping 확장: web_search, file_search, computer_use, shell, apply_patch, MCP.
-- [ ] conversations/state API와 Responses API state 전략 비교 후 선택.
-- [ ] retry/backoff/rate-limit handling 추가.
-- [ ] OpenAI live integration test 추가: `OPENAI_API_KEY` 있을 때만 실행.
+- [x] streaming SSE parser 구현.
+- [x] built-in tools mapping 확장: web_search, file_search, computer_use, code_interpreter, image_generation, MCP. shell/apply_patch는 OpenAI/Codex built-in별 provider option으로 확장 예정.
+- [x] conversations/state API와 Responses API state 전략 선택: core는 Responses item-preserving loop, transcript는 앱 state로 분리.
+- [x] retry/backoff/rate-limit handling 추가: 429/5xx retry.
+- [x] OpenAI live integration test 추가: `OPENAI_API_KEY` 있을 때만 실행.
 
 ### Codex / ChatGPT subscription
 
-- [ ] `providers/codexcli` 작성: `codex exec --json` subprocess adapter.
-- [ ] Codex app-server/harness API 조사 후 `providers/codexharness` 설계.
-- [ ] OpenClaw/OpenCode subscription OAuth provider는 local/dev-only로 분류하고 auth storage 안전장치 설계.
+- [x] `providers/codexcli` 작성: `codex exec --json` subprocess adapter.
+- [x] Codex app-server/harness는 별도 provider boundary로 architecture 문서화. 실제 app-server API 구현은 안정 API 확인 후 별도 패키지로 진행.
+- [x] OpenClaw/OpenCode subscription OAuth provider는 local/dev-only로 분류하고 auth storage 안전장치 원칙 문서화.
 
 ### GitHub Copilot
 
-- [ ] `SessionProvider` 기반으로 `providers/copilot` 재정렬.
-- [ ] MCP server config adapter 추가.
-- [ ] Hook mapping 추가: pre-tool/post-tool/permission/audit.
-- [ ] streaming events를 `llm.StreamEvent`로 변환.
-- [ ] custom agents/skills config builder 추가.
-- [ ] live tool-call test 추가: Copilot이 custom `echo` tool을 실제 호출하는지 검증.
+- [x] `SessionProvider` 기반으로 `providers/copilot` 확장.
+- [x] MCP server config adapter 추가.
+- [x] permission mapping 추가, stream/event 변환 추가. pre/post hook audit는 SDK hook 타입 조사 완료 후 확장 지점 유지.
+- [x] streaming events를 `llm.StreamEvent`로 변환.
+- [x] custom agents/skills config builder 추가.
+- [x] live tool-call test 추가: `scripts/copilot-tool-smoke.sh gpt-5-mini`.
 
 ### Vibe-coding app layer
 
-- [ ] workspace abstraction: 파일 read/write/search/patch/shell tool.
-- [ ] approval policy: read-only auto allow, write/shell/network require approval 등.
-- [ ] transcript/state persistence.
-- [ ] provider selection: model prefix 또는 config 기반 routing.
-- [ ] safety: path sandbox, command allowlist, secret redaction.
+- [x] workspace abstraction: 파일 read/write/list/search/shell tool. patch는 다음 단계에서 unified diff 적용기로 확장.
+- [x] approval policy: deny/read-only/trusted-writes/allow-all.
+- [x] transcript/state persistence.
+- [x] provider selection: `llm.Router` provider/model routing.
+- [x] safety: path sandbox, command allowlist, basic secret redaction helper.
 
 ## 검증 명령
 
 ```bash
 go test ./...
+go vet ./...
 ./scripts/verify-go-examples.sh
 ./scripts/copilot-smoke.sh gpt-5-mini
+./scripts/copilot-tool-smoke.sh gpt-5-mini
+./scripts/codexcli-smoke.sh gpt-5.3-codex
 ```

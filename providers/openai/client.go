@@ -22,6 +22,13 @@ type Config struct {
 	APIKey     string
 	HTTPClient *http.Client
 	Headers    map[string]string
+	Retry      RetryConfig
+}
+
+type RetryConfig struct {
+	MaxRetries int
+	MinBackoff time.Duration
+	MaxBackoff time.Duration
 }
 
 type Client struct {
@@ -29,6 +36,7 @@ type Client struct {
 	apiKey     string
 	httpClient *http.Client
 	headers    map[string]string
+	retry      RetryConfig
 }
 
 func New(cfg Config) *Client {
@@ -40,7 +48,17 @@ func New(cfg Config) *Client {
 	if hc == nil {
 		hc = &http.Client{Timeout: 120 * time.Second}
 	}
-	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: cfg.Headers}
+	retry := cfg.Retry
+	if retry.MaxRetries == 0 {
+		retry.MaxRetries = 2
+	}
+	if retry.MinBackoff == 0 {
+		retry.MinBackoff = 250 * time.Millisecond
+	}
+	if retry.MaxBackoff == 0 {
+		retry.MaxBackoff = 2 * time.Second
+	}
+	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: cfg.Headers, retry: retry}
 }
 
 func (c *Client) Name() string { return "openai-compatible" }
@@ -84,7 +102,7 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 	for k, v := range c.headers {
 		hreq.Header.Set(k, v)
 	}
-	res, err := c.httpClient.Do(hreq)
+	res, err := c.do(hreq, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +289,13 @@ func buildTool(tool llm.Tool) map[string]any {
 	if kind == "" {
 		kind = llm.ToolFunction
 	}
+	if kind == llm.ToolBuiltin {
+		m := map[string]any{"type": tool.Name}
+		for k, v := range tool.ProviderOptions {
+			m[k] = v
+		}
+		return m
+	}
 	m := map[string]any{"type": string(kind), "name": tool.Name}
 	if tool.Description != "" {
 		m["description"] = tool.Description
@@ -326,4 +351,40 @@ func buildTextFormat(tf llm.TextFormat) map[string]any {
 	default:
 		return map[string]any{"type": tf.Type}
 	}
+}
+
+func (c *Client) do(req *http.Request, payload []byte) (*http.Response, error) {
+	attempts := c.retry.MaxRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			backoff := c.retry.MinBackoff << (i - 1)
+			if backoff > c.retry.MaxBackoff {
+				backoff = c.retry.MaxBackoff
+			}
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(backoff):
+			}
+		}
+		clone := req.Clone(req.Context())
+		clone.Body = io.NopCloser(bytes.NewReader(payload))
+		res, err := c.httpClient.Do(clone)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+			lastErr = fmt.Errorf("retryable status: %s", res.Status)
+			_, _ = io.Copy(io.Discard, res.Body)
+			_ = res.Body.Close()
+			continue
+		}
+		return res, nil
+	}
+	return nil, lastErr
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -137,4 +138,78 @@ func TestClientGenerateAgainstHTTPServer(t *testing.T) {
 	if gotBody["model"] != "gpt-5-mini" || resp.Text != "ok" {
 		t.Fatalf("unexpected body/response: %#v %#v", gotBody, resp)
 	}
+}
+
+func TestBuildResponsesRequestBuiltinTool(t *testing.T) {
+	body, err := BuildResponsesRequest(llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("search")}, Tools: []llm.Tool{WebSearchTool(map[string]any{"search_context_size": "low"})}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := body["tools"].([]any)[0].(map[string]any)
+	if tool["type"] != "web_search_preview" || tool["search_context_size"] != "low" {
+		t.Fatalf("unexpected builtin tool: %#v", tool)
+	}
+}
+
+func TestStreamParsesSSE(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"he\"}\n\n"))
+		_, _ = w.Write([]byte("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"model\":\"gpt\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}]}}\n\n"))
+	}))
+	defer server.Close()
+	client := New(Config{BaseURL: server.URL + "/v1"})
+	stream, err := client.Stream(context.Background(), llm.Request{Model: "gpt", Messages: []llm.Message{llm.UserText("hi")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	ev, err := stream.Recv()
+	if err != nil || ev.Type != llm.StreamEventTextDelta || ev.Delta != "he" {
+		t.Fatalf("ev=%#v err=%v", ev, err)
+	}
+	ev, err = stream.Recv()
+	if err != nil || ev.Type != llm.StreamEventCompleted || ev.Response.Text != "hello" {
+		t.Fatalf("ev=%#v err=%v", ev, err)
+	}
+}
+
+func TestClientRetriesRetryableStatus(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			http.Error(w, "try again", http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"r","model":"gpt","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}`))
+	}))
+	defer server.Close()
+	client := New(Config{BaseURL: server.URL + "/v1", Retry: RetryConfig{MaxRetries: 1}})
+	resp, err := client.Generate(context.Background(), llm.Request{Model: "gpt", Messages: []llm.Message{llm.UserText("hi")}})
+	if err != nil || resp.Text != "ok" || calls != 2 {
+		t.Fatalf("resp=%#v calls=%d err=%v", resp, calls, err)
+	}
+}
+
+func TestOpenAILiveIfConfigured(t *testing.T) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+	client := New(Config{APIKey: key})
+	resp, err := client.Generate(context.Background(), llm.Request{Model: firstEnv("OPENAI_TEST_MODEL", "gpt-5-mini"), Messages: []llm.Message{llm.UserText("Reply with exactly OK")}, MaxOutputTokens: 16, Store: llm.Bool(false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text == "" {
+		t.Fatalf("empty live response: %#v", resp)
+	}
+}
+
+func firstEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

@@ -204,3 +204,165 @@ func firstNonEmpty(v, fallback string) string {
 	}
 	return fallback
 }
+
+func (c *Client) NewSession(ctx context.Context, req llm.SessionRequest) (llm.Session, error) {
+	client, err := c.ensureClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	config := c.sessionConfig(req)
+	session, err := client.CreateSession(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	return &Session{client: c, session: session, model: req.Model}, nil
+}
+
+func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
+	sess, err := c.NewSession(ctx, llm.SessionRequest{Model: req.Model, WorkingDirectory: c.cfg.WorkingDirectory, Reasoning: req.Reasoning})
+	if err != nil {
+		return nil, err
+	}
+	return sess.Stream(ctx, req)
+}
+
+type Session struct {
+	client  *Client
+	session *ghcopilot.Session
+	model   string
+}
+
+func (s *Session) ID() string { return s.session.SessionID }
+
+func (s *Session) Send(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	var finalText strings.Builder
+	unsubscribe := s.session.On(func(event ghcopilot.SessionEvent) {
+		if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
+			finalText.WriteString(d.Content)
+		}
+	})
+	defer unsubscribe()
+	event, err := s.session.SendAndWait(ctx, ghcopilot.MessageOptions{Prompt: renderPrompt(req)})
+	if err != nil {
+		return nil, err
+	}
+	if finalText.Len() == 0 && event != nil {
+		if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
+			finalText.WriteString(d.Content)
+		}
+	}
+	return &llm.Response{Provider: s.client.Name(), Model: firstNonEmpty(req.Model, s.model), Status: "completed", Text: finalText.String(), Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: finalText.String()}}}, nil
+}
+
+func (s *Session) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
+	events := make(chan llm.StreamEvent, 64)
+	var closeOnce sync.Once
+	closeEvents := func() { closeOnce.Do(func() { close(events) }) }
+	unsubscribe := s.session.On(func(event ghcopilot.SessionEvent) {
+		ev := copilotEventToStream(event, s.client.Name(), firstNonEmpty(req.Model, s.model))
+		select {
+		case <-ctx.Done():
+		case events <- ev:
+		}
+		if event.Type == ghcopilot.SessionEventTypeSessionIdle || event.Type == ghcopilot.SessionEventTypeSessionError {
+			closeEvents()
+		}
+	})
+	_, err := s.session.Send(ctx, ghcopilot.MessageOptions{Prompt: renderPrompt(req)})
+	if err != nil {
+		unsubscribe()
+		closeEvents()
+		return nil, err
+	}
+	return llm.NewChannelStream(ctx, events, closeFunc(func() error { unsubscribe(); closeEvents(); return nil })), nil
+}
+
+func (s *Session) Close() error { return s.session.Destroy() }
+
+type closeFunc func() error
+
+func (f closeFunc) Close() error { return f() }
+
+func (c *Client) sessionConfig(req llm.SessionRequest) *ghcopilot.SessionConfig {
+	cfg := &ghcopilot.SessionConfig{
+		ClientName:          firstNonEmpty(c.cfg.ClientName, "kkode"),
+		Model:               req.Model,
+		ReasoningEffort:     reasoningEffort(req.Reasoning),
+		WorkingDirectory:    firstNonEmpty(req.WorkingDirectory, c.cfg.WorkingDirectory),
+		Tools:               c.cfg.Tools,
+		MCPServers:          map[string]ghcopilot.MCPServerConfig{},
+		CustomAgents:        c.cfg.CustomAgents,
+		SkillDirectories:    append([]string{}, c.cfg.SkillDirectories...),
+		DisabledSkills:      append([]string{}, c.cfg.DisabledSkills...),
+		OnPermissionRequest: permissionHandler(c.cfg.ApproveAll || req.ApprovalPolicy.Mode == llm.ApprovalAllowAll),
+	}
+	if req.Instructions != "" {
+		cfg.SystemMessage = &ghcopilot.SystemMessageConfig{Mode: "append", Content: req.Instructions}
+	}
+	for name, server := range c.cfg.MCPServers {
+		cfg.MCPServers[name] = server
+	}
+	for name, server := range req.MCPServers {
+		cfg.MCPServers[name] = ToCopilotMCPServer(server)
+	}
+	for _, tool := range req.Tools {
+		cfg.Tools = append(cfg.Tools, ghcopilot.Tool{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
+	}
+	for _, agent := range req.CustomAgents {
+		cfg.CustomAgents = append(cfg.CustomAgents, ToCopilotAgent(agent))
+	}
+	cfg.SkillDirectories = append(cfg.SkillDirectories, req.Skills...)
+	return cfg
+}
+
+func permissionHandler(approve bool) ghcopilot.PermissionHandlerFunc {
+	return func(request ghcopilot.PermissionRequest, invocation ghcopilot.PermissionInvocation) (ghcopilot.PermissionRequestResult, error) {
+		if approve {
+			return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindApproved}, nil
+		}
+		return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindUserNotAvailable}, nil
+	}
+}
+
+func ToCopilotMCPServer(server llm.MCPServer) ghcopilot.MCPServerConfig {
+	if server.Kind == llm.MCPHTTP {
+		return ghcopilot.MCPHTTPServerConfig{Tools: server.Tools, Timeout: server.Timeout, URL: server.URL, Headers: server.Headers}
+	}
+	return ghcopilot.MCPStdioServerConfig{Tools: server.Tools, Timeout: server.Timeout, Command: server.Command, Args: server.Args, Env: server.Env, Cwd: server.Cwd}
+}
+
+func ToCopilotAgent(agent llm.Agent) ghcopilot.CustomAgentConfig {
+	servers := map[string]ghcopilot.MCPServerConfig{}
+	for name, server := range agent.MCPServers {
+		servers[name] = ToCopilotMCPServer(server)
+	}
+	return ghcopilot.CustomAgentConfig{Name: agent.Name, DisplayName: agent.DisplayName, Description: agent.Description, Tools: agent.Tools, Prompt: agent.Prompt, MCPServers: servers, Infer: agent.Infer, Skills: agent.Skills}
+}
+
+func copilotEventToStream(event ghcopilot.SessionEvent, provider, model string) llm.StreamEvent {
+	ev := llm.StreamEvent{Type: llm.StreamEventUnknown, Provider: provider, EventName: string(event.Type)}
+	if raw, err := event.Marshal(); err == nil {
+		ev.Raw = raw
+	}
+	switch event.Type {
+	case ghcopilot.SessionEventTypeAssistantMessage, ghcopilot.SessionEventTypeAssistantMessageDelta, ghcopilot.SessionEventTypeAssistantStreamingDelta:
+		ev.Type = llm.StreamEventTextDelta
+		if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
+			ev.Delta = d.Content
+		}
+	case ghcopilot.SessionEventTypeAssistantReasoning, ghcopilot.SessionEventTypeAssistantReasoningDelta:
+		ev.Type = llm.StreamEventReasoningDelta
+	case ghcopilot.SessionEventTypeToolExecutionStart, ghcopilot.SessionEventTypeToolUserRequested:
+		ev.Type = llm.StreamEventToolCall
+	case ghcopilot.SessionEventTypeToolExecutionComplete:
+		ev.Type = llm.StreamEventToolResult
+	case ghcopilot.SessionEventTypeSessionStart, ghcopilot.SessionEventTypeAssistantTurnStart:
+		ev.Type = llm.StreamEventStarted
+	case ghcopilot.SessionEventTypeSessionIdle, ghcopilot.SessionEventTypeAssistantTurnEnd:
+		ev.Type = llm.StreamEventCompleted
+		ev.Response = &llm.Response{Provider: provider, Model: model, Status: "completed"}
+	case ghcopilot.SessionEventTypeSessionError:
+		ev.Type = llm.StreamEventError
+	}
+	return ev
+}

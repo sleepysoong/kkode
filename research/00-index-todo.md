@@ -46,3 +46,9 @@ Git: `git init` 완료
 - `providers/openai`: OpenAI-compatible `/v1/responses` HTTP provider.
 - `providers/copilot`: GitHub Copilot SDK session adapter 및 tool 변환기.
 
+
+## 문서화
+
+- [x] `readme.md` — 프로젝트 개요, 사용법, 검증 명령
+- [x] `architecture.md` — 구조, provider boundary, state/tool/session 설계
+
