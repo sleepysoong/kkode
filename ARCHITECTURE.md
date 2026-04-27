@@ -11,6 +11,7 @@
 3. Tool, Provider, Auth, Model, Response, Prompt를 직접 소유해요.
 4. provider별 특수 기능은 adapter 안에 가두고 core는 최대한 provider-neutral하게 유지해요.
 5. workspace 접근과 shell 실행은 approval policy로 제한해야해요.
+6. 실제 agent 실행 단위는 provider, workspace tool, guardrail, transcript, trace를 한 번에 묶어야해요.
 
 ## 파일 트리
 
@@ -20,6 +21,9 @@ kkode/
 ├── ARCHITECTURE.md                   # 현재 문서예요
 ├── go.mod
 ├── go.sum
+├── agent/                           # 실제 coding agent loop와 guardrail/trace예요
+├── cmd/
+│   └── kkode-agent/                  # provider 선택형 agent CLI예요
 ├── llm/                              # provider-neutral core예요
 │   ├── approval.go                   # 승인 정책이에요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
@@ -38,7 +42,7 @@ kkode/
 │   ├── copilot/                      # GitHub Copilot SDK adapter예요
 │   ├── codexcli/                     # Codex CLI subprocess adapter예요
 │   └── omniroute/                    # OmniRoute gateway adapter예요
-├── workspace/                        # workspace file/search/shell tool이에요
+├── workspace/                        # workspace file/write/replace/search/shell tool이에요
 ├── transcript/                       # transcript 저장소예요
 ├── scripts/                          # 검증용 smoke scripts예요
 └── research/                         # 조사 문서와 TODO예요
@@ -173,6 +177,151 @@ type Tool struct {
     Grammar         *Grammar
     ProviderOptions map[string]any
 }
+```
+
+## Agent runtime 구현체
+
+패키지는 `agent`예요. `llm.Provider`만 있는 상태에서는 provider 호출과 tool loop를 직접 엮어야 해요. `agent.Agent`는 이 반복 구조를 앱에서 바로 쓸 수 있게 묶어줘요.
+
+주요 타입은 다음과 같아요.
+
+```go
+type Config struct {
+    Name          string
+    Provider      llm.Provider
+    Model         string
+    Instructions  string
+    BaseRequest   llm.Request
+    Workspace     *workspace.Workspace
+    Tools         []llm.Tool
+    ToolHandlers  llm.ToolRegistry
+    MaxIterations int
+    Transcript    *transcript.Transcript
+    Observer      Observer
+    Guardrails    Guardrails
+}
+
+type Agent struct { /* 내부 설정을 보관해요 */ }
+
+type RunResult struct {
+    Response *llm.Response
+    Trace    []TraceEvent
+}
+
+type Observer interface {
+    OnEvent(ctx context.Context, event TraceEvent)
+}
+
+type TraceEvent struct {
+    At      time.Time
+    Type    string
+    Message string
+    Tool    string
+    Error   string
+}
+
+type Guardrails struct {
+    BlockedSubstrings       []string
+    BlockedOutputSubstrings []string
+    RedactTranscript        bool
+}
+
+func New(cfg Config) (*Agent, error)
+func (a *Agent) Run(ctx context.Context, prompt string) (*RunResult, error)
+func (a *Agent) Stream(ctx context.Context, prompt string) (llm.EventStream, error)
+```
+
+`Run`은 다음 순서로 실행해요.
+
+1. 입력 guardrail을 검사해요.
+2. custom tool과 workspace tool을 합쳐요.
+3. `BaseRequest`에 model, instructions, prompt, tools를 얹어요.
+4. `llm.RunToolLoop`로 provider와 tool call을 반복해요.
+5. tool 시작/완료/실패 event를 trace에 남겨요.
+6. 출력 guardrail을 검사해요.
+7. transcript가 있으면 요청/응답/오류를 저장 가능한 구조로 누적해요.
+
+예제는 이렇게 써요.
+
+```go
+ws, err := workspace.New(".", llm.ApprovalPolicy{
+    Mode:            llm.ApprovalTrustedWrites,
+    AllowedPaths:    []string{"/abs/path/to/repo"},
+    AllowedCommands: []string{"go test", "go vet"},
+})
+if err != nil {
+    panic(err)
+}
+
+client := openai.New(openai.Config{APIKey: os.Getenv("OPENAI_API_KEY")})
+tr := transcript.New("session-1")
+
+ag, err := agent.New(agent.Config{
+    Provider:     client,
+    Model:        "gpt-5-mini",
+    Workspace:    ws,
+    Transcript:   tr,
+    Instructions: "너는 Go 코딩 agent예요. 수정 뒤에는 테스트를 실행해야해요.",
+    BaseRequest: llm.Request{
+        Reasoning: &llm.ReasoningConfig{Effort: "medium", Summary: "auto"},
+        Include:   []string{"reasoning.encrypted_content"},
+    },
+    Guardrails: agent.Guardrails{
+        BlockedSubstrings:       []string{"비밀키 출력"},
+        BlockedOutputSubstrings: []string{"sk-"},
+        RedactTranscript:        true,
+    },
+    Observer: agent.ObserverFunc(func(ctx context.Context, ev agent.TraceEvent) {
+        fmt.Println(ev.Type, ev.Tool, ev.Error)
+    }),
+})
+if err != nil {
+    panic(err)
+}
+
+result, err := ag.Run(ctx, "테스트를 실행하고 실패 원인을 고쳐줘")
+if err != nil {
+    panic(err)
+}
+fmt.Println(result.Response.Text)
+fmt.Println("trace events:", len(result.Trace))
+_ = tr.SaveRedacted(".kkode/transcript.json")
+```
+
+## Agent CLI 구현체
+
+`cmd/kkode-agent`는 위 agent runtime을 바로 실행하는 얇은 앱이에요. provider는 flag 또는 환경변수로 고르고, workspace 권한은 기본 read-only예요.
+
+주요 flag는 다음과 같아요.
+
+| Flag | 의미 | 기본값 |
+|---|---|---|
+| `-provider` | `openai`, `omniroute`, `copilot`, `codex` 중 하나예요 | `KKODE_PROVIDER` 또는 `openai` |
+| `-model` | provider에 넘길 모델이에요 | provider별 기본값이에요 |
+| `-root` | workspace root예요 | `.` |
+| `-write` | workspace write/replace tool을 열어요 | `false` |
+| `-commands` | shell tool에서 허용할 command prefix예요 | 비어 있음 |
+| `-reasoning-effort` | Responses API reasoning effort예요 | 비어 있음 |
+| `-reasoning-summary` | reasoning summary 설정이에요 | 비어 있음 |
+| `-include` | Responses API include 값이에요 | 비어 있음 |
+| `-transcript` | transcript 저장 경로예요 | 비어 있음 |
+| `-redact-transcript` | transcript 저장 시 secret을 마스킹해요 | `false` |
+| `-blocked-input` | 입력 차단 substring 목록이에요 | 비어 있음 |
+| `-blocked-output` | 출력 차단 substring 목록이에요 | 비어 있음 |
+
+실행 예제는 이렇게 써요.
+
+```bash
+go run ./cmd/kkode-agent \
+  -provider openai \
+  -model gpt-5-mini \
+  -root . \
+  -write \
+  -commands "go test,go vet" \
+  -reasoning-effort medium \
+  -reasoning-summary auto \
+  -transcript .kkode/transcript.json \
+  "실패하는 테스트를 고치고 검증 결과를 알려줘"
 ```
 
 ## Tool loop 흐름
@@ -399,6 +548,7 @@ func New(root string, policy llm.ApprovalPolicy) (*Workspace, error)
 func (w *Workspace) Resolve(rel string) (string, error)
 func (w *Workspace) ReadFile(rel string) (string, error)
 func (w *Workspace) WriteFile(rel, content string) error
+func (w *Workspace) ReplaceInFile(rel, old, new string) error
 func (w *Workspace) List(rel string) ([]string, error)
 func (w *Workspace) Search(needle string) ([]string, error)
 func (w *Workspace) Run(ctx context.Context, command string, args ...string) (string, error)
@@ -474,7 +624,9 @@ resp, err := router.Generate(ctx, llm.Request{
 현재 보안 경계는 다음과 같아요.
 
 - workspace path는 root 바깥으로 탈출할 수 없게 막아요.
-- write/shell은 `ApprovalPolicy`가 허용해야 실행해요.
+- write/replace/shell은 `ApprovalPolicy`가 허용해야 실행해요.
+- `cmd/kkode-agent`는 기본 read-only로 시작하고 `-write`, `-commands`가 있을 때만 능동 작업을 열어요.
+- `agent.Guardrails`는 입력/출력 substring 차단을 제공하고, 더 정교한 정책은 별도 guardrail 구현체로 확장해야해요.
 - transcript는 `SaveRedacted`로 token/API key 패턴을 지워 저장할 수 있어요.
 - provider OAuth/token 저장은 provider package가 소유해야해요.
 - MCP tool은 session/tool attachment로 취급하고, core provider method로 섞지 않아야해요.
@@ -488,3 +640,5 @@ resp, err := router.Generate(ctx, llm.Request{
 3. Codex app-server/harness provider를 CLI adapter와 분리해서 추가해요.
 4. streaming aggregation과 event replay를 강화해요.
 5. workspace patch tool과 command policy audit log를 추가해요.
+6. agent handoff/session memory를 `SessionProvider`와 연결해요.
+7. Copilot custom agent와 OpenAI hosted MCP tool을 같은 설정 파일에서 선언할 수 있게 해요.

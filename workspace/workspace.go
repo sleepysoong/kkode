@@ -82,6 +82,20 @@ func (w *Workspace) WriteFile(rel, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
+func (w *Workspace) ReplaceInFile(rel, old, new string) error {
+	if old == "" {
+		return errors.New("old text is required")
+	}
+	content, err := w.ReadFile(rel)
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(content, old) {
+		return fmt.Errorf("old text not found in %s", rel)
+	}
+	return w.WriteFile(rel, strings.Replace(content, old, new, 1))
+}
+
 func (w *Workspace) List(rel string) ([]string, error) {
 	path, err := w.Resolve(firstNonEmpty(rel, "."))
 	if err != nil {
@@ -161,15 +175,37 @@ func (w *Workspace) Run(ctx context.Context, command string, args ...string) (st
 func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 	strict := true
 	defs = []llm.Tool{
-		{Kind: llm.ToolFunction, Name: "workspace_read_file", Description: "Read a file inside the workspace", Strict: &strict, Parameters: objectSchema(map[string]any{"path": stringSchema()})},
-		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "List a directory inside the workspace", Strict: &strict, Parameters: objectSchema(map[string]any{"path": stringSchema()})},
-		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "Search for a literal string in workspace files", Strict: &strict, Parameters: objectSchema(map[string]any{"needle": stringSchema()})},
+		{Kind: llm.ToolFunction, Name: "workspace_read_file", Description: "workspace 안의 파일을 읽어요", Strict: &strict, Parameters: objectSchema(map[string]any{"path": stringSchema()})},
+		{Kind: llm.ToolFunction, Name: "workspace_write_file", Description: "approval policy가 허용할 때 workspace 안의 파일을 써요", Strict: &strict, Parameters: objectSchema(map[string]any{"path": stringSchema(), "content": stringSchema()})},
+		{Kind: llm.ToolFunction, Name: "workspace_replace_in_file", Description: "approval policy가 허용할 때 파일 안의 텍스트를 한 번 교체해요", Strict: &strict, Parameters: objectSchema(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema()})},
+		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchema(map[string]any{"path": stringSchema()})},
+		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "workspace 파일들에서 literal 문자열을 검색해요", Strict: &strict, Parameters: objectSchema(map[string]any{"needle": stringSchema()})},
+		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "approval policy가 허용할 때 workspace에서 명령을 실행해요", Strict: &strict, Parameters: objectSchema(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema())})},
 	}
 	handlers = llm.ToolRegistry{
 		"workspace_read_file": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path string `json:"path"`
 		}) (string, error) {
 			return w.ReadFile(in.Path)
+		}),
+		"workspace_write_file": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}) (string, error) {
+			if err := w.WriteFile(in.Path, in.Content); err != nil {
+				return "", err
+			}
+			return "파일을 썼어요: " + in.Path, nil
+		}),
+		"workspace_replace_in_file": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path string `json:"path"`
+			Old  string `json:"old"`
+			New  string `json:"new"`
+		}) (string, error) {
+			if err := w.ReplaceInFile(in.Path, in.Old, in.New); err != nil {
+				return "", err
+			}
+			return "파일 텍스트를 교체했어요: " + in.Path, nil
 		}),
 		"workspace_list": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path string `json:"path"`
@@ -183,6 +219,12 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 			xs, err := w.Search(in.Needle)
 			return strings.Join(xs, "\n"), err
 		}),
+		"workspace_run_command": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}) (string, error) {
+			return w.Run(ctx, in.Command, in.Args...)
+		}),
 	}
 	return defs, handlers
 }
@@ -195,6 +237,9 @@ func objectSchema(properties map[string]any) map[string]any {
 	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
 }
 func stringSchema() map[string]any { return map[string]any{"type": "string"} }
+func arraySchema(items map[string]any) map[string]any {
+	return map[string]any{"type": "array", "items": items}
+}
 func firstNonEmpty(v, fallback string) string {
 	if v != "" {
 		return v

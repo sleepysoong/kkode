@@ -43,7 +43,7 @@ func TestWorkspaceToolsAndCommandPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defs, handlers := w.Tools()
-	if len(defs) != 3 {
+	if len(defs) != 6 {
 		t.Fatalf("defs=%d", len(defs))
 	}
 	res, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_read_file", CallID: "1", Arguments: []byte(`{"path":"b.txt"}`)})
@@ -53,5 +53,28 @@ func TestWorkspaceToolsAndCommandPolicy(t *testing.T) {
 	out, err := w.Run(context.Background(), "echo", "ok")
 	if err != nil || out != "ok\n" {
 		t.Fatalf("out=%q err=%v", out, err)
+	}
+}
+
+func TestWorkspaceWriteReplaceAndRunToolPolicy(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalTrustedWrites, AllowedPaths: []string{dir}, AllowedCommands: []string{"echo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, handlers := w.Tools()
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_write_file", CallID: "1", Arguments: []byte(`{"path":"a.txt","content":"hello old"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_replace_in_file", CallID: "2", Arguments: []byte(`{"path":"a.txt","old":"old","new":"new"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	content, err := w.ReadFile("a.txt")
+	if err != nil || content != "hello new" {
+		t.Fatalf("content=%q err=%v", content, err)
+	}
+	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "3", Arguments: []byte(`{"command":"echo","args":["ok"]}`)})
+	if err != nil || out.Output != "ok\n" {
+		t.Fatalf("out=%#v err=%v", out, err)
 	}
 }

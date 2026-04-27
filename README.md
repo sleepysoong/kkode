@@ -6,6 +6,12 @@
 
 ## 지금 구현된 것
 
+### Agent runtime: `agent/`
+
+- `agent.Agent`가 provider, workspace tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요.
+- OpenAI-compatible Responses tool loop를 기본으로 쓰고, provider별 adapter는 `llm.Provider`만 구현하면 붙일 수 있어요.
+- `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, write 권한, command allowlist를 넘겨 바로 실행할 수 있어요.
+
 ### Core: `llm/`
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
@@ -34,11 +40,51 @@
 
 ### App support
 
+- `cmd/kkode-agent`
+  - OpenAI, OmniRoute, Copilot SDK, Codex CLI provider를 같은 CLI에서 실행해요.
+  - 기본은 read-only workspace이고, `-write`와 `-commands`를 명시해야 파일 쓰기와 shell 실행을 열어요.
 - `workspace`
-  - workspace path sandbox, read/write/list/search/shell tool을 제공해요.
+  - workspace path sandbox, read/write/replace/list/search/shell tool을 제공해요.
 - `transcript`
   - request/response/error turn을 JSON으로 저장해요.
   - secret redaction 저장도 지원해요.
+
+## Agent CLI 예제
+
+읽기 전용으로 저장소를 조사하게 할 때는 이렇게 실행해요.
+
+```bash
+go run ./cmd/kkode-agent \
+  -provider openai \
+  -model gpt-5-mini \
+  -root . \
+  "이 저장소 구조를 요약해줘"
+```
+
+파일 수정과 제한된 명령 실행까지 허용하려면 명시적으로 열어야해요.
+
+```bash
+go run ./cmd/kkode-agent \
+  -provider omniroute \
+  -model auto \
+  -root . \
+  -write \
+  -commands "go test,go vet" \
+  -reasoning-effort medium \
+  -reasoning-summary auto \
+  -transcript .kkode/transcript.json \
+  "테스트가 실패하면 고치고 go test ./...까지 실행해줘"
+```
+
+Codex 구독/CLI adapter를 쓰는 경우에는 provider만 바꾸면 돼요.
+
+```bash
+go run ./cmd/kkode-agent \
+  -provider codex \
+  -model gpt-5.3-codex \
+  -root . \
+  "README.md의 개선점을 알려줘"
+```
 
 ## 빠른 검증
 
@@ -125,6 +171,7 @@ resp, err := router.Generate(ctx, llm.Request{
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — 파일 트리, 구현체, 함수 시그니처, 예제를 정리해요.
 - [`research/`](research/) — 외부 문서 조사와 구현 판단을 저장해요.
 - [`research/08-omniroute-provider.md`](research/08-omniroute-provider.md) — OmniRoute API/MCP/A2A/OpenAPI 조사 내용을 정리해요.
+- [`research/09-agent-runtime-hardening.md`](research/09-agent-runtime-hardening.md) — 실제 agent 실행을 위한 tool loop, guardrail, trace, workspace 강화 조사 내용을 정리해요.
 
 ## 작업 규칙
 
