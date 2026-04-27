@@ -2,9 +2,8 @@ package llm
 
 import "context"
 
-// SessionProvider creates long-lived model sessions. Agent runtimes such as
-// Copilot SDK and Codex CLI/App Server can implement this in addition to the
-// one-shot Provider interface.
+// SessionProvider는 오래 유지되는 model session을 만들어요.
+// Copilot SDK나 Codex CLI/App Server 같은 agent runtime은 단발 Provider와 함께 이 인터페이스도 구현할 수 있어요.
 type SessionProvider interface {
 	Provider
 	NewSession(ctx context.Context, req SessionRequest) (Session, error)

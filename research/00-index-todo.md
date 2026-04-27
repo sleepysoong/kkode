@@ -50,6 +50,6 @@ Git: `git init` 완료
 
 ## 문서화
 
-- [x] `readme.md` — 프로젝트 개요, 사용법, 검증 명령
-- [x] `architecture.md` — 구조, provider boundary, state/tool/session 설계
+- [x] `README.md` — 프로젝트 개요, 사용법, 검증 명령
+- [x] `ARCHITECTURE.md` — 구조, provider boundary, state/tool/session 설계
 

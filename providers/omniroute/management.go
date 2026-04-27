@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// NewFromOpenAPIServer builds a client from the server root used by docs/openapi.yaml.
-// Example: http://localhost:20128 -> proxy base http://localhost:20128/api/v1.
+// NewFromOpenAPIServer는 docs/openapi.yaml에서 쓰는 server root로 client를 만들어요.
+// 예: http://localhost:20128 -> proxy base http://localhost:20128/api/v1.
 func NewFromOpenAPIServer(serverRoot string, cfg Config) *Client {
 	root := strings.TrimRight(serverRoot, "/")
 	cfg.BaseURL = root + "/api/v1"
@@ -15,8 +15,8 @@ func NewFromOpenAPIServer(serverRoot string, cfg Config) *Client {
 	return New(cfg)
 }
 
-// NewFromGatewayBase builds a client from the user-facing gateway root from the
-// OmniRoute user guide. Example: http://localhost:20128 -> http://localhost:20128/v1.
+// NewFromGatewayBase는 OmniRoute user guide의 사용자용 gateway root로 client를 만들어요.
+// 예: http://localhost:20128 -> http://localhost:20128/v1.
 func NewFromGatewayBase(serverRoot string, cfg Config) *Client {
 	root := strings.TrimRight(serverRoot, "/")
 	cfg.BaseURL = root + "/v1"

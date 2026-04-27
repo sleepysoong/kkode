@@ -49,10 +49,9 @@ type ToolLoopOptions struct {
 	MaxIterations int
 }
 
-// RunToolLoop executes the Responses-style tool loop: ask the provider, run any
-// requested tools, append the provider's output items plus tool outputs, repeat.
-// Providers that preserve reasoning items in Response.Output let this loop keep
-// reasoning context for models that require it.
+// RunToolLoop는 Responses-style tool loop를 실행해요.
+// provider를 호출하고, 요청된 tool을 실행하고, provider output item과 tool output을 붙인 뒤 반복해요.
+// Response.Output에 reasoning item을 보존하는 provider라면 reasoning context도 계속 유지할 수 있어요.
 func RunToolLoop(ctx context.Context, p Provider, req Request, tools ToolRegistry, opts ToolLoopOptions) (*Response, error) {
 	max := opts.MaxIterations
 	if max <= 0 {

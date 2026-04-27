@@ -57,7 +57,7 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, 
 func readSSE(ctx context.Context, r io.Reader, provider string, out chan<- llm.StreamEvent) {
 	defer close(out)
 	s := bufio.NewScanner(r)
-	// Allow reasonably large JSON events.
+	// 큰 JSON event도 처리할 수 있게 buffer를 넉넉하게 잡아요.
 	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	var eventName string
 	var dataLines []string

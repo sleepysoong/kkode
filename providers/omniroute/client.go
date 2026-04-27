@@ -20,16 +20,16 @@ const (
 )
 
 type Config struct {
-	// BaseURL should usually end with /v1, for example http://localhost:20128/v1.
+	// BaseURL은 보통 /v1로 끝나야해요. 예: http://localhost:20128/v1.
 	BaseURL string
-	// AdminBaseURL points to the dashboard/API root, for example http://localhost:20128.
-	// If empty, it is derived from BaseURL by trimming /v1.
+	// AdminBaseURL은 dashboard/API root를 가리켜요. 예: http://localhost:20128.
+	// 비어 있으면 BaseURL에서 /v1을 제거해서 계산해요.
 	AdminBaseURL string
 	APIKey       string
 	HTTPClient   *http.Client
 	Headers      map[string]string
 
-	// OmniRoute routing/cache/session headers.
+	// OmniRoute routing/cache/session header 설정이에요.
 	SessionID      string
 	NoCache        bool
 	Progress       bool

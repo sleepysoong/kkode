@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 )
 
-// Provider is the smallest common denominator for model backends.
-// Implementations should preserve provider-specific output items in Item.Raw
-// whenever possible so higher-level loops can keep reasoning/tool state intact.
+// Provider는 model backend를 위한 가장 작은 공통 인터페이스예요.
+// 구현체는 가능한 경우 provider별 output item을 Item.Raw 또는 ProviderRaw에 보존해야해요.
+// 그래야 상위 loop가 reasoning/tool 상태를 잃지 않아요.
 type Provider interface {
 	Name() string
 	Capabilities() Capabilities
@@ -114,7 +114,7 @@ type Tool struct {
 	Parameters  map[string]any
 	Strict      *bool
 	Grammar     *Grammar
-	// ProviderOptions carries backend-specific configuration without polluting the core model.
+	// ProviderOptions는 core model을 오염시키지 않고 backend별 설정을 전달해요.
 	ProviderOptions map[string]any
 }
 
