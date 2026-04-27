@@ -9,8 +9,9 @@
 ### Agent runtime: `agent/`
 
 - `agent.Agent`가 provider, workspace tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요.
+- `session.SQLiteStore`와 `runtime.Runtime`이 session resume/fork, turn/event/todo 저장을 담당해요.
 - OpenAI-compatible Responses tool loop를 기본으로 쓰고, provider별 adapter는 `llm.Provider`만 구현하면 붙일 수 있어요.
-- `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, write 권한, command allowlist를 넘겨 바로 실행할 수 있어요.
+- `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, write 권한, command allowlist, session ID를 넘겨 바로 실행할 수 있어요.
 
 ### Core: `llm/`
 
@@ -43,6 +44,11 @@
 - `cmd/kkode-agent`
   - OpenAI, OmniRoute, Copilot SDK, Codex CLI provider를 같은 CLI에서 실행해요.
   - 기본은 read-only workspace이고, `-write`와 `-commands`를 명시해야 파일 쓰기와 shell 실행을 열어요.
+  - 기본적으로 `.kkode/state.db` SQLite DB에 session/turn/event/todo를 저장하고, `-session`, `-fork-session`, `-list-sessions`로 이어갈 수 있어요.
+- `session`
+  - SQLite 기반 session store, resume/fork, turn/event/todo/checkpoint 저장 인터페이스를 제공해요.
+- `runtime`
+  - `agent.Agent`와 `session.Store`를 묶어 multi-turn runtime을 실행해요.
 - `workspace`
   - workspace path sandbox, read/write/replace/list/search/shell tool을 제공해요.
 - `transcript`
@@ -84,6 +90,26 @@ go run ./cmd/kkode-agent \
   -model gpt-5.3-codex \
   -root . \
   "README.md의 개선점을 알려줘"
+```
+
+저장된 session은 이렇게 이어가요.
+
+```bash
+go run ./cmd/kkode-agent -list-sessions
+go run ./cmd/kkode-agent \
+  -session sess_... \
+  -provider codex \
+  -model gpt-5.3-codex \
+  "이전 맥락을 이어서 다음 작업을 해줘"
+```
+
+실험 branch처럼 대화를 분기하려면 이렇게 해요.
+
+```bash
+go run ./cmd/kkode-agent \
+  -fork-session sess_... \
+  -fork-at turn_... \
+  "이 지점부터 다른 접근으로 구현해줘"
 ```
 
 ## 빠른 검증

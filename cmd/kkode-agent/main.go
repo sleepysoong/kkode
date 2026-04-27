@@ -17,6 +17,8 @@ import (
 	"github.com/sleepysoong/kkode/providers/copilot"
 	"github.com/sleepysoong/kkode/providers/omniroute"
 	"github.com/sleepysoong/kkode/providers/openai"
+	agentruntime "github.com/sleepysoong/kkode/runtime"
+	"github.com/sleepysoong/kkode/session"
 	"github.com/sleepysoong/kkode/transcript"
 	"github.com/sleepysoong/kkode/workspace"
 )
@@ -44,6 +46,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	blockedInput := fs.String("blocked-input", os.Getenv("KKODE_BLOCKED_INPUT"), "입력 guardrail substring을 쉼표로 적어요")
 	blockedOutput := fs.String("blocked-output", os.Getenv("KKODE_BLOCKED_OUTPUT"), "출력 guardrail substring을 쉼표로 적어요")
 	transcriptPath := fs.String("transcript", os.Getenv("KKODE_TRANSCRIPT"), "대화 transcript JSON을 저장할 경로예요")
+	statePath := fs.String("state", envDefault("KKODE_STATE_DB", ".kkode/state.db"), "SQLite session state DB 경로예요")
+	sessionID := fs.String("session", os.Getenv("KKODE_SESSION_ID"), "이어갈 session ID예요")
+	forkSessionID := fs.String("fork-session", os.Getenv("KKODE_FORK_SESSION_ID"), "fork할 원본 session ID예요")
+	forkAtTurnID := fs.String("fork-at", os.Getenv("KKODE_FORK_AT_TURN_ID"), "fork 기준 turn ID예요")
+	listSessions := fs.Bool("list-sessions", false, "SQLite DB에 저장된 session 목록을 출력해요")
+	noSession := fs.Bool("no-session", envBool("KKODE_NO_SESSION"), "SQLite session 저장을 끄고 단발 실행해요")
 	redactTranscript := fs.Bool("redact-transcript", envBool("KKODE_REDACT_TRANSCRIPT"), "transcript 저장 전에 secret 패턴을 마스킹해요")
 	verbose := fs.Bool("v", envBool("KKODE_VERBOSE"), "trace event를 stderr에 출력해요")
 	if err := fs.Parse(args); err != nil {
@@ -51,6 +59,22 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			return nil
 		}
 		return err
+	}
+
+	if *listSessions {
+		store, err := session.OpenSQLite(*statePath)
+		if err != nil {
+			return err
+		}
+		defer store.Close()
+		sessions, err := store.ListSessions(ctx, session.SessionQuery{Limit: 100})
+		if err != nil {
+			return err
+		}
+		for _, summary := range sessions {
+			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%d\t%s\n", summary.ID, summary.ProviderName, summary.Model, summary.Mode, summary.TurnCount, summary.UpdatedAt.Format(time.RFC3339))
+		}
+		return nil
 	}
 
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
@@ -121,7 +145,39 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	if err != nil {
 		return err
 	}
-	result, err := ag.Run(ctx, prompt)
+	var result *agent.RunResult
+	if *noSession {
+		result, err = ag.Run(ctx, prompt)
+	} else {
+		store, openErr := session.OpenSQLite(*statePath)
+		if openErr != nil {
+			return openErr
+		}
+		defer store.Close()
+		rt := &agentruntime.Runtime{
+			Store:           store,
+			Agent:           ag,
+			ProjectRoot:     absRoot,
+			ProviderName:    provider.Name(),
+			Model:           *model,
+			AgentName:       "kkode-agent",
+			Mode:            session.AgentModeBuild,
+			MaxHistoryTurns: 8,
+			EnableTodos:     true,
+			Compaction: session.CompactionPolicy{
+				Enabled:             true,
+				TriggerTokenRatio:   0.85,
+				PreserveFirstNTurns: 1,
+				PreserveLastNTurns:  4,
+			},
+		}
+		runResult, runErr := rt.Run(ctx, agentruntime.RunOptions{SessionID: *sessionID, ForkFrom: *forkSessionID, ForkAt: *forkAtTurnID, Prompt: prompt})
+		err = runErr
+		if runResult != nil {
+			result = runResult.Agent
+			fmt.Fprintf(stderr, "session: %s turn: %s\n", runResult.Session.ID, runResult.Turn.ID)
+		}
+	}
 	if tr != nil {
 		if saveErr := saveTranscript(tr, *transcriptPath, guardrails.RedactTranscript); saveErr != nil && err == nil {
 			err = saveErr

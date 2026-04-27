@@ -249,6 +249,26 @@ kkode compact <id>
 7. SQLite store
 8. subagent runtime
 
+
+## 구현 상태: 2026-04-27
+
+이번 구현으로 아래가 완료됐어요.
+
+- `session/` 패키지에 `Session`, `Turn`, `Event`, `Todo`, `Checkpoint`, `Store` interface를 추가했어요.
+- `session.OpenSQLite`로 SQLite store를 열고 migration을 실행해요.
+- session/turn/event/todo/checkpoint를 SQLite에 저장하고 다시 로드해요.
+- `session.Fork`와 `ForkSession`으로 session fork를 지원해요.
+- `session.TodoTools`로 `todo_write`, `todo_update`, `todo_list` tool을 제공해요.
+- `runtime.Runtime`으로 `agent.Agent` 실행 전 기존 turn history를 붙이고, 실행 후 turn/event/todo를 저장해요.
+- `cmd/kkode-agent`에 `-state`, `-session`, `-fork-session`, `-fork-at`, `-list-sessions`, `-no-session` flag를 추가했어요.
+
+아직 남은 것은 아래예요.
+
+- tokenizer 기반 auto compaction이 아니라 turn count 기반 extractive summary만 있어요.
+- background job, interrupt/cancel, cost budget은 아직 없어요.
+- checkpoint payload 저장 interface만 있고 파일 snapshot/undo는 `suggest/02` 범위로 남겨뒀어요.
+- subagent orchestration은 아직 없어요.
+
 ## 참고 소스
 
 - Claude Agent SDK loop: https://code.claude.com/docs/en/agent-sdk/agent-loop

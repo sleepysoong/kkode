@@ -78,14 +78,22 @@ func New(cfg Config) (*Agent, error) {
 }
 
 func (a *Agent) Run(ctx context.Context, prompt string) (*RunResult, error) {
+	req, handlers := a.Prepare(prompt)
+	return a.RunPrepared(ctx, prompt, req, handlers)
+}
+
+func (a *Agent) Prepare(prompt string) (llm.Request, llm.ToolRegistry) {
+	tools, handlers := a.tools()
+	return a.request(prompt, tools), handlers
+}
+
+func (a *Agent) RunPrepared(ctx context.Context, prompt string, req llm.Request, handlers llm.ToolRegistry) (*RunResult, error) {
 	if err := a.cfg.Guardrails.CheckInput(prompt); err != nil {
 		a.emit(ctx, TraceEvent{Type: "guardrail.blocked", Error: err.Error()})
 		return nil, err
 	}
 	var trace []TraceEvent
 	ctx = context.WithValue(ctx, traceEventsKey{}, &trace)
-	tools, handlers := a.tools()
-	req := a.request(prompt, tools)
 	a.emit(ctx, TraceEvent{Type: "agent.started", Message: prompt})
 	tracedHandlers := a.traceTools(handlers)
 	resp, err := llm.RunToolLoop(ctx, a.cfg.Provider, req, tracedHandlers, llm.ToolLoopOptions{MaxIterations: a.cfg.MaxIterations})

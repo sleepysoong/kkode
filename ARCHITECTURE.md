@@ -22,6 +22,8 @@ kkode/
 ├── go.mod
 ├── go.sum
 ├── agent/                           # 실제 coding agent loop와 guardrail/trace예요
+├── session/                         # SQLite session store와 resume/fork 상태예요
+├── runtime/                         # agent와 session store를 묶는 실행 runtime이에요
 ├── cmd/
 │   └── kkode-agent/                  # provider 선택형 agent CLI예요
 ├── llm/                              # provider-neutral core예요
@@ -288,6 +290,96 @@ fmt.Println("trace events:", len(result.Trace))
 _ = tr.SaveRedacted(".kkode/transcript.json")
 ```
 
+## Session runtime 구현체
+
+패키지는 `session`과 `runtime`이에요. `session`은 SQLite에 장기 상태를 저장하고, `runtime`은 `agent.Agent`를 session-aware 실행 단위로 감싸요.
+
+주요 타입은 다음과 같아요.
+
+```go
+type Session struct {
+    ID             string
+    ProjectRoot    string
+    ProviderName   string
+    Model          string
+    AgentName      string
+    Mode           AgentMode
+    CreatedAt      time.Time
+    UpdatedAt      time.Time
+    Turns          []Turn
+    Events         []Event
+    Todos          []Todo
+    Summary        string
+    LastResponseID string
+    LastInputItems []llm.Item
+    Metadata       map[string]string
+}
+
+type Store interface {
+    CreateSession(ctx context.Context, s *Session) error
+    LoadSession(ctx context.Context, id string) (*Session, error)
+    SaveSession(ctx context.Context, s *Session) error
+    ListSessions(ctx context.Context, q SessionQuery) ([]SessionSummary, error)
+    AppendEvent(ctx context.Context, ev Event) error
+    SaveCheckpoint(ctx context.Context, cp Checkpoint) error
+    Close() error
+}
+
+func OpenSQLite(path string) (*SQLiteStore, error)
+func Fork(ctx context.Context, store Store, sourceID string, atTurnID string) (*Session, error)
+func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry)
+```
+
+`kruntime.Runtime`은 prompt 실행 전에 기존 turn을 message history로 붙이고, todo tool을 추가하고, 실행 뒤에는 turn/event/todo를 SQLite에 저장해요.
+
+```go
+type Runtime struct {
+    Store           session.Store
+    Agent           *agent.Agent
+    ProjectRoot     string
+    ProviderName    string
+    Model           string
+    AgentName       string
+    Mode            session.AgentMode
+    MaxHistoryTurns int
+    Compaction      session.CompactionPolicy
+    EnableTodos     bool
+}
+
+func (r *Runtime) Run(ctx context.Context, opts RunOptions) (*RunResult, error)
+func (r *Runtime) Resume(ctx context.Context, sessionID string) (*session.Session, error)
+func (r *Runtime) Fork(ctx context.Context, sessionID string, atTurnID string) (*session.Session, error)
+```
+
+예제는 이렇게 써요.
+
+```go
+store, err := session.OpenSQLite(".kkode/state.db")
+if err != nil {
+    panic(err)
+}
+defer store.Close()
+
+rt := &kruntime.Runtime{
+    Store:           store,
+    Agent:           ag,
+    ProjectRoot:     ".",
+    ProviderName:    provider.Name(),
+    Model:           "gpt-5-mini",
+    MaxHistoryTurns: 8,
+    EnableTodos:     true,
+}
+
+result, err := rt.Run(ctx, kruntime.RunOptions{
+    SessionID: "sess_...",
+    Prompt:    "이전 작업을 이어서 테스트를 고쳐줘",
+})
+if err != nil {
+    panic(err)
+}
+fmt.Println(result.Session.ID, result.Turn.ID)
+```
+
 ## Agent CLI 구현체
 
 `cmd/kkode-agent`는 위 agent runtime을 바로 실행하는 얇은 앱이에요. provider는 flag 또는 환경변수로 고르고, workspace 권한은 기본 read-only예요.
@@ -305,6 +397,12 @@ _ = tr.SaveRedacted(".kkode/transcript.json")
 | `-reasoning-summary` | reasoning summary 설정이에요 | 비어 있음 |
 | `-include` | Responses API include 값이에요 | 비어 있음 |
 | `-transcript` | transcript 저장 경로예요 | 비어 있음 |
+| `-state` | SQLite session DB 경로예요 | `.kkode/state.db` |
+| `-session` | 이어갈 session ID예요 | 비어 있음 |
+| `-fork-session` | fork할 원본 session ID예요 | 비어 있음 |
+| `-fork-at` | fork 기준 turn ID예요 | 비어 있음 |
+| `-list-sessions` | 저장된 session 목록을 출력해요 | `false` |
+| `-no-session` | SQLite session 저장을 끄고 단발 실행해요 | `false` |
 | `-redact-transcript` | transcript 저장 시 secret을 마스킹해요 | `false` |
 | `-blocked-input` | 입력 차단 substring 목록이에요 | 비어 있음 |
 | `-blocked-output` | 출력 차단 substring 목록이에요 | 비어 있음 |
