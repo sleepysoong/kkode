@@ -27,6 +27,7 @@ kkode/
 ├── cmd/
 │   └── kkode-agent/                  # provider 선택형 agent CLI예요
 ├── llm/                              # provider-neutral core예요
+├── permission/                       # tool/path/command allow/ask/deny engine이에요
 │   ├── approval.go                   # 승인 정책이에요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
 │   ├── prompt.go                     # 메시지 helper예요
@@ -637,6 +638,54 @@ if err != nil {
 fmt.Println(a2a.Text)
 ```
 
+## Permission 구현체
+
+패키지는 `permission`이에요. 기존 `llm.ApprovalPolicy`는 호환용으로 유지하고, 새 workspace는 `permission.Engine`을 붙이면 tool/path/command 기준 rule을 먼저 평가해요.
+
+```go
+type Action string
+const (
+    ActionAllow Action = "allow"
+    ActionAsk   Action = "ask"
+    ActionDeny  Action = "deny"
+)
+
+type Request struct {
+    SessionID string
+    Tool      string
+    Args      map[string]any
+    Command   string
+    Path      string
+    URL       string
+    AgentName string
+}
+
+type Engine interface {
+    Decide(ctx context.Context, req Request) (Decision, error)
+}
+
+type StaticEngine struct {
+    Rules         []Rule
+    DefaultAction Action
+}
+```
+
+평가 순서는 `deny -> ask -> allow -> default`예요. 지금 CLI에는 ask UI가 없기 때문에 workspace에서는 `allow`만 실행하고 `ask/deny`는 모두 차단해요.
+
+```go
+engine := permission.StaticEngine{
+    DefaultAction: permission.ActionDeny,
+    Rules: []permission.Rule{
+        {Tool: "read", Pattern: "*", Action: permission.ActionAllow},
+        {Tool: "edit", Pattern: "src/**", Action: permission.ActionAllow},
+        {Tool: "bash", Pattern: "go test *", Action: permission.ActionAllow},
+    },
+}
+ws, err := workspace.NewWithPermission(".", llm.ApprovalPolicy{}, engine)
+```
+
+Protected path는 permission engine이 allow해도 workspace write 단계에서 한 번 더 막아요. 현재 기본 protected path는 `.git/**`, `.github/workflows/**`, `.env*`, `*.pem`, `*.key`, `.ssh/**`, `.codex/**`, `.claude/**`, `.opencode/**`, `.vscode/**`, `.idea/**`, `.husky/**`예요.
+
 ## Workspace 구현체
 
 패키지는 `workspace`예요. provider tool로 붙일 수 있는 local workspace adapter예요.
@@ -645,11 +694,17 @@ fmt.Println(a2a.Text)
 func New(root string, policy llm.ApprovalPolicy) (*Workspace, error)
 func (w *Workspace) Resolve(rel string) (string, error)
 func (w *Workspace) ReadFile(rel string) (string, error)
+func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error)
 func (w *Workspace) WriteFile(rel, content string) error
 func (w *Workspace) ReplaceInFile(rel, old, new string) error
+func (w *Workspace) EditFile(rel, old, new string, expectedReplacements int) error
+func (w *Workspace) ApplyPatch(patchText string) error
 func (w *Workspace) List(rel string) ([]string, error)
+func (w *Workspace) Glob(pattern string) ([]string, error)
 func (w *Workspace) Search(needle string) ([]string, error)
+func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error)
 func (w *Workspace) Run(ctx context.Context, command string, args ...string) (string, error)
+func (w *Workspace) RunDetailed(ctx context.Context, command string, args []string, opts CommandOptions) (CommandResult, error)
 func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry)
 ```
 
@@ -722,7 +777,8 @@ resp, err := router.Generate(ctx, llm.Request{
 현재 보안 경계는 다음과 같아요.
 
 - workspace path는 root 바깥으로 탈출할 수 없게 막아요.
-- write/replace/shell은 `ApprovalPolicy`가 허용해야 실행해요.
+- write/replace/apply_patch/shell은 `ApprovalPolicy` 또는 `permission.Engine`이 허용해야 실행해요.
+- protected path는 permission allow보다 우선해서 write를 차단해요.
 - `cmd/kkode-agent`는 기본 read-only로 시작하고 `-write`, `-commands`가 있을 때만 능동 작업을 열어요.
 - `agent.Guardrails`는 입력/출력 substring 차단을 제공하고, 더 정교한 정책은 별도 guardrail 구현체로 확장해야해요.
 - transcript는 `SaveRedacted`로 token/API key 패턴을 지워 저장할 수 있어요.

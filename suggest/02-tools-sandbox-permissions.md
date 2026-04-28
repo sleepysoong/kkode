@@ -276,6 +276,28 @@ type LSPClient interface {
 - line range read가 max bytes를 지키는지 테스트해요.
 - LSP diagnostics가 broken Go file에서 에러를 반환하는지 테스트해요.
 
+
+## 구현 상태: 2026-04-28
+
+이번 구현으로 아래가 완료됐어요.
+
+- `permission/` 패키지에 `Action`, `Request`, `Decision`, `Rule`, `Engine`, `StaticEngine`을 추가했어요.
+- rule 평가는 `deny -> ask -> allow -> default` 순서로 동작해요. 현재 non-interactive workspace에서는 `allow`만 실행하고 `ask/deny`는 차단해요.
+- `workspace.NewWithPermission`으로 permission engine을 붙일 수 있어요.
+- `workspace_read_file`에 `offset_line`, `limit_lines`, `max_bytes` 옵션을 추가했어요.
+- `workspace_glob`, `workspace_grep`, `workspace_apply_patch` tool을 추가했어요.
+- `workspace_replace_in_file`은 `expected_replacements`를 지원하는 `EditFile` 위로 올렸어요.
+- `workspace_run_command`는 `CommandResult` JSON으로 command, cwd, exit code, stdout, stderr, timeout 여부를 돌려줘요.
+- protected path write 차단을 추가했어요. `.git/**`, `.env*`, `.claude/**`, `.codex/**` 같은 경로는 기본적으로 write/apply_patch가 막혀요.
+
+아직 남은 것은 아래예요.
+
+- `ask` permission을 실제 TUI/CLI 승인 UX와 연결하지 않았어요.
+- OS-level sandbox(bubblewrap/seatbelt)는 아직 없어요.
+- checkpoint snapshot/undo/redo는 아직 없어요.
+- LSP diagnostics/tool은 아직 없어요.
+- `workspace_apply_patch`는 Codex 스타일의 단순 apply_patch grammar만 지원하고, 전체 unified diff parser는 아니에요.
+
 ## 참고 소스
 
 - OpenCode Tools: https://opencode.ai/docs/tools/

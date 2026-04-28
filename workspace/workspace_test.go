@@ -2,10 +2,13 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/permission"
 )
 
 func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
@@ -43,7 +46,7 @@ func TestWorkspaceToolsAndCommandPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defs, handlers := w.Tools()
-	if len(defs) != 6 {
+	if len(defs) != 9 {
 		t.Fatalf("defs=%d", len(defs))
 	}
 	res, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_read_file", CallID: "1", Arguments: []byte(`{"path":"b.txt"}`)})
@@ -66,15 +69,86 @@ func TestWorkspaceWriteReplaceAndRunToolPolicy(t *testing.T) {
 	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_write_file", CallID: "1", Arguments: []byte(`{"path":"a.txt","content":"hello old"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_replace_in_file", CallID: "2", Arguments: []byte(`{"path":"a.txt","old":"old","new":"new"}`)}); err != nil {
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_replace_in_file", CallID: "2", Arguments: []byte(`{"path":"a.txt","old":"old","new":"new","expected_replacements":1}`)}); err != nil {
 		t.Fatal(err)
 	}
 	content, err := w.ReadFile("a.txt")
 	if err != nil || content != "hello new" {
 		t.Fatalf("content=%q err=%v", content, err)
 	}
-	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "3", Arguments: []byte(`{"command":"echo","args":["ok"]}`)})
-	if err != nil || out.Output != "ok\n" {
-		t.Fatalf("out=%#v err=%v", out, err)
+	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "3", Arguments: []byte(`{"command":"echo","args":["ok"],"timeout_ms":1000}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cmd CommandResult
+	if err := json.Unmarshal([]byte(out.Output), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Stdout != "ok\n" || cmd.ExitCode != 0 {
+		t.Fatalf("cmd=%#v", cmd)
+	}
+}
+
+func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalTrustedWrites, AllowedPaths: []string{dir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("src/a.txt", "one\ntwo needle\nthree\n"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := w.ReadFileRange("src/a.txt", ReadOptions{OffsetLine: 2, LimitLines: 1})
+	if err != nil || part != "two needle" {
+		t.Fatalf("part=%q err=%v", part, err)
+	}
+	glob, err := w.Glob("src/*.txt")
+	if err != nil || len(glob) != 1 || glob[0] != "src/a.txt" {
+		t.Fatalf("glob=%#v err=%v", glob, err)
+	}
+	matches, err := w.Grep("needle", GrepOptions{PathGlob: "src/**"})
+	if err != nil || len(matches) != 1 || matches[0].Line != 2 {
+		t.Fatalf("matches=%#v err=%v", matches, err)
+	}
+	patch := `*** Begin Patch
+*** Update File: src/a.txt
+@@
+ one
+-two needle
++two patched
+ three
+*** End Patch
+`
+	if err := w.ApplyPatch(patch); err != nil {
+		t.Fatal(err)
+	}
+	updated, _ := w.ReadFile("src/a.txt")
+	if !strings.Contains(updated, "two patched") {
+		t.Fatalf("updated=%q", updated)
+	}
+}
+
+func TestPermissionEngineAndProtectedPath(t *testing.T) {
+	dir := t.TempDir()
+	engine := permission.StaticEngine{DefaultAction: permission.ActionDeny, Rules: []permission.Rule{
+		{ID: "read", Tool: "read", Pattern: "*", Action: permission.ActionAllow},
+		{ID: "edit-src", Tool: "edit", Pattern: "src/**", Action: permission.ActionAllow},
+		{ID: "go-test", Tool: "bash", Pattern: "go test *", Action: permission.ActionAllow},
+	}}
+	w, err := NewWithPermission(dir, llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll}, engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("src/a.txt", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir+"/.git", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile(".git/config", "bad"); err == nil {
+		t.Fatal("expected protected path denial")
+	}
+	if _, err := w.Run(context.Background(), "rm", "-rf", "."); err == nil {
+		t.Fatal("expected command denial")
 	}
 }

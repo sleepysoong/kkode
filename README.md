@@ -49,8 +49,12 @@
   - SQLite 기반 session store, resume/fork, turn/event/todo/checkpoint 저장 인터페이스를 제공해요.
 - `runtime`
   - `agent.Agent`와 `session.Store`를 묶어 multi-turn runtime을 실행해요.
+- `permission`
+  - tool/path/command 기준 `allow`, `ask`, `deny` rule engine을 제공하고 deny 우선 평가를 해요.
 - `workspace`
-  - workspace path sandbox, read/write/replace/list/search/shell tool을 제공해요.
+  - workspace path sandbox, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
+  - `.git/**`, `.env*`, `.claude/**`, `.codex/**` 같은 protected path write를 기본 차단해요.
+  - shell 실행은 stdout 문자열뿐 아니라 exit code, stderr, timeout 여부를 구조화해서 tool output으로 돌려줘요.
 - `transcript`
   - request/response/error turn을 JSON으로 저장해요.
   - secret redaction 저장도 지원해요.
@@ -157,6 +161,32 @@ if err != nil {
     panic(err)
 }
 fmt.Println(resp.Text)
+```
+
+## Workspace tool 예제
+
+```go
+engine := permission.StaticEngine{
+    DefaultAction: permission.ActionDeny,
+    Rules: []permission.Rule{
+        {Tool: "read", Pattern: "*", Action: permission.ActionAllow},
+        {Tool: "edit", Pattern: "src/**", Action: permission.ActionAllow},
+        {Tool: "bash", Pattern: "go test *", Action: permission.ActionAllow},
+    },
+}
+ws, err := workspace.NewWithPermission(".", llm.ApprovalPolicy{}, engine)
+if err != nil {
+    panic(err)
+}
+
+text, err := ws.ReadFileRange("src/main.go", workspace.ReadOptions{
+    OffsetLine: 1,
+    LimitLines: 80,
+})
+_ = text
+
+matches, err := ws.Grep("TODO", workspace.GrepOptions{PathGlob: "**/*.go"})
+_ = matches
 ```
 
 ## Tool loop 예제
