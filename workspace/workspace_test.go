@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
-	"github.com/sleepysoong/kkode/permission"
 )
 
 func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
@@ -128,27 +127,20 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	}
 }
 
-func TestPermissionEngineAndProtectedPath(t *testing.T) {
+func TestYOLOAllowAllWritesProtectedPathsAndCommands(t *testing.T) {
 	dir := t.TempDir()
-	engine := permission.StaticEngine{DefaultAction: permission.ActionDeny, Rules: []permission.Rule{
-		{ID: "read", Tool: "read", Pattern: "*", Action: permission.ActionAllow},
-		{ID: "edit-src", Tool: "edit", Pattern: "src/**", Action: permission.ActionAllow},
-		{ID: "go-test", Tool: "bash", Pattern: "go test *", Action: permission.ActionAllow},
-	}}
-	w, err := NewWithPermission(dir, llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll}, engine)
+	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := w.WriteFile("src/a.txt", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(dir+"/.git", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.WriteFile(".git/config", "bad"); err == nil {
-		t.Fatal("expected protected path denial")
+	if err := w.WriteFile(".git/config", "yolo"); err != nil {
+		t.Fatalf("YOLO 모드에서는 protected path도 막지 않아요: %v", err)
 	}
-	if _, err := w.Run(context.Background(), "rm", "-rf", "."); err == nil {
-		t.Fatal("expected command denial")
+	out, err := w.Run(context.Background(), "echo", "yolo")
+	if err != nil || out != "yolo\n" {
+		t.Fatalf("out=%q err=%v", out, err)
 	}
 }

@@ -27,7 +27,6 @@ kkode/
 ├── cmd/
 │   └── kkode-agent/                  # provider 선택형 agent CLI예요
 ├── llm/                              # provider-neutral core예요
-├── permission/                       # tool/path/command allow/ask/deny engine이에요
 │   ├── approval.go                   # 승인 정책이에요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
 │   ├── prompt.go                     # 메시지 helper예요
@@ -392,8 +391,9 @@ fmt.Println(result.Session.ID, result.Turn.ID)
 | `-provider` | `openai`, `omniroute`, `copilot`, `codex` 중 하나예요 | `KKODE_PROVIDER` 또는 `openai` |
 | `-model` | provider에 넘길 모델이에요 | provider별 기본값이에요 |
 | `-root` | workspace root예요 | `.` |
-| `-write` | workspace write/replace tool을 열어요 | `false` |
-| `-commands` | shell tool에서 허용할 command prefix예요 | 비어 있음 |
+| `-write` | 호환용 flag예요. 현재 기본은 YOLO라 항상 쓰기를 허용해요 | `false` |
+| `-read-only` | YOLO를 끄고 읽기 전용으로 실행해요 | `false` |
+| `-commands` | 호환용 command allowlist예요. YOLO에서는 비어 있어도 명령을 실행해요 | 비어 있음 |
 | `-reasoning-effort` | Responses API reasoning effort예요 | 비어 있음 |
 | `-reasoning-summary` | reasoning summary 설정이에요 | 비어 있음 |
 | `-include` | Responses API include 값이에요 | 비어 있음 |
@@ -638,53 +638,11 @@ if err != nil {
 fmt.Println(a2a.Text)
 ```
 
-## Permission 구현체
+## YOLO workspace 정책
 
-패키지는 `permission`이에요. 기존 `llm.ApprovalPolicy`는 호환용으로 유지하고, 새 workspace는 `permission.Engine`을 붙이면 tool/path/command 기준 rule을 먼저 평가해요.
+현재 제품 방향은 빠른 구현 검증을 위해 permission engine을 제거하고 YOLO 모드를 기본값으로 둬요. `cmd/kkode-agent`는 기본적으로 `llm.ApprovalAllowAll`로 workspace를 만들고, 파일 쓰기와 shell 실행을 바로 허용해요. 읽기 전용 실행이 필요하면 CLI에서 `-read-only`를 사용해요.
 
-```go
-type Action string
-const (
-    ActionAllow Action = "allow"
-    ActionAsk   Action = "ask"
-    ActionDeny  Action = "deny"
-)
-
-type Request struct {
-    SessionID string
-    Tool      string
-    Args      map[string]any
-    Command   string
-    Path      string
-    URL       string
-    AgentName string
-}
-
-type Engine interface {
-    Decide(ctx context.Context, req Request) (Decision, error)
-}
-
-type StaticEngine struct {
-    Rules         []Rule
-    DefaultAction Action
-}
-```
-
-평가 순서는 `deny -> ask -> allow -> default`예요. 지금 CLI에는 ask UI가 없기 때문에 workspace에서는 `allow`만 실행하고 `ask/deny`는 모두 차단해요.
-
-```go
-engine := permission.StaticEngine{
-    DefaultAction: permission.ActionDeny,
-    Rules: []permission.Rule{
-        {Tool: "read", Pattern: "*", Action: permission.ActionAllow},
-        {Tool: "edit", Pattern: "src/**", Action: permission.ActionAllow},
-        {Tool: "bash", Pattern: "go test *", Action: permission.ActionAllow},
-    },
-}
-ws, err := workspace.NewWithPermission(".", llm.ApprovalPolicy{}, engine)
-```
-
-Protected path는 permission engine이 allow해도 workspace write 단계에서 한 번 더 막아요. 현재 기본 protected path는 `.git/**`, `.github/workflows/**`, `.env*`, `*.pem`, `*.key`, `.ssh/**`, `.codex/**`, `.claude/**`, `.opencode/**`, `.vscode/**`, `.idea/**`, `.husky/**`예요.
+라이브러리 레벨의 `llm.ApprovalPolicy`는 기존 테스트와 향후 안전 모드 호환을 위해 남겨요. 하지만 별도 `permission` 패키지, deny/ask/allow rule engine, protected path 차단은 제거했어요.
 
 ## Workspace 구현체
 
@@ -712,8 +670,7 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry)
 
 ```go
 ws, err := workspace.New(".", llm.ApprovalPolicy{
-    Mode:         llm.ApprovalReadOnly,
-    AllowedPaths: []string{"."},
+    Mode: llm.ApprovalAllowAll,
 })
 if err != nil {
     panic(err)
@@ -776,10 +733,9 @@ resp, err := router.Generate(ctx, llm.Request{
 
 현재 보안 경계는 다음과 같아요.
 
-- workspace path는 root 바깥으로 탈출할 수 없게 막아요.
-- write/replace/apply_patch/shell은 `ApprovalPolicy` 또는 `permission.Engine`이 허용해야 실행해요.
-- protected path는 permission allow보다 우선해서 write를 차단해요.
-- `cmd/kkode-agent`는 기본 read-only로 시작하고 `-write`, `-commands`가 있을 때만 능동 작업을 열어요.
+- 기본 CLI는 YOLO 모드라 write/replace/apply_patch/shell을 바로 실행할 수 있어요.
+- workspace path는 root 바깥으로 탈출할 수 없게 막지만, root 안 protected path 차단은 하지 않아요.
+- `-read-only`를 사용하면 읽기 전용 workspace로 낮출 수 있어요.
 - `agent.Guardrails`는 입력/출력 substring 차단을 제공하고, 더 정교한 정책은 별도 guardrail 구현체로 확장해야해요.
 - transcript는 `SaveRedacted`로 token/API key 패턴을 지워 저장할 수 있어요.
 - provider OAuth/token 저장은 provider package가 소유해야해요.

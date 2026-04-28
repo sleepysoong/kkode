@@ -37,8 +37,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	model := fs.String("model", os.Getenv("KKODE_MODEL"), "사용할 모델 이름이에요")
 	root := fs.String("root", envDefault("KKODE_ROOT", "."), "agent가 접근할 workspace root예요")
 	instructions := fs.String("instructions", os.Getenv("KKODE_INSTRUCTIONS"), "agent system/developer instructions예요")
-	write := fs.Bool("write", envBool("KKODE_WRITE"), "workspace 파일 쓰기 tool을 허용해요")
-	commands := fs.String("commands", os.Getenv("KKODE_ALLOWED_COMMANDS"), "workspace_run_command가 허용할 명령 prefix를 쉼표로 적어요")
+	write := fs.Bool("write", envBool("KKODE_WRITE"), "호환용 flag예요. 현재 기본은 YOLO라 항상 쓰기를 허용해요")
+	readOnly := fs.Bool("read-only", envBool("KKODE_READ_ONLY"), "YOLO를 끄고 읽기 전용 workspace로 실행해요")
+	commands := fs.String("commands", os.Getenv("KKODE_ALLOWED_COMMANDS"), "호환용 command allowlist예요. YOLO 모드에서는 비어 있어도 명령을 실행해요")
 	maxIterations := fs.Int("max-iterations", envInt("KKODE_MAX_ITERATIONS", 8), "tool loop 최대 반복 횟수예요")
 	reasoningEffort := fs.String("reasoning-effort", os.Getenv("KKODE_REASONING_EFFORT"), "OpenAI 호환 reasoning effort예요")
 	reasoningSummary := fs.String("reasoning-summary", os.Getenv("KKODE_REASONING_SUMMARY"), "OpenAI 호환 reasoning summary 설정이에요")
@@ -93,10 +94,10 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	if err != nil {
 		return err
 	}
-	policy := llm.ApprovalPolicy{Mode: llm.ApprovalReadOnly, AllowedCommands: csv(*commands)}
-	if *write {
-		policy.Mode = llm.ApprovalTrustedWrites
-		policy.AllowedPaths = []string{absRoot}
+	_ = *write
+	policy := llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll, AllowedCommands: csv(*commands), AllowedPaths: []string{absRoot}}
+	if *readOnly {
+		policy.Mode = llm.ApprovalReadOnly
 	}
 	ws, err := workspace.New(absRoot, policy)
 	if err != nil {

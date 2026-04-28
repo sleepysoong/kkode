@@ -43,17 +43,14 @@
 
 - `cmd/kkode-agent`
   - OpenAI, OmniRoute, Copilot SDK, Codex CLI provider를 같은 CLI에서 실행해요.
-  - 기본은 read-only workspace이고, `-write`와 `-commands`를 명시해야 파일 쓰기와 shell 실행을 열어요.
+  - 기본은 YOLO workspace라 파일 쓰기와 shell 실행을 바로 열어요. 읽기 전용이 필요하면 `-read-only`를 써요.
   - 기본적으로 `.kkode/state.db` SQLite DB에 session/turn/event/todo를 저장하고, `-session`, `-fork-session`, `-list-sessions`로 이어갈 수 있어요.
 - `session`
   - SQLite 기반 session store, resume/fork, turn/event/todo/checkpoint 저장 인터페이스를 제공해요.
 - `runtime`
   - `agent.Agent`와 `session.Store`를 묶어 multi-turn runtime을 실행해요.
-- `permission`
-  - tool/path/command 기준 `allow`, `ask`, `deny` rule engine을 제공하고 deny 우선 평가를 해요.
 - `workspace`
-  - workspace path sandbox, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
-  - `.git/**`, `.env*`, `.claude/**`, `.codex/**` 같은 protected path write를 기본 차단해요.
+  - YOLO 모드에서 workspace path sandbox, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
   - shell 실행은 stdout 문자열뿐 아니라 exit code, stderr, timeout 여부를 구조화해서 tool output으로 돌려줘요.
 - `transcript`
   - request/response/error turn을 JSON으로 저장해요.
@@ -61,7 +58,7 @@
 
 ## Agent CLI 예제
 
-읽기 전용으로 저장소를 조사하게 할 때는 이렇게 실행해요.
+기본 YOLO 모드로 저장소를 조사하거나 수정하게 할 때는 이렇게 실행해요.
 
 ```bash
 go run ./cmd/kkode-agent \
@@ -71,19 +68,15 @@ go run ./cmd/kkode-agent \
   "이 저장소 구조를 요약해줘"
 ```
 
-파일 수정과 제한된 명령 실행까지 허용하려면 명시적으로 열어야해요.
+읽기 전용으로만 실행하고 싶으면 `-read-only`를 붙여요.
 
 ```bash
 go run ./cmd/kkode-agent \
-  -provider omniroute \
-  -model auto \
+  -provider openai \
+  -model gpt-5-mini \
   -root . \
-  -write \
-  -commands "go test,go vet" \
-  -reasoning-effort medium \
-  -reasoning-summary auto \
-  -transcript .kkode/transcript.json \
-  "테스트가 실패하면 고치고 go test ./...까지 실행해줘"
+  -read-only \
+  "이 저장소 구조를 요약해줘"
 ```
 
 Codex 구독/CLI adapter를 쓰는 경우에는 provider만 바꾸면 돼요.
@@ -166,15 +159,7 @@ fmt.Println(resp.Text)
 ## Workspace tool 예제
 
 ```go
-engine := permission.StaticEngine{
-    DefaultAction: permission.ActionDeny,
-    Rules: []permission.Rule{
-        {Tool: "read", Pattern: "*", Action: permission.ActionAllow},
-        {Tool: "edit", Pattern: "src/**", Action: permission.ActionAllow},
-        {Tool: "bash", Pattern: "go test *", Action: permission.ActionAllow},
-    },
-}
-ws, err := workspace.NewWithPermission(".", llm.ApprovalPolicy{}, engine)
+ws, err := workspace.New(".", llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll})
 if err != nil {
     panic(err)
 }
@@ -187,6 +172,9 @@ _ = text
 
 matches, err := ws.Grep("TODO", workspace.GrepOptions{PathGlob: "**/*.go"})
 _ = matches
+
+result, err := ws.RunDetailed(ctx, "go", []string{"test", "./..."}, workspace.CommandOptions{})
+_ = result
 ```
 
 ## Tool loop 예제

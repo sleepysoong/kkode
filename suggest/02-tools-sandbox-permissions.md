@@ -298,6 +298,29 @@ type LSPClient interface {
 - LSP diagnostics/tool은 아직 없어요.
 - `workspace_apply_patch`는 Codex 스타일의 단순 apply_patch grammar만 지원하고, 전체 unified diff parser는 아니에요.
 
+
+## 구현 상태 업데이트: 2026-04-28 YOLO 전환
+
+사용자 지시에 따라 방금 추가했던 `permission/` 패키지와 deny/ask/allow rule engine은 제거했어요. 현재 `cmd/kkode-agent` 기본값은 YOLO 모드이며 `llm.ApprovalAllowAll`로 파일 쓰기와 shell 실행을 바로 허용해요.
+
+남긴 것:
+
+- `workspace_read_file` 범위 옵션
+- `workspace_glob`
+- `workspace_grep`
+- `workspace_apply_patch`
+- `workspace_replace_in_file.expected_replacements`
+- 구조화 `CommandResult`
+
+제거한 것:
+
+- `permission/` 패키지
+- `workspace.NewWithPermission`
+- protected path write 차단
+- ask/deny/allow rule 평가
+
+주의: YOLO 모드는 빠른 구현 검증용이에요. 안전 모드가 다시 필요해지면 permission engine보다 checkpoint/undo와 UI 승인 흐름을 먼저 설계해야해요.
+
 ## 참고 소스
 
 - OpenCode Tools: https://opencode.ai/docs/tools/

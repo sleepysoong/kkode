@@ -15,13 +15,11 @@ import (
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
-	"github.com/sleepysoong/kkode/permission"
 )
 
 type Workspace struct {
 	Root           string
 	Approval       llm.ApprovalPolicy
-	Permission     permission.Engine
 	CommandTimeout time.Duration
 }
 
@@ -73,15 +71,6 @@ func New(root string, policy llm.ApprovalPolicy) (*Workspace, error) {
 		return nil, fmt.Errorf("workspace root is not a directory: %s", abs)
 	}
 	return &Workspace{Root: abs, Approval: policy, CommandTimeout: 30 * time.Second}, nil
-}
-
-func NewWithPermission(root string, policy llm.ApprovalPolicy, engine permission.Engine) (*Workspace, error) {
-	w, err := New(root, policy)
-	if err != nil {
-		return nil, err
-	}
-	w.Permission = engine
-	return w, nil
 }
 
 func (w *Workspace) Resolve(rel string) (string, error) {
@@ -415,14 +404,14 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 	strict := true
 	defs = []llm.Tool{
 		{Kind: llm.ToolFunction, Name: "workspace_read_file", Description: "workspace 안의 파일을 읽어요. offset_line, limit_lines, max_bytes로 범위를 줄일 수 있어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "offset_line": integerSchema(), "limit_lines": integerSchema(), "max_bytes": integerSchema()}, []string{"path"})},
-		{Kind: llm.ToolFunction, Name: "workspace_write_file", Description: "permission policy가 허용할 때 workspace 안의 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
-		{Kind: llm.ToolFunction, Name: "workspace_replace_in_file", Description: "permission policy가 허용할 때 파일 안의 텍스트를 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": integerSchema()}, []string{"path", "old", "new"})},
-		{Kind: llm.ToolFunction, Name: "workspace_apply_patch", Description: "permission policy가 허용할 때 apply_patch 형식의 patch를 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
+		{Kind: llm.ToolFunction, Name: "workspace_write_file", Description: "YOLO 모드에서 workspace 안의 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
+		{Kind: llm.ToolFunction, Name: "workspace_replace_in_file", Description: "YOLO 모드에서 파일 안의 텍스트를 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": integerSchema()}, []string{"path", "old", "new"})},
+		{Kind: llm.ToolFunction, Name: "workspace_apply_patch", Description: "YOLO 모드에서 apply_patch 형식의 patch를 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
 		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "workspace_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_grep", Description: "workspace 파일들에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": integerSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "workspace 파일들에서 literal 문자열을 검색하고 파일 경로만 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"needle": stringSchema()}, []string{"needle"})},
-		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "permission policy가 허용할 때 workspace에서 명령을 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": integerSchema()}, []string{"command"})},
+		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "YOLO 모드에서 workspace에서 명령을 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": integerSchema()}, []string{"command"})},
 	}
 	handlers = llm.ToolRegistry{
 		"workspace_read_file": llm.JSONToolHandler(func(ctx context.Context, in struct {
@@ -507,50 +496,15 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 }
 
 func (w *Workspace) allowsRead(path string) bool {
-	if w.Permission != nil {
-		dec, err := w.Permission.Decide(context.Background(), permission.Request{Tool: "read", Path: w.rel(path)})
-		return err == nil && dec.Action == permission.ActionAllow
-	}
 	return w.Approval.AllowsRead(path)
 }
 
 func (w *Workspace) allowsWrite(path string) bool {
-	rel := w.rel(path)
-	if IsProtectedPath(rel) {
-		return false
-	}
-	if w.Permission != nil {
-		dec, err := w.Permission.Decide(context.Background(), permission.Request{Tool: "edit", Path: rel})
-		return err == nil && dec.Action == permission.ActionAllow
-	}
 	return w.Approval.AllowsWrite(path)
 }
 
 func (w *Workspace) allowsCommand(command string) bool {
-	if w.Permission != nil {
-		dec, err := w.Permission.Decide(context.Background(), permission.Request{Tool: "bash", Command: command})
-		return err == nil && dec.Action == permission.ActionAllow
-	}
 	return w.Approval.AllowsCommand(command)
-}
-
-func (w *Workspace) rel(path string) string {
-	rel, err := filepath.Rel(w.Root, path)
-	if err != nil {
-		return filepath.ToSlash(path)
-	}
-	return filepath.ToSlash(rel)
-}
-
-func IsProtectedPath(rel string) bool {
-	rel = filepath.ToSlash(strings.TrimPrefix(rel, "./"))
-	patterns := []string{".git/**", ".github/workflows/**", ".env", ".env.*", "*.pem", "*.key", ".ssh/**", ".codex/**", ".claude/**", ".opencode/**", ".vscode/**", ".idea/**", ".husky/**"}
-	for _, pattern := range patterns {
-		if globMatches(pattern, rel) || rel == strings.TrimSuffix(pattern, "/**") {
-			return true
-		}
-	}
-	return false
 }
 
 type patchOp struct {
