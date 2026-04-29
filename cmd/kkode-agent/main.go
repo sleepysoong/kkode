@@ -19,6 +19,7 @@ import (
 	"github.com/sleepysoong/kkode/providers/openai"
 	agentruntime "github.com/sleepysoong/kkode/runtime"
 	"github.com/sleepysoong/kkode/session"
+	ktools "github.com/sleepysoong/kkode/tools"
 	"github.com/sleepysoong/kkode/transcript"
 	"github.com/sleepysoong/kkode/workspace"
 )
@@ -54,6 +55,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	listSessions := fs.Bool("list-sessions", false, "SQLite DB에 저장된 session 목록을 출력해요")
 	noSession := fs.Bool("no-session", envBool("KKODE_NO_SESSION"), "SQLite session 저장을 끄고 단발 실행해요")
 	redactTranscript := fs.Bool("redact-transcript", envBool("KKODE_REDACT_TRANSCRIPT"), "transcript 저장 전에 secret 패턴을 마스킹해요")
+	noWeb := fs.Bool("no-web", envBool("KKODE_NO_WEB"), "web_fetch tool을 비활성화해요")
+	webMaxBytes := fs.Int64("web-max-bytes", envInt64("KKODE_WEB_MAX_BYTES", 1<<20), "web_fetch가 읽을 최대 byte 수예요")
 	verbose := fs.Bool("v", envBool("KKODE_VERBOSE"), "trace event를 stderr에 출력해요")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -128,12 +131,22 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	if *reasoningEffort != "" || *reasoningSummary != "" {
 		base.Reasoning = &llm.ReasoningConfig{Effort: *reasoningEffort, Summary: *reasoningSummary}
 	}
+	toolDefs, toolHandlers := ktools.FileTools(ws)
+	if !*noWeb {
+		webDefs, webHandlers := ktools.WebTools(ktools.WebConfig{MaxBytes: *webMaxBytes})
+		toolDefs = append(toolDefs, webDefs...)
+		for name, handler := range webHandlers {
+			toolHandlers[name] = handler
+		}
+	}
 	ag, err := agent.New(agent.Config{
 		Provider:      provider,
 		Model:         *model,
 		Instructions:  *instructions,
 		BaseRequest:   base,
 		Workspace:     ws,
+		Tools:         toolDefs,
+		ToolHandlers:  toolHandlers,
 		MaxIterations: *maxIterations,
 		Transcript:    tr,
 		Guardrails:    guardrails,
@@ -250,6 +263,18 @@ func envDefault(key, fallback string) string {
 func envBool(key string) bool {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
 	return value == "1" || value == "true" || value == "yes" || value == "y" || value == "on"
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	var out int64
+	if _, err := fmt.Sscanf(value, "%d", &out); err != nil || out <= 0 {
+		return fallback
+	}
+	return out
 }
 
 func envInt(key string, fallback int) int {

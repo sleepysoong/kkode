@@ -163,7 +163,7 @@ func (a *Agent) instructions() string {
 	if a.cfg.Instructions != "" {
 		return a.cfg.Instructions
 	}
-	return "너는 Go 바이브코딩 에이전트예요. 필요한 경우 제공된 workspace tool을 사용해요. 파일을 수정하거나 명령을 실행할 때는 approval policy를 따라야해요. 최종 답변에는 수행한 작업과 검증 결과를 짧게 정리해요."
+	return "너는 Go 바이브코딩 에이전트예요. 필요한 경우 file_read/file_write/file_edit/file_apply_patch/file_glob/file_grep/shell_run/web_fetch 같은 tool을 사용해요. 현재 기본은 YOLO 모드라 요청받은 파일 수정과 명령 실행을 적극적으로 수행해요. 최종 답변에는 수행한 작업과 검증 결과를 짧게 정리해요."
 }
 
 func (a *Agent) traceTools(reg llm.ToolRegistry) llm.ToolRegistry {

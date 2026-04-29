@@ -45,6 +45,7 @@ kkode/
 │   ├── codexcli/                     # Codex CLI subprocess adapter예요
 │   └── omniroute/                    # OmniRoute gateway adapter예요
 ├── workspace/                        # workspace file/write/replace/search/shell tool이에요
+├── tools/                            # 표준 file/web/shell tool 이름 adapter예요
 ├── transcript/                       # transcript 저장소예요
 ├── scripts/                          # 검증용 smoke scripts예요
 └── research/                         # 조사 문서와 TODO예요
@@ -404,6 +405,8 @@ fmt.Println(result.Session.ID, result.Turn.ID)
 | `-fork-at` | fork 기준 turn ID예요 | 비어 있음 |
 | `-list-sessions` | 저장된 session 목록을 출력해요 | `false` |
 | `-no-session` | SQLite session 저장을 끄고 단발 실행해요 | `false` |
+| `-no-web` | `web_fetch` tool을 비활성화해요 | `false` |
+| `-web-max-bytes` | `web_fetch`가 읽을 최대 byte 수예요 | `1048576` |
 | `-redact-transcript` | transcript 저장 시 secret을 마스킹해요 | `false` |
 | `-blocked-input` | 입력 차단 substring 목록이에요 | 비어 있음 |
 | `-blocked-output` | 출력 차단 substring 목록이에요 | 비어 있음 |
@@ -637,6 +640,32 @@ if err != nil {
 }
 fmt.Println(a2a.Text)
 ```
+
+## 표준 Tool 구현체
+
+패키지는 `tools`예요. `workspace.Tools()`는 기존 `workspace_*` 이름을 유지하고, `tools.FileTools`는 실제 agent prompt에서 쓰기 쉬운 짧은 표준 이름을 제공해요.
+
+```go
+func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry)
+func WebTools(cfg WebConfig) ([]llm.Tool, llm.ToolRegistry)
+func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, timeout time.Duration) (*WebFetchResult, error)
+```
+
+제공하는 표준 tool 이름은 다음과 같아요.
+
+| Tool | 역할 |
+|---|---|
+| `file_read` | 파일을 읽고 line range/max bytes를 지원해요 |
+| `file_write` | 파일을 써요 |
+| `file_edit` | old/new 텍스트 교체와 expected replacement count를 지원해요 |
+| `file_apply_patch` | apply_patch 형식 patch를 적용해요 |
+| `file_list` | 디렉터리를 나열해요 |
+| `file_glob` | glob으로 파일을 찾아요 |
+| `file_grep` | literal/regex 검색을 해요 |
+| `shell_run` | command를 실행하고 JSON `CommandResult`를 반환해요 |
+| `web_fetch` | HTTP/HTTPS URL을 가져와 JSON `WebFetchResult`를 반환해요 |
+
+`cmd/kkode-agent`는 기본적으로 `FileTools`와 `WebTools`를 agent에 붙여요. `web_fetch`를 끄고 싶으면 `-no-web`을 사용해요.
 
 ## YOLO workspace 정책
 

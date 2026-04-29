@@ -49,6 +49,9 @@
   - SQLite 기반 session store, resume/fork, turn/event/todo/checkpoint 저장 인터페이스를 제공해요.
 - `runtime`
   - `agent.Agent`와 `session.Store`를 묶어 multi-turn runtime을 실행해요.
+- `tools`
+  - agent가 바로 쓰기 좋은 표준 tool 이름을 제공해요: `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`.
+  - `web_fetch`는 HTTP/HTTPS URL을 가져와 status, content type, body, truncate 여부를 JSON으로 돌려줘요.
 - `workspace`
   - YOLO 모드에서 workspace path sandbox, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
   - shell 실행은 stdout 문자열뿐 아니라 exit code, stderr, timeout 여부를 구조화해서 tool output으로 돌려줘요.
@@ -156,7 +159,9 @@ if err != nil {
 fmt.Println(resp.Text)
 ```
 
-## Workspace tool 예제
+## Tool 예제
+
+agent에는 기본적으로 표준 tool 이름을 붙이면 좋아요.
 
 ```go
 ws, err := workspace.New(".", llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll})
@@ -164,6 +169,26 @@ if err != nil {
     panic(err)
 }
 
+fileDefs, fileHandlers := tools.FileTools(ws)
+webDefs, webHandlers := tools.WebTools(tools.WebConfig{MaxBytes: 1 << 20})
+
+allDefs := append(fileDefs, webDefs...)
+for name, handler := range webHandlers {
+    fileHandlers[name] = handler
+}
+
+ag, err := agent.New(agent.Config{
+    Provider:     provider,
+    Model:        "gpt-5-mini",
+    Workspace:    ws,
+    Tools:        allDefs,
+    ToolHandlers: fileHandlers,
+})
+```
+
+직접 workspace API를 써도 돼요.
+
+```go
 text, err := ws.ReadFileRange("src/main.go", workspace.ReadOptions{
     OffsetLine: 1,
     LimitLines: 80,

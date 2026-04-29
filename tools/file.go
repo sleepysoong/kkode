@@ -1,0 +1,124 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/workspace"
+)
+
+func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
+	strict := true
+	defs := []llm.Tool{
+		{Kind: llm.ToolFunction, Name: "file_read", Description: "workspace 파일을 읽어요. offset_line, limit_lines, max_bytes로 범위를 줄일 수 있어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "offset_line": integerSchema(), "limit_lines": integerSchema(), "max_bytes": integerSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "file_write", Description: "YOLO 모드에서 workspace 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
+		{Kind: llm.ToolFunction, Name: "file_edit", Description: "workspace 파일에서 old 텍스트를 new 텍스트로 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": integerSchema()}, []string{"path", "old", "new"})},
+		{Kind: llm.ToolFunction, Name: "file_apply_patch", Description: "apply_patch 형식 patch를 workspace에 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
+		{Kind: llm.ToolFunction, Name: "file_list", Description: "workspace 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "file_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾아요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema()}, []string{"pattern"})},
+		{Kind: llm.ToolFunction, Name: "file_grep", Description: "workspace 파일에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": integerSchema()}, []string{"pattern"})},
+		{Kind: llm.ToolFunction, Name: "shell_run", Description: "YOLO 모드에서 workspace command를 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": integerSchema()}, []string{"command"})},
+	}
+	handlers := llm.ToolRegistry{
+		"file_read": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path       string `json:"path"`
+			OffsetLine int    `json:"offset_line"`
+			LimitLines int    `json:"limit_lines"`
+			MaxBytes   int    `json:"max_bytes"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			return ws.ReadFileRange(in.Path, workspace.ReadOptions{OffsetLine: in.OffsetLine, LimitLines: in.LimitLines, MaxBytes: in.MaxBytes})
+		}),
+		"file_write": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			if err := ws.WriteFile(in.Path, in.Content); err != nil {
+				return "", err
+			}
+			return "파일을 썼어요: " + in.Path, nil
+		}),
+		"file_edit": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path                 string `json:"path"`
+			Old                  string `json:"old"`
+			New                  string `json:"new"`
+			ExpectedReplacements int    `json:"expected_replacements"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			if err := ws.EditFile(in.Path, in.Old, in.New, in.ExpectedReplacements); err != nil {
+				return "", err
+			}
+			return "파일 텍스트를 교체했어요: " + in.Path, nil
+		}),
+		"file_apply_patch": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			PatchText string `json:"patch_text"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			if err := ws.ApplyPatch(in.PatchText); err != nil {
+				return "", err
+			}
+			return "patch를 적용했어요", nil
+		}),
+		"file_list": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path string `json:"path"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			xs, err := ws.List(in.Path)
+			return strings.Join(xs, "\n"), err
+		}),
+		"file_glob": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Pattern string `json:"pattern"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			xs, err := ws.Glob(in.Pattern)
+			return strings.Join(xs, "\n"), err
+		}),
+		"file_grep": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Pattern       string `json:"pattern"`
+			PathGlob      string `json:"path_glob"`
+			Regex         bool   `json:"regex"`
+			CaseSensitive bool   `json:"case_sensitive"`
+			MaxMatches    int    `json:"max_matches"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			matches, err := ws.Grep(in.Pattern, workspace.GrepOptions{PathGlob: in.PathGlob, Regex: in.Regex, CaseSensitive: in.CaseSensitive, MaxMatches: in.MaxMatches})
+			if err != nil {
+				return "", err
+			}
+			b, _ := json.MarshalIndent(matches, "", "  ")
+			return string(b), nil
+		}),
+		"shell_run": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Command   string   `json:"command"`
+			Args      []string `json:"args"`
+			TimeoutMS int      `json:"timeout_ms"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			res, err := ws.RunDetailed(ctx, in.Command, in.Args, workspace.CommandOptions{Timeout: time.Duration(in.TimeoutMS) * time.Millisecond})
+			b, _ := json.MarshalIndent(res, "", "  ")
+			return string(b), err
+		}),
+	}
+	return defs, handlers
+}
