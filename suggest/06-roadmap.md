@@ -164,6 +164,28 @@
 - provider/model list가 CLI에서 보이고 routing policy가 설명 가능해요.
 - 비용/usage budget 초과 시 stop/ask/fallback이 작동해요.
 
+
+## Phase 9: Gateway API / integration surface
+
+기간: 7~14일
+
+### 작업
+
+- `gateway/` package와 `cmd/kkode-gateway` 또는 `kkode serve`를 추가해요.
+- REST API로 session/run/event/file/tool/provider를 노출해요.
+- SSE event stream을 추가해요.
+- API key auth와 localhost 개발 모드를 추가해요.
+- Discord/webhook adapter 설계를 시작해요.
+- `gateway/openapi.yaml`을 작성해요.
+
+### 완료 기준
+
+- curl로 session 생성, run 시작, event 조회가 가능해요.
+- 웹 패널이 session list와 run event stream을 볼 수 있어요.
+- Discord bot이 `POST /runs`를 호출해서 작업을 시작할 수 있어요.
+
+상세 계획은 `suggest/07-gateway-api-plan.md`에 정리했어요.
+
 ## 추천 디렉터리 구조
 
 ```text
@@ -183,6 +205,7 @@ kkode/
 ├── modelcatalog/
 ├── tui/
 ├── server/
+├── gateway/
 ├── sdk/
 └── providers/
 ```
@@ -196,6 +219,7 @@ kkode/
 5. `context: load AGENTS.md/CLAUDE.md/KKODE.md into requests`
 6. `mcp: implement stdio client and tool registry adapter`
 7. `cli: replace kkode-agent with kkode run/session/auth/models`
+8. `gateway: expose sessions/runs/events over REST and SSE`
 
 ## 참고 소스
 
