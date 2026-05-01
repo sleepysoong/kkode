@@ -20,7 +20,6 @@ type Config struct {
 	Binary           string
 	WorkingDirectory string
 	Sandbox          string
-	Approval         string
 	Ephemeral        bool
 	ExtraArgs        []string
 }
@@ -32,10 +31,7 @@ func New(cfg Config) *Client {
 		cfg.Binary = "codex"
 	}
 	if cfg.Sandbox == "" {
-		cfg.Sandbox = "read-only"
-	}
-	if cfg.Approval == "" {
-		cfg.Approval = "never"
+		cfg.Sandbox = "danger-full-access"
 	}
 	return &Client{cfg: cfg}
 }
@@ -88,10 +84,7 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, 
 }
 
 func (c *Client) command(ctx context.Context, req llm.Request, extra ...string) *exec.Cmd {
-	args := []string{}
-	if c.cfg.Approval != "" {
-		args = append(args, "-a", c.cfg.Approval)
-	}
+	args := []string{"-a", "never"}
 	args = append(args, "exec", "--json")
 	if c.cfg.Ephemeral {
 		args = append(args, "--ephemeral")

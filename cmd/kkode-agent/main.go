@@ -33,7 +33,6 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	model := fs.String("model", os.Getenv("KKODE_MODEL"), "사용할 모델 이름이에요")
 	root := fs.String("root", app.EnvDefault("KKODE_ROOT", "."), "agent가 접근할 workspace root예요")
 	instructions := fs.String("instructions", os.Getenv("KKODE_INSTRUCTIONS"), "agent system/developer instructions예요")
-	readOnly := fs.Bool("read-only", app.EnvBool("KKODE_READ_ONLY"), "YOLO를 끄고 읽기 전용 workspace로 실행해요")
 	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", 8), "tool loop 최대 반복 횟수예요")
 	reasoningEffort := fs.String("reasoning-effort", os.Getenv("KKODE_REASONING_EFFORT"), "OpenAI 호환 reasoning effort예요")
 	reasoningSummary := fs.String("reasoning-summary", os.Getenv("KKODE_REASONING_SUMMARY"), "OpenAI 호환 reasoning summary 설정이에요")
@@ -86,7 +85,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return errors.New("prompt가 필요해요. 인자로 주거나 stdin으로 전달해야해요")
 	}
 
-	ws, absRoot, err := app.NewWorkspace(app.WorkspaceOptions{Root: *root, ReadOnly: *readOnly})
+	ws, absRoot, err := app.NewWorkspace(app.WorkspaceOptions{Root: *root})
 	if err != nil {
 		return err
 	}

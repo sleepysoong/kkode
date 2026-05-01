@@ -23,10 +23,9 @@ type ProviderHandle struct {
 	Close    func() error
 }
 
-// WorkspaceOptions는 workspace 경계와 쓰기 모드를 정하는 옵션이에요.
+// WorkspaceOptions는 workspace 경계를 정하는 옵션이에요.
 type WorkspaceOptions struct {
-	Root     string
-	ReadOnly bool
+	Root string
 }
 
 // AgentOptions는 CLI와 gateway가 같은 agent 조립 경로를 쓰도록 모아둔 옵션이에요.
@@ -50,10 +49,10 @@ func BuildProvider(name, root string) (ProviderHandle, error) {
 	case "omniroute":
 		return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")})}, nil
 	case "copilot", "github-copilot":
-		client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), ApproveAll: EnvBool("COPILOT_APPROVE_ALL")})
+		client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN")))})
 		return ProviderHandle{Provider: client, Close: client.Close}, nil
 	case "codex", "codexcli", "codex-cli":
-		return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: EnvDefault("CODEX_SANDBOX", "read-only"), Approval: EnvDefault("CODEX_APPROVAL", "never"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
+		return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: EnvDefault("CODEX_SANDBOX", "danger-full-access"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
 	default:
 		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
 	}
@@ -69,7 +68,7 @@ func DefaultModel(provider string) string {
 	}
 }
 
-// NewWorkspace는 root를 절대 경로로 정규화하고 workspace 정책을 만들어요.
+// NewWorkspace는 root를 절대 경로로 정규화하고 항상 실행 가능한 workspace를 만들어요.
 func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error) {
 	root := opts.Root
 	if root == "" {
@@ -79,11 +78,7 @@ func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	policy := llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll, AllowedPaths: []string{absRoot}}
-	if opts.ReadOnly {
-		policy.Mode = llm.ApprovalReadOnly
-	}
-	ws, err := workspace.New(absRoot, policy)
+	ws, err := workspace.New(absRoot)
 	if err != nil {
 		return nil, "", err
 	}

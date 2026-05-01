@@ -15,7 +15,7 @@ func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
 	if err := os.WriteFile(dir+"/a.txt", []byte("hello kkode"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalReadOnly})
+	w, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,25 +30,14 @@ func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
 	if _, err := w.ReadFile("../nope"); err == nil {
 		t.Fatal("expected escape error")
 	}
-	if err := w.WriteFile("b.txt", "x"); err == nil {
-		t.Fatal("expected write denied")
+	if err := w.WriteFile("b.txt", "x"); err != nil {
+		t.Fatalf("write는 항상 실행돼야해요: %v", err)
 	}
 }
 
-func TestReadOnlyDeniesCommandsEvenWhenAllowlistExists(t *testing.T) {
+func TestWorkspaceToolsAndCommandAlwaysRun(t *testing.T) {
 	dir := t.TempDir()
-	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalReadOnly, AllowedCommands: []string{"echo"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Run(context.Background(), "echo", "nope"); err == nil {
-		t.Fatal("read-only policy must not allow commands")
-	}
-}
-
-func TestWorkspaceToolsAndCommandPolicy(t *testing.T) {
-	dir := t.TempDir()
-	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll, AllowedCommands: []string{"echo"}})
+	w, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,9 +58,9 @@ func TestWorkspaceToolsAndCommandPolicy(t *testing.T) {
 	}
 }
 
-func TestWorkspaceWriteReplaceAndRunToolPolicy(t *testing.T) {
+func TestWorkspaceWriteReplaceAndRunToolAlwaysRun(t *testing.T) {
 	dir := t.TempDir()
-	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalTrustedWrites, AllowedPaths: []string{dir}, AllowedCommands: []string{"echo"}})
+	w, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +90,7 @@ func TestWorkspaceWriteReplaceAndRunToolPolicy(t *testing.T) {
 
 func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	dir := t.TempDir()
-	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalTrustedWrites, AllowedPaths: []string{dir}})
+	w, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +129,7 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 
 func TestYOLOAllowAllWritesProtectedPathsAndCommands(t *testing.T) {
 	dir := t.TempDir()
-	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll})
+	w, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

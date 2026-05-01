@@ -189,7 +189,7 @@ erDiagram
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
 - `Auth`, `Model`, `ModelRegistry`, `Usage.EstimatedCost`를 제공해요.
-- `Router`, `Template`, `ApprovalPolicy`, `RedactSecrets`도 포함해요.
+- `Router`, `Template`, `RedactSecrets`도 포함해요.
 
 ### Providers
 
@@ -221,7 +221,7 @@ erDiagram
 
 - `cmd/kkode-agent`
   - OpenAI, OmniRoute, Copilot SDK, Codex CLI provider를 같은 CLI에서 실행해요.
-  - 기본은 YOLO workspace라 파일 쓰기와 shell 실행을 바로 열어요. 읽기 전용이 필요하면 `-read-only`를 써요.
+  - 항상 실행형 workspace라 파일 쓰기와 shell 실행을 바로 열어요.
   - 기본적으로 `.kkode/state.db` SQLite DB에 session/turn/event/todo를 저장하고, `-session`, `-fork-session`, `-list-sessions`로 이어갈 수 있어요.
 - `session`
   - SQLite 기반 session store, resume/fork, turn/event/todo/checkpoint 저장 인터페이스를 제공해요.
@@ -249,16 +249,7 @@ go run ./cmd/kkode-agent \
   "이 저장소 구조를 요약해줘"
 ```
 
-읽기 전용으로만 실행하고 싶으면 `-read-only`를 붙여요.
-
-```bash
-go run ./cmd/kkode-agent \
-  -provider openai \
-  -model gpt-5-mini \
-  -root . \
-  -read-only \
-  "이 저장소 구조를 요약해줘"
-```
+이 프로젝트는 별도 권한/읽기 전용 모드를 두지 않아요. agent가 요청한 파일 작업과 shell 실행은 workspace root 안에서 바로 실행돼요.
 
 Codex 구독/CLI adapter를 쓰는 경우에는 provider만 바꾸면 돼요.
 
@@ -379,7 +370,7 @@ fmt.Println(resp.Text)
 agent에는 기본적으로 표준 tool 이름을 붙이면 좋아요.
 
 ```go
-ws, err := workspace.New(".", llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll})
+ws, err := workspace.New(".")
 if err != nil {
     panic(err)
 }

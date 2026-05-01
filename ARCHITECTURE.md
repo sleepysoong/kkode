@@ -10,7 +10,7 @@
 2. Copilot SDK나 Codex CLI처럼 session 중심인 provider도 같은 앱에서 사용할 수 있게 해요.
 3. Tool, Provider, Auth, Model, Response, Prompt를 직접 소유해요.
 4. provider별 특수 기능은 adapter 안에 가두고 core는 최대한 provider-neutral하게 유지해요.
-5. workspace 접근과 shell 실행은 approval policy로 제한해야해요.
+5. workspace 접근과 shell 실행은 별도 권한 엔진 없이 즉시 실행해야해요.
 6. 실제 agent 실행 단위는 provider, workspace tool, guardrail, transcript, trace를 한 번에 묶어야해요.
 
 ## 파일 트리
@@ -29,7 +29,6 @@ kkode/
 │   ├── kkode-agent/                  # provider 선택형 agent CLI예요
 │   └── kkode-gateway/                # HTTP gateway API server예요
 ├── llm/                              # provider-neutral core예요
-│   ├── approval.go                   # 승인 정책이에요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
 │   ├── prompt.go                     # 메시지 helper예요
 │   ├── redact.go                     # secret redaction helper예요
@@ -264,11 +263,7 @@ func (a *Agent) Stream(ctx context.Context, prompt string) (llm.EventStream, err
 예제는 이렇게 써요.
 
 ```go
-ws, err := workspace.New(".", llm.ApprovalPolicy{
-    Mode:            llm.ApprovalTrustedWrites,
-    AllowedPaths:    []string{"/abs/path/to/repo"},
-    AllowedCommands: []string{"go test", "go vet"},
-})
+ws, err := workspace.New(".")
 if err != nil {
     panic(err)
 }
@@ -457,7 +452,7 @@ fmt.Println(result.Session.ID, result.Turn.ID)
 
 ## Agent CLI 구현체
 
-`cmd/kkode-agent`는 위 agent runtime을 바로 실행하는 얇은 앱이에요. provider는 flag 또는 환경변수로 고르고, workspace 권한은 기본 YOLO예요. 읽기 전용이 필요할 때만 `-read-only`를 켜요.
+`cmd/kkode-agent`는 위 agent runtime을 바로 실행하는 얇은 앱이에요. provider는 flag 또는 환경변수로 고르고, workspace 파일 작업과 shell 실행은 별도 권한 엔진 없이 바로 실행해요.
 
 주요 flag는 다음과 같아요.
 
@@ -466,7 +461,6 @@ fmt.Println(result.Session.ID, result.Turn.ID)
 | `-provider` | `openai`, `omniroute`, `copilot`, `codex` 중 하나예요 | `KKODE_PROVIDER` 또는 `openai` |
 | `-model` | provider에 넘길 모델이에요 | provider별 기본값이에요 |
 | `-root` | workspace root예요 | `.` |
-| `-read-only` | YOLO를 끄고 읽기 전용으로 실행해요 | `false` |
 | `-reasoning-effort` | Responses API reasoning effort예요 | 비어 있음 |
 | `-reasoning-summary` | reasoning summary 설정이에요 | 비어 있음 |
 | `-include` | Responses API include 값이에요 | 비어 있음 |
@@ -739,16 +733,16 @@ func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, ti
 
 ## YOLO workspace 정책
 
-현재 제품 방향은 빠른 구현 검증을 위해 permission engine을 제거하고 YOLO 모드를 기본값으로 둬요. `cmd/kkode-agent`는 기본적으로 `llm.ApprovalAllowAll`로 workspace를 만들고, 파일 쓰기와 shell 실행을 바로 허용해요. 읽기 전용 실행이 필요하면 CLI에서 `-read-only`를 사용해요.
+현재 제품 방향은 빠른 구현 검증을 위해 권한 엔진을 완전히 제거하고 항상 실행 모드로 단순화해요. `cmd/kkode-agent`, `cmd/kkode-gateway`, `workspace`는 파일 쓰기와 shell 실행을 묻지 않고 바로 수행해요.
 
-라이브러리 레벨의 `llm.ApprovalPolicy`는 기존 테스트와 향후 안전 모드 호환을 위해 남겨요. 하지만 별도 `permission` 패키지, deny/ask/allow rule engine, protected path 차단은 제거했어요.
+승인 정책 타입, 읽기 전용 모드, 명령 허용 목록, 보호 경로 차단은 코드에서 제거했어요. 외부 provider가 권한 callback을 요구하는 경우에도 Copilot provider는 항상 approve를 반환하고, Codex CLI adapter는 `-a never`와 `danger-full-access` sandbox 기본값으로 실행해요.
 
 ## Workspace 구현체
 
 패키지는 `workspace`예요. provider tool로 붙일 수 있는 local workspace adapter예요.
 
 ```go
-func New(root string, policy llm.ApprovalPolicy) (*Workspace, error)
+func New(root string) (*Workspace, error)
 func (w *Workspace) Resolve(rel string) (string, error)
 func (w *Workspace) ReadFile(rel string) (string, error)
 func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error)
@@ -768,9 +762,7 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry)
 예제는 이렇게 써요.
 
 ```go
-ws, err := workspace.New(".", llm.ApprovalPolicy{
-    Mode: llm.ApprovalAllowAll,
-})
+ws, err := workspace.New(".")
 if err != nil {
     panic(err)
 }
@@ -833,8 +825,7 @@ resp, err := router.Generate(ctx, llm.Request{
 현재 보안 경계는 다음과 같아요.
 
 - 기본 CLI는 YOLO 모드라 write/replace/apply_patch/shell을 바로 실행할 수 있어요.
-- workspace path는 root 바깥으로 탈출할 수 없게 막지만, root 안 protected path 차단은 하지 않아요.
-- `-read-only`를 사용하면 읽기 전용 workspace로 낮출 수 있어요.
+- workspace path는 root 바깥으로 탈출할 수 없게 막지만, root 안 보호 경로 차단은 하지 않아요.
 - `agent.Guardrails`는 입력/출력 substring 차단을 제공하고, 더 정교한 정책은 별도 guardrail 구현체로 확장해야해요.
 - transcript는 `SaveRedacted`로 token/API key 패턴을 지워 저장할 수 있어요.
 - provider OAuth/token 저장은 provider package가 소유해야해요.

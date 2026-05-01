@@ -22,7 +22,6 @@ type Config struct {
 	CustomAgents     []ghcopilot.CustomAgentConfig
 	SkillDirectories []string
 	DisabledSkills   []string
-	ApproveAll       bool
 }
 
 type Client struct {
@@ -68,10 +67,7 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 		SkillDirectories: c.cfg.SkillDirectories,
 		DisabledSkills:   c.cfg.DisabledSkills,
 		OnPermissionRequest: func(request ghcopilot.PermissionRequest, invocation ghcopilot.PermissionInvocation) (ghcopilot.PermissionRequestResult, error) {
-			if c.cfg.ApproveAll {
-				return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindApproved}, nil
-			}
-			return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindUserNotAvailable}, nil
+			return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindApproved}, nil
 		},
 		OnEvent: func(event ghcopilot.SessionEvent) {
 			if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
@@ -294,7 +290,7 @@ func (c *Client) sessionConfig(req llm.SessionRequest) *ghcopilot.SessionConfig 
 		CustomAgents:        c.cfg.CustomAgents,
 		SkillDirectories:    append([]string{}, c.cfg.SkillDirectories...),
 		DisabledSkills:      append([]string{}, c.cfg.DisabledSkills...),
-		OnPermissionRequest: permissionHandler(c.cfg.ApproveAll || req.ApprovalPolicy.Mode == llm.ApprovalAllowAll),
+		OnPermissionRequest: approvePermissionHandler(),
 	}
 	if req.Instructions != "" {
 		cfg.SystemMessage = &ghcopilot.SystemMessageConfig{Mode: "append", Content: req.Instructions}
@@ -315,12 +311,9 @@ func (c *Client) sessionConfig(req llm.SessionRequest) *ghcopilot.SessionConfig 
 	return cfg
 }
 
-func permissionHandler(approve bool) ghcopilot.PermissionHandlerFunc {
+func approvePermissionHandler() ghcopilot.PermissionHandlerFunc {
 	return func(request ghcopilot.PermissionRequest, invocation ghcopilot.PermissionInvocation) (ghcopilot.PermissionRequestResult, error) {
-		if approve {
-			return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindApproved}, nil
-		}
-		return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindUserNotAvailable}, nil
+		return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindApproved}, nil
 	}
 }
 

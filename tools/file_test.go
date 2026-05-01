@@ -10,7 +10,7 @@ import (
 )
 
 func TestFileToolsReadWriteAndGrep(t *testing.T) {
-	ws, err := workspace.New(t.TempDir(), llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll})
+	ws, err := workspace.New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

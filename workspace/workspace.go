@@ -19,7 +19,6 @@ import (
 
 type Workspace struct {
 	Root           string
-	Approval       llm.ApprovalPolicy
 	CommandTimeout time.Duration
 }
 
@@ -58,7 +57,7 @@ type SearchMatch struct {
 	Excerpt string `json:"excerpt"`
 }
 
-func New(root string, policy llm.ApprovalPolicy) (*Workspace, error) {
+func New(root string) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -70,7 +69,7 @@ func New(root string, policy llm.ApprovalPolicy) (*Workspace, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("workspace root is not a directory: %s", abs)
 	}
-	return &Workspace{Root: abs, Approval: policy, CommandTimeout: 30 * time.Second}, nil
+	return &Workspace{Root: abs, CommandTimeout: 30 * time.Second}, nil
 }
 
 func (w *Workspace) Resolve(rel string) (string, error) {
@@ -100,9 +99,6 @@ func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	if !w.allowsRead(path) {
-		return "", fmt.Errorf("read denied: %s", rel)
-	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
@@ -130,9 +126,6 @@ func (w *Workspace) WriteFile(rel, content string) error {
 	path, err := w.Resolve(rel)
 	if err != nil {
 		return err
-	}
-	if !w.allowsWrite(path) {
-		return fmt.Errorf("write denied: %s", rel)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -171,9 +164,6 @@ func (w *Workspace) List(rel string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !w.allowsRead(path) {
-		return nil, fmt.Errorf("list denied: %s", rel)
-	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
@@ -204,9 +194,6 @@ func (w *Workspace) Glob(pattern string) ([]string, error) {
 			if d.Name() == ".git" {
 				return filepath.SkipDir
 			}
-			return nil
-		}
-		if !w.allowsRead(path) {
 			return nil
 		}
 		if globMatches(pattern, rel) {
@@ -276,9 +263,6 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 		if opts.PathGlob != "" && !globMatches(opts.PathGlob, rel) {
 			return nil
 		}
-		if !w.allowsRead(path) {
-			return nil
-		}
 		file, err := os.Open(path)
 		if err != nil {
 			return nil
@@ -319,13 +303,7 @@ func (w *Workspace) Run(ctx context.Context, command string, args ...string) (st
 }
 
 func (w *Workspace) RunDetailed(ctx context.Context, command string, args []string, opts CommandOptions) (CommandResult, error) {
-	full := strings.Join(append([]string{command}, args...), " ")
 	result := CommandResult{Command: append([]string{command}, args...), CWD: w.Root, StartedAt: time.Now().UTC()}
-	if !w.allowsCommand(full) {
-		result.EndedAt = time.Now().UTC()
-		result.ExitCode = -1
-		return result, fmt.Errorf("command denied: %s", full)
-	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = w.CommandTimeout
@@ -377,9 +355,6 @@ func (w *Workspace) ApplyPatch(patchText string) error {
 			path, err := w.Resolve(op.path)
 			if err != nil {
 				return err
-			}
-			if !w.allowsWrite(path) {
-				return fmt.Errorf("delete denied: %s", op.path)
 			}
 			if err := os.Remove(path); err != nil {
 				return err
@@ -493,18 +468,6 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		}),
 	}
 	return defs, handlers
-}
-
-func (w *Workspace) allowsRead(path string) bool {
-	return w.Approval.AllowsRead(path)
-}
-
-func (w *Workspace) allowsWrite(path string) bool {
-	return w.Approval.AllowsWrite(path)
-}
-
-func (w *Workspace) allowsCommand(command string) bool {
-	return w.Approval.AllowsCommand(command)
 }
 
 type patchOp struct {

@@ -18,7 +18,6 @@ type SessionRequest struct {
 	Skills           []string
 	CustomAgents     []Agent
 	Reasoning        *ReasoningConfig
-	ApprovalPolicy   ApprovalPolicy
 	ProviderOptions  map[string]any
 }
 

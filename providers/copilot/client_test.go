@@ -46,7 +46,7 @@ func TestToCopilotMCPServerAndAgent(t *testing.T) {
 	if _, ok := httpCfg.(ghcopilot.MCPHTTPServerConfig); !ok {
 		t.Fatalf("expected http config: %#v", httpCfg)
 	}
-	agent := ToCopilotAgent(llm.Agent{Name: "researcher", Prompt: "read only", Tools: []string{"view"}, MCPServers: map[string]llm.MCPServer{"x": {Kind: llm.MCPHTTP, URL: "https://example.test/mcp"}}})
+	agent := ToCopilotAgent(llm.Agent{Name: "researcher", Prompt: "inspect files", Tools: []string{"view"}, MCPServers: map[string]llm.MCPServer{"x": {Kind: llm.MCPHTTP, URL: "https://example.test/mcp"}}})
 	if agent.Name != "researcher" || len(agent.MCPServers) != 1 {
 		t.Fatalf("agent=%#v", agent)
 	}

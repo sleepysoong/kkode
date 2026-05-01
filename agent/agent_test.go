@@ -24,7 +24,7 @@ func (p *fakeProvider) Generate(ctx context.Context, req llm.Request) (*llm.Resp
 }
 
 func TestAgentRunWithWorkspaceTool(t *testing.T) {
-	ws, err := workspace.New(t.TempDir(), llm.ApprovalPolicy{Mode: llm.ApprovalReadOnly})
+	ws, err := workspace.New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
