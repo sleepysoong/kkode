@@ -1,0 +1,409 @@
+openapi: 3.0.3
+info:
+  title: kkode Gateway API
+  version: 0.1.0
+  description: |
+    kkode의 session-aware coding agent gateway API예요.
+    REST는 session/run 제어면을 담당하고, SSE는 event replay/stream을 담당해요.
+servers:
+  - url: http://127.0.0.1:41234
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      summary: 프로세스 health를 확인해요.
+      security: []
+      responses:
+        '200':
+          description: 정상이에요.
+  /readyz:
+    get:
+      summary: gateway 준비 상태를 확인해요.
+      security: []
+      responses:
+        '200':
+          description: 준비됐어요.
+  /api/v1/version:
+    get:
+      summary: gateway version과 provider 목록을 반환해요.
+      responses:
+        '200':
+          description: version 응답이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+  /api/v1/providers:
+    get:
+      summary: gateway가 알고 있는 provider 목록을 반환해요.
+      responses:
+        '200':
+          description: provider 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderListResponse'
+  /api/v1/sessions:
+    get:
+      summary: session 목록을 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: session 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+    post:
+      summary: 새 session을 만들어요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreateRequest'
+      responses:
+        '201':
+          description: 생성된 session이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /api/v1/sessions/{session_id}:
+    get:
+      summary: session 상세를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: session 상세예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/sessions/{session_id}/fork:
+    post:
+      summary: 기존 session을 fork해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                at_turn_id:
+                  type: string
+      responses:
+        '201':
+          description: fork된 session이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /api/v1/sessions/{session_id}/events:
+    get:
+      summary: session event를 JSON 또는 SSE로 replay해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: query
+          name: after_seq
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: stream
+          schema:
+            type: boolean
+          description: true면 text/event-stream으로 반환해요.
+      responses:
+        '200':
+          description: event 목록 또는 SSE stream이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventListResponse'
+            text/event-stream:
+              schema:
+                type: string
+  /api/v1/sessions/{session_id}/todos:
+    get:
+      summary: session todo 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: todo 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodoListResponse'
+  /api/v1/runs:
+    post:
+      summary: agent run을 시작해요.
+      description: MVP에서는 RunStarter가 주입됐을 때만 동작해요. 다음 단계에서 async RunManager로 확장해야해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunStartRequest'
+      responses:
+        '202':
+          description: run이 접수됐어요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '501':
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    SessionID:
+      in: path
+      name: session_id
+      required: true
+      schema:
+        type: string
+  responses:
+    Error:
+      description: 표준 error envelope이에요.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    VersionResponse:
+      type: object
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        providers:
+          type: array
+          items:
+            type: string
+    ProviderListResponse:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Provider'
+    Provider:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        models:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: object
+          additionalProperties: true
+        auth_status:
+          type: string
+    SessionCreateRequest:
+      type: object
+      required: [project_root, provider, model]
+      properties:
+        project_root:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        agent:
+          type: string
+        mode:
+          type: string
+          enum: [build, plan, ask]
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    SessionListResponse:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+    Session:
+      type: object
+      required: [id, project_root, provider_name, model, agent_name, mode, turn_count, updated_at]
+      properties:
+        id:
+          type: string
+        project_root:
+          type: string
+        provider_name:
+          type: string
+        model:
+          type: string
+        agent_name:
+          type: string
+        mode:
+          type: string
+        summary:
+          type: string
+        turn_count:
+          type: integer
+        event_count:
+          type: integer
+        todo_count:
+          type: integer
+        last_response_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    EventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+    Event:
+      type: object
+      required: [seq, id, session_id, at, type]
+      properties:
+        seq:
+          type: integer
+        id:
+          type: string
+        session_id:
+          type: string
+        turn_id:
+          type: string
+        at:
+          type: string
+          format: date-time
+        type:
+          type: string
+        tool:
+          type: string
+        payload:
+          nullable: true
+        error:
+          type: string
+    TodoListResponse:
+      type: object
+      required: [todos]
+      properties:
+        todos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Todo'
+    Todo:
+      type: object
+      required: [id, content, status, updated_at]
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    RunStartRequest:
+      type: object
+      required: [session_id, prompt]
+      properties:
+        session_id:
+          type: string
+        prompt:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        stream:
+          type: boolean
+        yolo:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    Run:
+      type: object
+      required: [id, session_id, status]
+      properties:
+        id:
+          type: string
+        session_id:
+          type: string
+        turn_id:
+          type: string
+        status:
+          type: string
+        prompt:
+          type: string
+        events_url:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+            details:
+              type: object
+              additionalProperties: true

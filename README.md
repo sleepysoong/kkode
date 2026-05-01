@@ -12,6 +12,7 @@
 - `session.SQLiteStore`와 `runtime.Runtime`이 session resume/fork, turn/event/todo 저장을 담당해요.
 - OpenAI-compatible Responses tool loop를 기본으로 쓰고, provider별 adapter는 `llm.Provider`만 구현하면 붙일 수 있어요.
 - `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, write 권한, command allowlist, session ID를 넘겨 바로 실행할 수 있어요.
+- `gateway.Server`와 `cmd/kkode-gateway`가 session/run/event/todo를 HTTP API로 노출해서 웹 패널이나 Discord adapter가 같은 runtime state를 재사용할 수 있게 해요.
 
 ### Core: `llm/`
 
@@ -38,6 +39,16 @@
   - OmniRoute gateway adapter예요.
   - `/v1/responses` 또는 OpenAPI 기준 `/api/v1/responses`를 사용할 수 있어요.
   - model list, health, thinking budget, fallback chain, cache/rate/session, translator, A2A helper를 제공해요.
+
+### Gateway API: `gateway/`
+
+- `gateway.Server`는 `net/http` 기반 API server예요. 외부 의존성 없이 `/api/v1` REST surface를 만들어요.
+- `GET /healthz`, `GET /readyz`, `GET /api/v1/version`, `GET /api/v1/providers`를 제공해요.
+- `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, `POST /api/v1/sessions/{id}/fork`를 제공해요.
+- `GET /api/v1/sessions/{id}/events`는 JSON replay와 `stream=true` SSE replay를 지원해요.
+- `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
+- `POST /api/v1/runs`는 `RunStarter` 주입 경계를 갖고 있어요. 지금은 gateway MVP boundary이고, 다음 단계에서 async `RunManager`로 확장해야해요.
+- `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support
 
@@ -111,6 +122,43 @@ go run ./cmd/kkode-agent \
   -fork-at turn_... \
   "이 지점부터 다른 접근으로 구현해줘"
 ```
+
+
+## Gateway API 예제
+
+로컬 웹 패널이나 Discord adapter가 session state를 읽게 하려면 gateway를 실행해요. 기본 listen 주소는 localhost라 개발 중에는 안전하게 시작할 수 있어요.
+
+```bash
+go run ./cmd/kkode-gateway \
+  -addr 127.0.0.1:41234 \
+  -state .kkode/state.db
+```
+
+원격 bind는 YOLO tool surface를 외부에 여는 것이므로 API key가 필요해요.
+
+```bash
+KKODE_API_KEY=kk_live_local \
+  go run ./cmd/kkode-gateway \
+  -addr 0.0.0.0:41234 \
+  -api-key-env KKODE_API_KEY
+```
+
+session 생성 예시는 다음과 같아요.
+
+```bash
+curl -X POST http://127.0.0.1:41234/api/v1/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"project_root":"/home/user/kkode","provider":"openai","model":"gpt-5-mini","agent":"web-panel"}'
+```
+
+event replay는 JSON이나 SSE로 받을 수 있어요.
+
+```bash
+curl http://127.0.0.1:41234/api/v1/sessions/sess_.../events
+curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
+```
+
+OpenAPI 계약은 `gateway/openapi.yaml`을 참고해요.
 
 ## 빠른 검증
 

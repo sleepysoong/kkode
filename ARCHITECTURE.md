@@ -25,7 +25,8 @@ kkode/
 ├── session/                         # SQLite session store와 resume/fork 상태예요
 ├── runtime/                         # agent와 session store를 묶는 실행 runtime이에요
 ├── cmd/
-│   └── kkode-agent/                  # provider 선택형 agent CLI예요
+│   ├── kkode-agent/                  # provider 선택형 agent CLI예요
+│   └── kkode-gateway/                # HTTP gateway API server예요
 ├── llm/                              # provider-neutral core예요
 │   ├── approval.go                   # 승인 정책이에요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
@@ -44,11 +45,13 @@ kkode/
 │   ├── copilot/                      # GitHub Copilot SDK adapter예요
 │   ├── codexcli/                     # Codex CLI subprocess adapter예요
 │   └── omniroute/                    # OmniRoute gateway adapter예요
+├── gateway/                         # session/run/event HTTP API와 OpenAPI 계약이에요
 ├── workspace/                        # workspace file/write/replace/search/shell tool이에요
 ├── tools/                            # 표준 file/web/shell tool 이름 adapter예요
 ├── transcript/                       # transcript 저장소예요
 ├── scripts/                          # 검증용 smoke scripts예요
-└── research/                         # 조사 문서와 TODO예요
+├── research/                         # 조사 문서와 TODO예요
+└── suggest/                          # 다음 구현 제안과 roadmap이에요
 ```
 
 ## 핵심 인터페이스
@@ -290,6 +293,63 @@ fmt.Println(result.Response.Text)
 fmt.Println("trace events:", len(result.Trace))
 _ = tr.SaveRedacted(".kkode/transcript.json")
 ```
+
+## Gateway API 구현체
+
+패키지는 `gateway`예요. 웹 패널, Discord bot, 외부 SDK가 SQLite를 직접 읽지 않고 같은 HTTP 계약으로 session state를 다루게 하는 경계예요.
+
+주요 타입은 다음과 같아요.
+
+```go
+type Config struct {
+    Store                session.Store
+    Version              string
+    Commit               string
+    APIKey               string
+    AllowLocalhostNoAuth bool
+    Providers            []ProviderDTO
+    RunStarter           RunStarter
+    Now                  func() time.Time
+}
+
+type RunStarter func(ctx context.Context, req RunStartRequest) (*RunDTO, error)
+
+type Server struct { /* net/http handler를 보관해요 */ }
+
+func New(cfg Config) (*Server, error)
+func (s *Server) Handler() http.Handler
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request)
+```
+
+현재 endpoint는 다음과 같아요.
+
+```text
+GET  /healthz
+GET  /readyz
+GET  /api/v1/version
+GET  /api/v1/providers
+POST /api/v1/sessions
+GET  /api/v1/sessions
+GET  /api/v1/sessions/{session_id}
+POST /api/v1/sessions/{session_id}/fork
+GET  /api/v1/sessions/{session_id}/events
+GET  /api/v1/sessions/{session_id}/todos
+POST /api/v1/runs
+```
+
+`/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `RunManager`와 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
+
+```bash
+curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
+```
+
+`cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요. YOLO file/shell/web tool surface가 외부에 노출될 수 있기 때문이에요.
+
+```bash
+go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db
+```
+
+OpenAPI 계약은 `gateway/openapi.yaml`에 있어요. 웹 패널과 Discord adapter는 이 계약을 기준으로 붙이면 돼요.
 
 ## Session runtime 구현체
 
