@@ -155,7 +155,7 @@ paths:
   /api/v1/runs:
     post:
       summary: agent run을 시작해요.
-      description: MVP에서는 RunStarter가 주입됐을 때만 동작해요. 다음 단계에서 async RunManager로 확장해야해요.
+      description: cmd/kkode-gateway에서는 동기 RunStarter가 실제 agent run을 실행해요. 다음 단계에서 async RunManager로 확장해야해요.
       requestBody:
         required: true
         content:
@@ -354,10 +354,6 @@ components:
           type: string
         model:
           type: string
-        stream:
-          type: boolean
-        yolo:
-          type: boolean
         metadata:
           type: object
           additionalProperties:

@@ -76,18 +76,16 @@ type TodoListResponse struct {
 	Todos []TodoDTO `json:"todos"`
 }
 
-// RunStartRequest는 향후 비동기 RunManager에 넘길 실행 요청이에요.
+// RunStartRequest는 gateway RunStarter가 실제 agent 실행에 넘기는 요청이에요.
 type RunStartRequest struct {
 	SessionID string            `json:"session_id"`
 	Prompt    string            `json:"prompt"`
 	Provider  string            `json:"provider,omitempty"`
 	Model     string            `json:"model,omitempty"`
-	Stream    bool              `json:"stream,omitempty"`
-	Yolo      bool              `json:"yolo,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// RunDTO는 gateway에서 관리하는 실행 단위예요. MVP에서는 RunStarter를 주입했을 때만 생성해요.
+// RunDTO는 gateway에서 관리하는 실행 단위예요. gateway RunStarter가 실행을 접수하거나 완료했을 때 생성해요.
 type RunDTO struct {
 	ID        string            `json:"id"`
 	SessionID string            `json:"session_id"`

@@ -2,7 +2,6 @@ package omniroute
 
 import (
 	"context"
-	"net/url"
 	"strings"
 )
 
@@ -132,13 +131,4 @@ func (c *Client) Sessions(ctx context.Context) (map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-func joinRoot(root, suffix string) string {
-	u, err := url.Parse(strings.TrimRight(root, "/"))
-	if err != nil {
-		return strings.TrimRight(root, "/") + suffix
-	}
-	u.Path = strings.TrimRight(u.Path, "/") + suffix
-	return strings.TrimRight(u.String(), "/")
 }

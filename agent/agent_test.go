@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/tools"
 	"github.com/sleepysoong/kkode/workspace"
 )
 
@@ -17,7 +18,7 @@ func (p *fakeProvider) Capabilities() llm.Capabilities { return llm.Capabilities
 func (p *fakeProvider) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
 	p.calls++
 	if p.calls == 1 {
-		return &llm.Response{ID: "r1", Output: []llm.Item{{Type: llm.ItemFunctionCall, ToolCall: &llm.ToolCall{CallID: "c1", Name: "workspace_list", Arguments: json.RawMessage(`{"path":"."}`)}}}, ToolCalls: []llm.ToolCall{{CallID: "c1", Name: "workspace_list", Arguments: json.RawMessage(`{"path":"."}`)}}}, nil
+		return &llm.Response{ID: "r1", Output: []llm.Item{{Type: llm.ItemFunctionCall, ToolCall: &llm.ToolCall{CallID: "c1", Name: "file_list", Arguments: json.RawMessage(`{"path":"."}`)}}}, ToolCalls: []llm.ToolCall{{CallID: "c1", Name: "file_list", Arguments: json.RawMessage(`{"path":"."}`)}}}, nil
 	}
 	return &llm.Response{Text: "완료했어요", Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: "완료했어요"}}}, nil
 }
@@ -28,7 +29,8 @@ func TestAgentRunWithWorkspaceTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events []TraceEvent
-	ag, err := New(Config{Provider: &fakeProvider{}, Model: "fake", Workspace: ws, Observer: ObserverFunc(func(ctx context.Context, event TraceEvent) { events = append(events, event) })})
+	defs, handlers := tools.FileTools(ws)
+	ag, err := New(Config{Provider: &fakeProvider{}, Model: "fake", Tools: defs, ToolHandlers: handlers, Observer: ObserverFunc(func(ctx context.Context, event TraceEvent) { events = append(events, event) })})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +46,7 @@ func TestAgentRunWithWorkspaceTool(t *testing.T) {
 	}
 	var sawTool bool
 	for _, ev := range events {
-		if ev.Type == "tool.completed" && ev.Tool == "workspace_list" {
+		if ev.Type == "tool.completed" && ev.Tool == "file_list" {
 			sawTool = true
 		}
 	}

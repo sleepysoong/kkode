@@ -100,10 +100,3 @@ func cloneTodos(todos []Todo) []Todo {
 	copy(out, todos)
 	return out
 }
-
-func lastTurnID(turns []Turn) string {
-	if len(turns) == 0 {
-		return ""
-	}
-	return turns[len(turns)-1].ID
-}

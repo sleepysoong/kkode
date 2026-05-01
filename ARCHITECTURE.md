@@ -21,6 +21,7 @@ kkode/
 ├── ARCHITECTURE.md                   # 현재 문서예요
 ├── go.mod
 ├── go.sum
+├── app/                             # CLI/gateway가 공유하는 provider/agent 조립 도우미예요
 ├── agent/                           # 실제 coding agent loop와 guardrail/trace예요
 ├── session/                         # SQLite session store와 resume/fork 상태예요
 ├── runtime/                         # agent와 session store를 묶는 실행 runtime이에요
@@ -185,6 +186,20 @@ type Tool struct {
 }
 ```
 
+
+## App 조립 도우미
+
+패키지는 `app`이에요. CLI와 gateway가 provider 생성, workspace 정책, 표준 tool 조립을 중복 구현하지 않도록 모아둔 얇은 조립 계층이에요. 핵심 domain 타입은 여전히 `llm`, `agent`, `runtime`, `session`이 소유해요.
+
+```go
+func BuildProvider(name, root string) (ProviderHandle, error)
+func DefaultModel(provider string) string
+func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error)
+func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions) (*agent.Agent, error)
+```
+
+`NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+
 ## Agent runtime 구현체
 
 패키지는 `agent`예요. `llm.Provider`만 있는 상태에서는 provider 호출과 tool loop를 직접 엮어야 해요. `agent.Agent`는 이 반복 구조를 앱에서 바로 쓸 수 있게 묶어줘요.
@@ -198,7 +213,6 @@ type Config struct {
     Model         string
     Instructions  string
     BaseRequest   llm.Request
-    Workspace     *workspace.Workspace
     Tools         []llm.Tool
     ToolHandlers  llm.ToolRegistry
     MaxIterations int
@@ -443,7 +457,7 @@ fmt.Println(result.Session.ID, result.Turn.ID)
 
 ## Agent CLI 구현체
 
-`cmd/kkode-agent`는 위 agent runtime을 바로 실행하는 얇은 앱이에요. provider는 flag 또는 환경변수로 고르고, workspace 권한은 기본 read-only예요.
+`cmd/kkode-agent`는 위 agent runtime을 바로 실행하는 얇은 앱이에요. provider는 flag 또는 환경변수로 고르고, workspace 권한은 기본 YOLO예요. 읽기 전용이 필요할 때만 `-read-only`를 켜요.
 
 주요 flag는 다음과 같아요.
 
@@ -452,9 +466,7 @@ fmt.Println(result.Session.ID, result.Turn.ID)
 | `-provider` | `openai`, `omniroute`, `copilot`, `codex` 중 하나예요 | `KKODE_PROVIDER` 또는 `openai` |
 | `-model` | provider에 넘길 모델이에요 | provider별 기본값이에요 |
 | `-root` | workspace root예요 | `.` |
-| `-write` | 호환용 flag예요. 현재 기본은 YOLO라 항상 쓰기를 허용해요 | `false` |
 | `-read-only` | YOLO를 끄고 읽기 전용으로 실행해요 | `false` |
-| `-commands` | 호환용 command allowlist예요. YOLO에서는 비어 있어도 명령을 실행해요 | 비어 있음 |
 | `-reasoning-effort` | Responses API reasoning effort예요 | 비어 있음 |
 | `-reasoning-summary` | reasoning summary 설정이에요 | 비어 있음 |
 | `-include` | Responses API include 값이에요 | 비어 있음 |
@@ -478,8 +490,6 @@ go run ./cmd/kkode-agent \
   -provider openai \
   -model gpt-5-mini \
   -root . \
-  -write \
-  -commands "go test,go vet" \
   -reasoning-effort medium \
   -reasoning-summary auto \
   -transcript .kkode/transcript.json \

@@ -302,7 +302,7 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		return
 	}
 	if s.cfg.RunStarter == nil {
-		writeError(w, r, http.StatusNotImplemented, "run_starter_missing", "RunStarter가 아직 연결되지 않았어요")
+		writeError(w, r, http.StatusNotImplemented, "run_starter_missing", "이 gateway에는 RunStarter가 연결되지 않았어요")
 		return
 	}
 	var req RunStartRequest
@@ -316,11 +316,6 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 	}
 	run, err := s.cfg.RunStarter(r.Context(), req)
 	if err != nil {
-		var se statusError
-		if errors.As(err, &se) {
-			writeError(w, r, se.Status, se.Code, se.Message)
-			return
-		}
 		writeError(w, r, http.StatusInternalServerError, "start_run_failed", err.Error())
 		return
 	}

@@ -18,8 +18,8 @@ graph TD
 
     CLI --> RT[runtime.Runtime]
     GW --> Store[(session.SQLiteStore)]
-    GW --> RunStarter[RunStarter 경계 / 다음 RunManager]
-    RunStarter --> RT
+    GW --> SyncRunStarter[동기 RunStarter / 다음 async RunManager]
+    SyncRunStarter --> RT
 
     RT --> Agent[agent.Agent]
     RT --> Store
@@ -86,7 +86,7 @@ sequenceDiagram
     participant UI as 웹 패널 / Discord adapter
     participant G as gateway.Server
     participant S as session.SQLiteStore
-    participant RM as RunManager 예정
+    participant RS as 동기 RunStarter
     participant R as runtime.Runtime
     participant A as agent.Agent
 
@@ -96,18 +96,18 @@ sequenceDiagram
     G-->>UI: 201 SessionDTO
 
     UI->>G: POST /api/v1/runs
-    G->>RM: RunStartRequest 전달
-    RM-->>G: RunDTO queued/running
+    G->>RS: RunStartRequest 전달
+    RS-->>G: RunDTO completed/failed
     G-->>UI: 202 RunDTO + events_url
 
     UI->>G: GET /api/v1/sessions/{id}/events?stream=true
-    RM->>R: background run 실행
+    RS->>R: 현재 요청 안에서 run 실행
     R->>A: provider/tool loop 실행
     A-->>R: trace/tool/text event
     R->>S: event 저장
     G-->>UI: SSE replay/live event
 
-    Note over RM,G: 현재는 RunStarter 경계만 있고, 다음 단계에서 async RunManager/EventBus를 붙여야해요.
+    Note over RS,G: 현재는 동기 실행이에요. 다음 단계에서 async RunManager/EventBus를 붙여야해요.
 ```
 
 ### 저장되는 상태
@@ -168,12 +168,17 @@ erDiagram
 
 ## 지금 구현된 것
 
+### 앱 조립: `app/`
+
+- `app.BuildProvider`, `app.NewWorkspace`, `app.NewAgent`가 CLI/gateway의 중복 조립 코드를 줄여요.
+- agent 표면에는 표준 `file_*`, `shell_run`, `web_fetch` tool만 붙이고, 이전 `workspace_*` tool 자동 주입은 하지 않아요.
+
 ### Agent runtime: `agent/`
 
-- `agent.Agent`가 provider, workspace tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요.
+- `agent.Agent`가 provider, 표준 tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요.
 - `session.SQLiteStore`와 `runtime.Runtime`이 session resume/fork, turn/event/todo 저장을 담당해요.
 - OpenAI-compatible Responses tool loop를 기본으로 쓰고, provider별 adapter는 `llm.Provider`만 구현하면 붙일 수 있어요.
-- `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, write 권한, command allowlist, session ID를 넘겨 바로 실행할 수 있어요.
+- `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, session ID를 넘겨 바로 실행할 수 있어요.
 - `gateway.Server`와 `cmd/kkode-gateway`가 session/run/event/todo를 HTTP API로 노출해서 웹 패널이나 Discord adapter가 같은 runtime state를 재사용할 수 있게 해요.
 
 ### Core: `llm/`
@@ -209,7 +214,7 @@ erDiagram
 - `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, `POST /api/v1/sessions/{id}/fork`를 제공해요.
 - `GET /api/v1/sessions/{id}/events`는 JSON replay와 `stream=true` SSE replay를 지원해요.
 - `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
-- `POST /api/v1/runs`는 `RunStarter` 주입 경계를 갖고 있어요. 지금은 gateway MVP boundary이고, 다음 단계에서 async `RunManager`로 확장해야해요.
+- `POST /api/v1/runs`는 `cmd/kkode-gateway`에서 동기 `RunStarter`로 실제 agent run을 실행해요. 다음 단계에서 async `RunManager`로 확장해야해요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support

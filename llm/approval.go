@@ -15,11 +15,17 @@ type ApprovalPolicy struct {
 	Mode            ApprovalMode
 	AllowedCommands []string
 	AllowedPaths    []string
-	AllowedURLs     []string
 }
 
 func (p ApprovalPolicy) AllowsRead(path string) bool {
-	return p.Mode == ApprovalReadOnly || p.Mode == ApprovalTrustedWrites || p.Mode == ApprovalAllowAll || p.pathAllowed(path)
+	switch p.Mode {
+	case ApprovalAllowAll, ApprovalReadOnly:
+		return true
+	case ApprovalTrustedWrites:
+		return p.pathAllowed(path)
+	default:
+		return false
+	}
 }
 
 func (p ApprovalPolicy) AllowsWrite(path string) bool {
@@ -34,12 +40,14 @@ func (p ApprovalPolicy) AllowsWrite(path string) bool {
 }
 
 func (p ApprovalPolicy) AllowsCommand(command string) bool {
-	if p.Mode == ApprovalAllowAll {
+	switch p.Mode {
+	case ApprovalAllowAll:
 		return true
-	}
-	for _, allowed := range p.AllowedCommands {
-		if command == allowed || strings.HasPrefix(command, allowed+" ") {
-			return true
+	case ApprovalTrustedWrites:
+		for _, allowed := range p.AllowedCommands {
+			if command == allowed || strings.HasPrefix(command, allowed+" ") {
+				return true
+			}
 		}
 	}
 	return false

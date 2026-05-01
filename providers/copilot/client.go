@@ -82,7 +82,7 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 	if err != nil {
 		return nil, err
 	}
-	defer session.Destroy()
+	defer session.Disconnect()
 	prompt := renderPrompt(req)
 	if prompt == "" {
 		return nil, fmt.Errorf("copilot provider requires at least one user message or input item")
@@ -277,7 +277,7 @@ func (s *Session) Stream(ctx context.Context, req llm.Request) (llm.EventStream,
 	return llm.NewChannelStream(ctx, events, closeFunc(func() error { unsubscribe(); closeEvents(); return nil })), nil
 }
 
-func (s *Session) Close() error { return s.session.Destroy() }
+func (s *Session) Close() error { return s.session.Disconnect() }
 
 type closeFunc func() error
 

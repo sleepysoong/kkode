@@ -35,6 +35,17 @@ func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
 	}
 }
 
+func TestReadOnlyDeniesCommandsEvenWhenAllowlistExists(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalReadOnly, AllowedCommands: []string{"echo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Run(context.Background(), "echo", "nope"); err == nil {
+		t.Fatal("read-only policy must not allow commands")
+	}
+}
+
 func TestWorkspaceToolsAndCommandPolicy(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir, llm.ApprovalPolicy{Mode: llm.ApprovalAllowAll, AllowedCommands: []string{"echo"}})

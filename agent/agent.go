@@ -7,7 +7,6 @@ import (
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/transcript"
-	"github.com/sleepysoong/kkode/workspace"
 )
 
 type Config struct {
@@ -16,7 +15,6 @@ type Config struct {
 	Model         string
 	Instructions  string
 	BaseRequest   llm.Request
-	Workspace     *workspace.Workspace
 	Tools         []llm.Tool
 	ToolHandlers  llm.ToolRegistry
 	MaxIterations int
@@ -148,13 +146,6 @@ func (a *Agent) tools() ([]llm.Tool, llm.ToolRegistry) {
 	handlers := llm.ToolRegistry{}
 	for name, handler := range a.cfg.ToolHandlers {
 		handlers[name] = handler
-	}
-	if a.cfg.Workspace != nil {
-		workspaceDefs, workspaceHandlers := a.cfg.Workspace.Tools()
-		defs = append(defs, workspaceDefs...)
-		for name, handler := range workspaceHandlers {
-			handlers[name] = handler
-		}
 	}
 	return defs, handlers
 }

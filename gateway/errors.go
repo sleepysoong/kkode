@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 )
 
@@ -15,18 +14,6 @@ type apiError struct {
 
 type errorEnvelope struct {
 	Error apiError `json:"error"`
-}
-
-type statusError struct {
-	Status  int
-	Code    string
-	Message string
-}
-
-func (e statusError) Error() string { return e.Message }
-
-func newStatusError(status int, code, format string, args ...any) statusError {
-	return statusError{Status: status, Code: code, Message: fmt.Sprintf(format, args...)}
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {

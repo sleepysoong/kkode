@@ -1,13 +1,12 @@
 package main
 
 import (
-	"context"
 	"strings"
 	"testing"
 )
 
 func TestRemoteBindRequiresAPIKey(t *testing.T) {
-	err := run(context.Background(), []string{"-addr", "0.0.0.0:41234", "-state", t.TempDir() + "/state.db"})
+	err := run([]string{"-addr", "0.0.0.0:41234", "-state", t.TempDir() + "/state.db"})
 	if err == nil || !strings.Contains(err.Error(), "--api-key") {
 		t.Fatalf("expected api key error, got %v", err)
 	}
