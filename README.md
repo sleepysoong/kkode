@@ -4,6 +4,168 @@
 
 기본 호환 기준은 **OpenAI Responses API**로 잡았어요. 그래서 단순 chat message만 다루지 않고 reasoning item, tool call, tool output, provider raw item을 최대한 보존해요. 이렇게 해야 tool loop, account rotation, Copilot/Codex 같은 agent runtime을 같은 앱 안에서 안전하게 이어 붙일 수 있어요.
 
+
+## 프로젝트 틀과 작동 플로우
+
+`kkode`의 큰 틀은 **OpenAI-compatible core → provider adapter → agent runtime → session/gateway surface** 순서로 흘러가요. CLI, 웹 패널, Discord 같은 외부 인터페이스는 모두 같은 runtime과 SQLite session store를 공유하도록 설계해요.
+
+### 전체 구성 그래프
+
+```mermaid
+graph TD
+    User[사용자 / 웹 패널 / Discord / CLI] --> CLI[cmd/kkode-agent]
+    User --> GW[cmd/kkode-gateway / gateway.Server]
+
+    CLI --> RT[runtime.Runtime]
+    GW --> Store[(session.SQLiteStore)]
+    GW --> RunStarter[RunStarter 경계 / 다음 RunManager]
+    RunStarter --> RT
+
+    RT --> Agent[agent.Agent]
+    RT --> Store
+    Agent --> Core[llm core 타입과 tool loop]
+    Agent --> Tools[tools.FileTools / tools.WebTools]
+    Tools --> WS[workspace.Workspace]
+    WS --> FS[(파일 시스템 / shell / grep / glob)]
+    Tools --> Web[HTTP web_fetch]
+
+    Core --> Router[llm.Router]
+    Router --> OpenAI[providers/openai]
+    Router --> Copilot[providers/copilot]
+    Router --> Codex[providers/codexcli]
+    Router --> OmniRoute[providers/omniroute]
+
+    OpenAI --> ModelAPI[OpenAI-compatible Responses API]
+    Copilot --> CopilotSDK[GitHub Copilot SDK]
+    Codex --> CodexCLI[Codex CLI JSONL]
+    OmniRoute --> OmniRouteAPI[OmniRoute gateway]
+
+    Agent --> Trace[trace / transcript]
+    Trace --> Store
+```
+
+### Agent 실행 플로우
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant C as kkode-agent CLI
+    participant R as runtime.Runtime
+    participant S as session.SQLiteStore
+    participant A as agent.Agent
+    participant P as llm.Provider
+    participant T as ToolRegistry
+    participant W as workspace/web tools
+
+    U->>C: prompt + provider/model/session 옵션
+    C->>S: session load/create/fork
+    C->>R: RunOptions 전달
+    R->>A: Prepare(prompt)
+    A->>P: Generate(Request)
+    P-->>A: Response(tool calls 또는 text)
+
+    loop tool call이 남아 있는 동안
+        A->>T: tool call dispatch
+        T->>W: file_read/file_write/shell_run/web_fetch 실행
+        W-->>T: ToolResult JSON
+        T-->>A: ToolResult
+        A->>P: tool output 포함해서 다음 Generate
+        P-->>A: 다음 Response
+    end
+
+    A-->>R: 최종 Response + Trace
+    R->>S: turn/event/todo 저장
+    R-->>C: RunResult
+    C-->>U: 최종 text 출력
+```
+
+### Gateway / 외부 연동 플로우
+
+```mermaid
+sequenceDiagram
+    participant UI as 웹 패널 / Discord adapter
+    participant G as gateway.Server
+    participant S as session.SQLiteStore
+    participant RM as RunManager 예정
+    participant R as runtime.Runtime
+    participant A as agent.Agent
+
+    UI->>G: POST /api/v1/sessions
+    G->>S: session 생성
+    S-->>G: SessionDTO
+    G-->>UI: 201 SessionDTO
+
+    UI->>G: POST /api/v1/runs
+    G->>RM: RunStartRequest 전달
+    RM-->>G: RunDTO queued/running
+    G-->>UI: 202 RunDTO + events_url
+
+    UI->>G: GET /api/v1/sessions/{id}/events?stream=true
+    RM->>R: background run 실행
+    R->>A: provider/tool loop 실행
+    A-->>R: trace/tool/text event
+    R->>S: event 저장
+    G-->>UI: SSE replay/live event
+
+    Note over RM,G: 현재는 RunStarter 경계만 있고, 다음 단계에서 async RunManager/EventBus를 붙여야해요.
+```
+
+### 저장되는 상태
+
+```mermaid
+erDiagram
+    SESSION ||--o{ TURN : has
+    SESSION ||--o{ EVENT : records
+    SESSION ||--o{ TODO : tracks
+    SESSION ||--o{ CHECKPOINT : saves
+
+    SESSION {
+        string id
+        string project_root
+        string provider_name
+        string model
+        string agent_name
+        string mode
+        string summary
+        string last_response_id
+    }
+    TURN {
+        string id
+        string session_id
+        int ordinal
+        string prompt
+        blob request_json
+        blob response_json
+        string error
+    }
+    EVENT {
+        string id
+        string session_id
+        string turn_id
+        int ordinal
+        string type
+        string tool
+        blob payload_json
+        string error
+    }
+    TODO {
+        string id
+        string session_id
+        int ordinal
+        string content
+        string status
+        string priority
+    }
+    CHECKPOINT {
+        string id
+        string session_id
+        string turn_id
+        blob payload_json
+    }
+```
+
+요약하면, 모델별 차이는 `providers/*`에 가두고, 앱의 나머지 부분은 `llm.Request`, `llm.Response`, `ToolCall`, `session.Event` 같은 공통 타입만 보게 해요. 그래서 나중에 Copilot, Codex, OpenAI, OmniRoute, 자체 gateway provider를 바꿔 끼워도 agent/session/gateway 플로우는 유지돼요.
+
 ## 지금 구현된 것
 
 ### Agent runtime: `agent/`
