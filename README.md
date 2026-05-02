@@ -328,14 +328,33 @@ curl -X POST http://127.0.0.1:41234/api/v1/sessions \
   -d '{"project_root":"/home/user/kkode","provider":"openai","model":"gpt-5-mini","agent":"web-panel"}'
 ```
 
-event replay는 JSON이나 SSE로 받을 수 있어요.
+저장해둔 MCP server, skill, subagent manifest를 골라 background run에 붙일 수 있어요. 응답은 즉시 `202 Accepted`와 `run_id`를 돌려주고, 실제 agent 실행은 gateway 내부 goroutine에서 이어져요.
 
 ```bash
+curl -X POST http://127.0.0.1:41234/api/v1/runs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "session_id":"sess_...",
+    "prompt":"이 저장소 구조를 요약하고 다음 작업을 추천해줘",
+    "provider":"copilot",
+    "model":"gpt-5-mini",
+    "mcp_servers":["mcp_..."],
+    "skills":["skill_..."],
+    "subagents":["subagent_..."],
+    "metadata":{"source":"web-panel"}
+  }'
+```
+
+run 상태와 상태 변경 SSE는 아래처럼 읽어요. `events_url`은 session event replay URL이라서 최종 tool/event log를 따라갈 때 같이 쓰면 돼요.
+
+```bash
+curl http://127.0.0.1:41234/api/v1/runs/run_...
+curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true'
 curl http://127.0.0.1:41234/api/v1/sessions/sess_.../events
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
 ```
 
-OpenAPI 계약은 `gateway/openapi.yaml`을 참고해요.
+OpenAPI 계약은 `gateway/openapi.yaml`을 참고해요. `go test ./gateway`에는 feature catalog endpoint가 OpenAPI paths에 계속 존재하는지 확인하는 계약 테스트도 들어 있어요.
 
 ## 빠른 검증
 
@@ -470,4 +489,4 @@ resp, err := router.Generate(ctx, llm.Request{
 
 ## 작업 규칙
 
-앞으로 문서와 주석은 한글로 작성하고 `~해요`, `~할게요`, `~해야해요` 말투를 유지할게요. 의미 있는 작업 단위가 끝나면 테스트를 돌리고 커밋/푸시까지 할게요.
+앞으로 문서와 주석은 한글 해요체로 작성하고 `~해요`, `~할게요`, `~해야해요` 말투를 유지할게요. 기술 용어는 원문을 유지하고, 새 `research/*.md`와 `suggest/*.md` 파일은 numbered-kebab-case 이름을 쓸게요. 의미 있는 작업 단위가 끝나면 테스트를 돌리고 커밋/푸시까지 할게요.

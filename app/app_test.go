@@ -36,6 +36,22 @@ func TestCSVAndDefaultModel(t *testing.T) {
 	}
 }
 
+func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
+	specs := ProviderSpecs()
+	if len(specs) == 0 {
+		t.Fatal("provider registry가 비면 안 돼요")
+	}
+	specs[0].Aliases = append(specs[0].Aliases, "mutated")
+	specs[0].Capabilities["tools"] = false
+	fresh := ProviderSpecs()
+	if len(fresh[0].Aliases) > 0 && fresh[0].Aliases[len(fresh[0].Aliases)-1] == "mutated" {
+		t.Fatal("ProviderSpecs는 alias slice를 방어 복사해야 해요")
+	}
+	if fresh[0].Capabilities["tools"] != true {
+		t.Fatal("ProviderSpecs는 capability map을 방어 복사해야 해요")
+	}
+}
+
 func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	ws, _, err := NewWorkspace(WorkspaceOptions{Root: t.TempDir()})
 	if err != nil {

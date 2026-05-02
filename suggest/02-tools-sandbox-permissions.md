@@ -269,57 +269,23 @@ type LSPClient interface {
 
 ## 테스트 제안
 
-- deny rule이 allow rule보다 우선하는지 테스트해요.
-- `.git/config` write가 default deny인지 테스트해요.
-- `workspace_apply_patch` rollback이 되는지 테스트해요.
-- `rm -rf`가 command parser에서 막히는지 테스트해요.
-- line range read가 max bytes를 지키는지 테스트해요.
-- LSP diagnostics가 broken Go file에서 에러를 반환하는지 테스트해요.
+- YOLO 모드에서 `file_write`, `file_apply_patch`, `shell_run`이 별도 승인 없이 실행되는지 테스트해요.
+- `workspace` root 밖 path escape가 의도한 경계 정책대로 처리되는지 테스트해요.
+- `file_apply_patch` 실패 시 파일 내용이 부분 적용으로 망가지지 않는지 테스트해요.
+- line range read가 `max_bytes`를 지키는지 테스트해요.
+- `shell_run`이 command, cwd, exit code, stdout, stderr, timeout을 구조화해서 돌려주는지 테스트해요.
+- LSP symbol scan이 `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리를 건너뛰는지 테스트해요.
 
 
-## 구현 상태: 2026-04-28
+## 되돌린 구현 메모: 2026-04-28
 
-이번 구현으로 아래가 완료됐어요.
+한때 `permission/` 패키지와 deny/ask/allow rule engine을 실험했지만, 사용자 지시에 따라 제거했어요. 현재 코드에는 `permission/` 디렉터리, `workspace.NewWithPermission`, protected path 차단, ask/deny UX가 존재하지 않아요. 앞으로도 이 프로젝트의 기본 정책은 “권한 기능 자체가 없는 YOLO 실행”이에요.
 
-- `permission/` 패키지에 `Action`, `Request`, `Decision`, `Rule`, `Engine`, `StaticEngine`을 추가했어요.
-- rule 평가는 `deny -> ask -> allow -> default` 순서로 동작해요. 현재 non-interactive workspace에서는 `allow`만 실행하고 `ask/deny`는 차단해요.
-- `workspace.NewWithPermission`으로 permission engine을 붙일 수 있어요.
-- `workspace_read_file`에 `offset_line`, `limit_lines`, `max_bytes` 옵션을 추가했어요.
-- `workspace_glob`, `workspace_grep`, `workspace_apply_patch` tool을 추가했어요.
-- `workspace_replace_in_file`은 `expected_replacements`를 지원하는 `EditFile` 위로 올렸어요.
-- `workspace_run_command`는 `CommandResult` JSON으로 command, cwd, exit code, stdout, stderr, timeout 여부를 돌려줘요.
-- protected path write 차단을 추가했어요. `.git/**`, `.env*`, `.claude/**`, `.codex/**` 같은 경로는 기본적으로 write/apply_patch가 막혀요.
+남긴 것은 권한이 아니라 실행 도구의 품질 개선이에요. `file_read` range 옵션, `file_glob`, `file_grep`, `file_apply_patch`, `file_edit.expected_replacements`, 구조화 `shell_run` 결과는 계속 유지해요.
 
-아직 남은 것은 아래예요.
+## 현재 구현 상태: YOLO 실행
 
-- `ask` permission을 실제 TUI/CLI 승인 UX와 연결하지 않았어요.
-- OS-level sandbox(bubblewrap/seatbelt)는 아직 없어요.
-- checkpoint snapshot/undo/redo는 아직 없어요.
-- LSP diagnostics/tool은 아직 없어요.
-- `workspace_apply_patch`는 Codex 스타일의 단순 apply_patch grammar만 지원하고, 전체 unified diff parser는 아니에요.
-
-
-## 구현 상태 업데이트: 2026-04-28 YOLO 전환
-
-사용자 지시에 따라 방금 추가했던 `permission/` 패키지와 deny/ask/allow rule engine은 제거했어요. 현재 `cmd/kkode-agent` 기본값은 YOLO 모드이며 `llm.ApprovalAllowAll`로 파일 쓰기와 shell 실행을 바로 허용해요.
-
-남긴 것:
-
-- `workspace_read_file` 범위 옵션
-- `workspace_glob`
-- `workspace_grep`
-- `workspace_apply_patch`
-- `workspace_replace_in_file.expected_replacements`
-- 구조화 `CommandResult`
-
-제거한 것:
-
-- `permission/` 패키지
-- `workspace.NewWithPermission`
-- protected path write 차단
-- ask/deny/allow rule 평가
-
-주의: YOLO 모드는 빠른 구현 검증용이에요. 안전 모드가 다시 필요해지면 permission engine보다 checkpoint/undo와 UI 승인 흐름을 먼저 설계해야해요.
+현재 구현은 권한 시스템이 애초에 없는 구조예요. `workspace`와 표준 tool은 file write, patch, shell run을 승인 절차 없이 실행해요. API gateway를 공개망에 직접 노출하면 위험하므로 운영에서는 reverse proxy, bearer token, network isolation 같은 배포 경계를 별도로 둬야해요. 다만 kkode 내부에는 deny/ask/allow 정책을 다시 넣지 않아요.
 
 ## 참고 소스
 

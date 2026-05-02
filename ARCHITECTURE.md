@@ -196,6 +196,7 @@ func ProviderSpecs() []ProviderSpec
 func ResolveProviderSpec(name string) (ProviderSpec, bool)
 func ProviderAuthStatus(spec ProviderSpec) string
 func BuildProvider(name, root string) (ProviderHandle, error)
+func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error)
 func DefaultModel(provider string) string
 func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error)
 func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions) (*agent.Agent, error)
@@ -203,7 +204,7 @@ func NewRuntime(store session.Store, ag *agent.Agent, opts RuntimeOptions) *runt
 func DefaultCompactionPolicy() session.CompactionPolicy
 ```
 
-`ProviderSpecs`는 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `BuildProviderWithOptions`는 같은 registry entry의 factory를 실행하므로 새 provider를 추가할 때 spec, alias, capability, 생성 로직을 한 곳에서 맞추면 돼요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
 ## Prompt 템플릿 구현체
 
@@ -345,10 +346,13 @@ type Config struct {
     APIKey               string
     AllowLocalhostNoAuth bool
     Providers            []ProviderDTO
+    Features             []FeatureDTO
+    ResourceStore        session.ResourceStore
     RunStarter           RunStarter
     RunGetter            RunGetter
     RunLister            RunLister
     RunCanceler          RunCanceler
+    RunSubscriber        RunEventSubscriber
     Now                  func() time.Time
 }
 
@@ -360,10 +364,12 @@ type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 type AsyncRunManager struct { /* background run 상태와 cancel 함수를 보관해요 */ }
 
 func NewAsyncRunManager(starter RunStarter) *AsyncRunManager
+func NewAsyncRunManagerWithStore(starter RunStarter, store session.RunStore) *AsyncRunManager
 func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunDTO, error)
 func (m *AsyncRunManager) Get(ctx context.Context, runID string) (*RunDTO, error)
 func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error)
 func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, error)
+func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan RunDTO, func())
 
 type Server struct { /* net/http handler를 보관해요 */ }
 
@@ -394,8 +400,14 @@ DELETE /api/v1/mcp/servers/{resource_id}
 GET  /api/v1/mcp/servers/{resource_id}/tools
 GET  /api/v1/skills
 POST /api/v1/skills
+GET  /api/v1/skills/{resource_id}
+PUT  /api/v1/skills/{resource_id}
+DELETE /api/v1/skills/{resource_id}
 GET  /api/v1/subagents
 POST /api/v1/subagents
+GET  /api/v1/subagents/{resource_id}
+PUT  /api/v1/subagents/{resource_id}
+DELETE /api/v1/subagents/{resource_id}
 GET  /api/v1/lsp/symbols
 GET  /api/v1/runs
 POST /api/v1/runs
@@ -405,7 +417,7 @@ POST /api/v1/runs/{run_id}/cancel
 POST /api/v1/runs/{run_id}/retry
 ```
 
-`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio manifest는 `/api/v1/mcp/servers/{resource_id}/tools`로 `initialize`와 `tools/list` probe를 실행할 수 있어요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 symbol index를 반환해서 웹 패널이 함수/타입/메서드 탐색 UI를 만들 수 있게 해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. `/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
+`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio manifest는 `/api/v1/mcp/servers/{resource_id}/tools`로 `initialize`와 `tools/list` probe를 실행할 수 있어요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 symbol index를 반환하고, `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리는 건너뛰며 `limit`에 도달하면 scan을 조기 중단해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. session `/events`는 저장된 event replay이고, run `/events`는 현재 snapshot과 live 상태 변경을 함께 제공해요.
 
 ```bash
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
@@ -417,7 +429,7 @@ curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&afte
 go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db
 ```
 
-OpenAPI 계약은 `gateway/openapi.yaml`에 있어요. 웹 패널과 Discord adapter는 이 계약을 기준으로 붙이면 돼요.
+OpenAPI 계약은 `gateway/openapi.yaml`에 있어요. 웹 패널과 Discord adapter는 이 계약을 기준으로 붙이면 돼요. `gateway/openapi_contract_test.go`는 feature catalog endpoint가 OpenAPI paths에서 빠지지 않았는지 검사해요.
 
 ## Session runtime 구현체
 

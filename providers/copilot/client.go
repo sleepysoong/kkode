@@ -51,46 +51,15 @@ func (c *Client) Capabilities() llm.Capabilities {
 }
 
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
-	client, err := c.ensureClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var finalText strings.Builder
-	session, err := client.CreateSession(ctx, &ghcopilot.SessionConfig{
-		ClientName:          firstNonEmpty(c.cfg.ClientName, "kkode"),
-		Model:               req.Model,
-		ReasoningEffort:     reasoningEffort(req.Reasoning),
-		WorkingDirectory:    c.cfg.WorkingDirectory,
-		Tools:               c.cfg.Tools,
-		MCPServers:          c.cfg.MCPServers,
-		CustomAgents:        c.cfg.CustomAgents,
-		SkillDirectories:    c.cfg.SkillDirectories,
-		DisabledSkills:      c.cfg.DisabledSkills,
-		OnPermissionRequest: approvePermissionHandler(),
-		OnEvent: func(event ghcopilot.SessionEvent) {
-			if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
-				finalText.WriteString(d.Content)
-			}
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer session.Disconnect()
-	prompt := renderPrompt(req)
-	if prompt == "" {
+	if renderPrompt(req) == "" {
 		return nil, fmt.Errorf("copilot provider requires at least one user message or input item")
 	}
-	event, err := session.SendAndWait(ctx, ghcopilot.MessageOptions{Prompt: prompt})
+	sess, err := c.NewSession(ctx, llm.SessionRequest{Model: req.Model, WorkingDirectory: c.cfg.WorkingDirectory, Reasoning: req.Reasoning})
 	if err != nil {
 		return nil, err
 	}
-	if event != nil {
-		if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok && finalText.Len() == 0 {
-			finalText.WriteString(d.Content)
-		}
-	}
-	return llm.TextResponse(c.Name(), req.Model, finalText.String()), nil
+	defer sess.Close()
+	return sess.Send(ctx, req)
 }
 
 func (c *Client) ensureClient(ctx context.Context) (*ghcopilot.Client, error) {

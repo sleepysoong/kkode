@@ -25,6 +25,9 @@ type ProviderHandle struct {
 	Close    func() error
 }
 
+// ProviderFactory는 provider별 생성 방식을 registry entry 안에 묶는 함수예요.
+type ProviderFactory func(root string, opts ProviderOptions) (ProviderHandle, error)
+
 // ProviderSpec은 provider 이름, alias, 기본 모델, 인증 힌트를 한 곳에서 관리해요.
 type ProviderSpec struct {
 	Name         string
@@ -33,6 +36,11 @@ type ProviderSpec struct {
 	AuthEnv      []string
 	Local        bool
 	Capabilities map[string]any
+}
+
+type providerRegistryEntry struct {
+	Spec    ProviderSpec
+	Factory ProviderFactory
 }
 
 // WorkspaceOptions는 workspace 경계를 정하는 옵션이에요.
@@ -81,23 +89,11 @@ func BuildProvider(name, root string) (ProviderHandle, error) {
 
 // BuildProviderWithOptions는 gateway resource manifest를 provider별 설정으로 반영해요.
 func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error) {
-	spec, ok := ResolveProviderSpec(name)
-	if !ok {
+	entry, ok := resolveProviderEntry(name)
+	if !ok || entry.Factory == nil {
 		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
 	}
-	switch spec.Name {
-	case "openai", "openai-compatible":
-		return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")})}, nil
-	case "omniroute":
-		return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")})}, nil
-	case "copilot", "github-copilot":
-		client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
-		return ProviderHandle{Provider: client, Close: client.Close}, nil
-	case "codex", "codexcli", "codex-cli":
-		return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
-	default:
-		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", spec.Name)
-	}
+	return entry.Factory(root, opts)
 }
 
 // DefaultModel은 provider별 기본 모델을 정해요.
@@ -108,28 +104,76 @@ func DefaultModel(provider string) string {
 	return "gpt-5-mini"
 }
 
+var providerRegistry = []providerRegistryEntry{
+	{
+		Spec: ProviderSpec{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "reasoning_summaries": true, "structured_output": true, "streaming": true, "tool_choice": true, "parallel_tool_calls": true}},
+		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+			return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")})}, nil
+		},
+	},
+	{
+		Spec: ProviderSpec{Name: "omniroute", DefaultModel: "gpt-5-mini", AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "a2a": true, "routing": true}},
+		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+			return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")})}, nil
+		},
+	},
+	{
+		Spec: ProviderSpec{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "streaming": true, "parallel_tool_calls": true, "mcp": true, "skills": true, "custom_agents": true}},
+		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+			client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
+			return ProviderHandle{Provider: client, Close: client.Close}, nil
+		},
+	},
+	{
+		Spec: ProviderSpec{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Local: true, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "skills": true}},
+		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+			return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
+		},
+	},
+}
+
 func ProviderSpecs() []ProviderSpec {
-	return []ProviderSpec{
-		{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "reasoning_summaries": true, "structured_output": true, "streaming": true, "tool_choice": true, "parallel_tool_calls": true}},
-		{Name: "omniroute", DefaultModel: "gpt-5-mini", AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "a2a": true, "routing": true}},
-		{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "streaming": true, "parallel_tool_calls": true, "mcp": true, "skills": true, "custom_agents": true}},
-		{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Local: true, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "skills": true}},
+	specs := make([]ProviderSpec, 0, len(providerRegistry))
+	for _, entry := range providerRegistry {
+		specs = append(specs, cloneProviderSpec(entry.Spec))
 	}
+	return specs
 }
 
 func ResolveProviderSpec(name string) (ProviderSpec, bool) {
+	entry, ok := resolveProviderEntry(name)
+	if !ok {
+		return ProviderSpec{}, false
+	}
+	return cloneProviderSpec(entry.Spec), true
+}
+
+func resolveProviderEntry(name string) (providerRegistryEntry, bool) {
 	needle := strings.ToLower(strings.TrimSpace(name))
-	for _, spec := range ProviderSpecs() {
-		if needle == spec.Name {
-			return spec, true
+	for _, entry := range providerRegistry {
+		if needle == entry.Spec.Name {
+			return entry, true
 		}
-		for _, alias := range spec.Aliases {
+		for _, alias := range entry.Spec.Aliases {
 			if needle == alias {
-				return spec, true
+				return entry, true
 			}
 		}
 	}
-	return ProviderSpec{}, false
+	return providerRegistryEntry{}, false
+}
+
+func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
+	spec.Aliases = append([]string(nil), spec.Aliases...)
+	spec.AuthEnv = append([]string(nil), spec.AuthEnv...)
+	if spec.Capabilities != nil {
+		capabilities := make(map[string]any, len(spec.Capabilities))
+		for key, value := range spec.Capabilities {
+			capabilities[key] = value
+		}
+		spec.Capabilities = capabilities
+	}
+	return spec
 }
 
 func ProviderAuthStatus(spec ProviderSpec) string {

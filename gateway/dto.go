@@ -165,7 +165,7 @@ func toSessionDTO(sess *session.Session) SessionDTO {
 		LastResponseID: sess.LastResponseID,
 		CreatedAt:      sess.CreatedAt,
 		UpdatedAt:      sess.UpdatedAt,
-		Metadata:       sess.Metadata,
+		Metadata:       cloneMap(sess.Metadata),
 	}
 }
 

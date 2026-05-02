@@ -25,8 +25,12 @@ type LSPSymbolListResponse struct {
 }
 
 func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []string) {
-	if len(parts) != 2 || parts[1] != "symbols" || r.Method != http.MethodGet {
+	if len(parts) != 2 || parts[1] != "symbols" {
 		writeError(w, r, http.StatusNotFound, "not_found", "lsp endpoint를 찾을 수 없어요")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 lsp method예요")
 		return
 	}
 	root := strings.TrimSpace(r.URL.Query().Get("project_root"))
@@ -61,13 +65,16 @@ func scanGoSymbols(root string, query string, limit int) ([]LSPSymbolDTO, error)
 		if walkErr != nil {
 			return walkErr
 		}
+		if len(out) >= limit {
+			return fs.SkipAll
+		}
 		if entry.IsDir() {
 			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if len(out) >= limit || !strings.HasSuffix(entry.Name(), ".go") {
+		if !strings.HasSuffix(entry.Name(), ".go") {
 			return nil
 		}
 		file, err := parser.ParseFile(fset, path, nil, 0)
@@ -116,7 +123,7 @@ func scanGoSymbols(root string, query string, limit int) ([]LSPSymbolDTO, error)
 
 func shouldSkipLSPDir(name string) bool {
 	switch name {
-	case ".git", ".kkode", ".serena", "node_modules", "vendor", "tmp", "dist", "build":
+	case ".git", ".kkode", ".omx", ".serena", "node_modules", "vendor", "tmp", "dist", "build", "coverage", "target":
 		return true
 	default:
 		return false
