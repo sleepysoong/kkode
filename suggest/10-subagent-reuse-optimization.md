@@ -25,8 +25,8 @@
 3. Resource 계열 handler의 `LoadResource`/not found/store missing 반복을 helper로 묶었어요.
    - `gateway.Server.withResource`가 MCP/skill/subagent preview와 단건 조회의 store missing, not found 응답을 같은 방식으로 처리해요.
 
-4. LSP도 files/git과 같은 project root 검증 helper를 쓰게 해야 해요.
-   - path 검증과 오류 응답이 gateway 전반에서 더 일관돼요.
+4. LSP도 files/git과 같은 project root 검증 helper를 쓰게 했어요.
+   - `handleLSP`와 scan helper가 `newWorkspace` 기반 root 정규화를 써서 파일이거나 없는 root를 일관된 `invalid_workspace` 응답으로 막아요.
 
 5. OpenAI-compatible provider transport를 더 공통화해야 해요.
    - OpenAI, OmniRoute, 앞으로 붙을 compatible gateway가 request build/parse/retry/stream 코드를 더 많이 공유할 수 있어요.

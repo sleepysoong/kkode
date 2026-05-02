@@ -80,9 +80,8 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 lsp method예요")
 		return
 	}
-	root := strings.TrimSpace(r.URL.Query().Get("project_root"))
-	if root == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_lsp_request", "project_root가 필요해요")
+	_, root, ok := workspaceFromQuery(w, r)
+	if !ok {
 		return
 	}
 	switch parts[1] {
@@ -137,7 +136,7 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 }
 
 func scanGoSymbols(root string, query string, limit int) ([]LSPSymbolDTO, error) {
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -198,19 +197,13 @@ func scanGoDocumentSymbols(root string, relPath string) ([]LSPSymbolDTO, error) 
 	if strings.TrimSpace(relPath) == "" {
 		return nil, fmt.Errorf("path가 필요해요")
 	}
-	if filepath.IsAbs(relPath) {
-		return nil, fmt.Errorf("path는 project_root 기준 상대 경로여야 해요: %s", relPath)
-	}
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Clean(filepath.Join(absRoot, relPath))
-	if path != absRoot && !strings.HasPrefix(path, absRoot+string(filepath.Separator)) {
-		return nil, fmt.Errorf("path가 project_root 밖으로 벗어나요: %s", relPath)
-	}
-	if !strings.HasSuffix(path, ".go") {
-		return nil, fmt.Errorf("go 파일만 document symbol을 지원해요: %s", relPath)
+	path, err := resolveRelativeGoFile(absRoot, relPath)
+	if err != nil {
+		return nil, err
 	}
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, 0)
@@ -237,7 +230,7 @@ func scanGoDefinitions(root string, symbol string, limit int) ([]LSPSymbolDTO, e
 	if limit <= 0 {
 		limit = 50
 	}
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +265,7 @@ func scanGoReferences(root string, symbol string, limit int) ([]LSPReferenceDTO,
 	if dot := strings.LastIndex(symbol, "."); dot >= 0 && dot+1 < len(symbol) {
 		target = symbol[dot+1:]
 	}
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +326,7 @@ func scanGoDiagnostics(root string, relPath string, limit int) ([]LSPDiagnosticD
 	if limit <= 0 {
 		limit = 200
 	}
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +382,7 @@ func scanGoHover(root string, symbol string) (LSPHoverResponse, error) {
 	if strings.TrimSpace(symbol) == "" {
 		return LSPHoverResponse{}, fmt.Errorf("symbol이 필요해요")
 	}
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
 		return LSPHoverResponse{}, err
 	}
@@ -443,6 +436,14 @@ func hoverFromFile(fset *token.FileSet, file *ast.File, rel string, symbol strin
 		}
 	}
 	return LSPHoverResponse{}
+}
+
+func normalizeProjectRoot(root string) (string, error) {
+	_, absRoot, err := newWorkspace(root)
+	if err != nil {
+		return "", err
+	}
+	return absRoot, nil
 }
 
 func resolveRelativeGoFile(absRoot string, relPath string) (string, error) {

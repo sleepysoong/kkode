@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +45,20 @@ func TestHandleLSPRejectsUnsupportedMethodAs405(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST /lsp/symbols는 405여야 해요: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleLSPUsesWorkspaceValidation(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "not-dir")
+	writeFile(t, file, "x")
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+file, nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_workspace") {
+		t.Fatalf("LSP도 workspace 검증 오류를 써야 해요: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
