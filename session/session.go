@@ -132,6 +132,11 @@ type IncrementalStore interface {
 	SaveSessionState(ctx context.Context, sess *Session) error
 }
 
+// TurnEventStore는 run 결과 turn, event, session state를 한 transaction으로 저장해요.
+type TurnEventStore interface {
+	AppendTurnWithEvents(ctx context.Context, sess *Session, turn Turn, events []Event) error
+}
+
 type SessionSummary struct {
 	ID           string    `json:"id"`
 	ProjectRoot  string    `json:"project_root"`

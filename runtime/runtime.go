@@ -96,11 +96,15 @@ func (r *Runtime) Run(ctx context.Context, opts RunOptions) (*RunResult, error) 
 }
 
 func (r *Runtime) saveSessionAfterRun(ctx context.Context, sess *session.Session, turn session.Turn, baseEventCount int) error {
+	events := append([]session.Event(nil), sess.Events[baseEventCount:]...)
+	if atomicStore, ok := r.Store.(session.TurnEventStore); ok {
+		return atomicStore.AppendTurnWithEvents(ctx, sess, turn, events)
+	}
 	if incremental, ok := r.Store.(session.IncrementalStore); ok {
 		if err := incremental.AppendTurn(ctx, sess.ID, turn); err != nil {
 			return err
 		}
-		for _, ev := range sess.Events[baseEventCount:] {
+		for _, ev := range events {
 			if err := r.Store.AppendEvent(ctx, ev); err != nil {
 				return err
 			}

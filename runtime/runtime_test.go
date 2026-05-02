@@ -126,8 +126,8 @@ func TestRuntimeUsesIncrementalStoreForRunPersistence(t *testing.T) {
 	if _, err := rt.Run(ctx, RunOptions{SessionID: first.Session.ID, Prompt: "둘째 요청"}); err != nil {
 		t.Fatal(err)
 	}
-	if store.saveSessionCalls != 0 {
-		t.Fatalf("incremental store에서는 SaveSession 전체 재작성을 쓰면 안 돼요: %d", store.saveSessionCalls)
+	if store.saveSessionCalls != 0 || store.appendTurnCalls != 0 || store.saveStateCalls != 0 || store.appendTurnWithEventsCalls != 2 {
+		t.Fatalf("atomic incremental 저장 경로를 써야 해요: save=%d append=%d state=%d atomic=%d", store.saveSessionCalls, store.appendTurnCalls, store.saveStateCalls, store.appendTurnWithEventsCalls)
 	}
 	loaded, err := sqlite.LoadSession(ctx, first.Session.ID)
 	if err != nil {
@@ -140,12 +140,30 @@ func TestRuntimeUsesIncrementalStoreForRunPersistence(t *testing.T) {
 
 type countingStore struct {
 	*session.SQLiteStore
-	saveSessionCalls int
+	saveSessionCalls          int
+	appendTurnCalls           int
+	saveStateCalls            int
+	appendTurnWithEventsCalls int
 }
 
 func (s *countingStore) SaveSession(ctx context.Context, sess *session.Session) error {
 	s.saveSessionCalls++
 	return s.SQLiteStore.SaveSession(ctx, sess)
+}
+
+func (s *countingStore) AppendTurn(ctx context.Context, sessionID string, turn session.Turn) error {
+	s.appendTurnCalls++
+	return s.SQLiteStore.AppendTurn(ctx, sessionID, turn)
+}
+
+func (s *countingStore) SaveSessionState(ctx context.Context, sess *session.Session) error {
+	s.saveStateCalls++
+	return s.SQLiteStore.SaveSessionState(ctx, sess)
+}
+
+func (s *countingStore) AppendTurnWithEvents(ctx context.Context, sess *session.Session, turn session.Turn, events []session.Event) error {
+	s.appendTurnWithEventsCalls++
+	return s.SQLiteStore.AppendTurnWithEvents(ctx, sess, turn, events)
 }
 
 type toolProvider struct{ calls int }
