@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/prompts"
 )
 
 type todoSaver interface {
@@ -103,5 +104,9 @@ func arraySchema(items map[string]any) map[string]any {
 }
 
 func TodoInstructions() string {
-	return strings.TrimSpace("복잡한 작업은 todo_write/todo_update/todo_list 도구로 진행 상황을 관리해야해요.")
+	text, err := prompts.Text(prompts.TodoInstructions)
+	if err != nil {
+		return "복잡한 작업은 todo_write/todo_update/todo_list 도구로 진행 상황을 관리해야해요."
+	}
+	return strings.TrimSpace(text)
 }

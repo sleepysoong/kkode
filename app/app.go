@@ -68,7 +68,7 @@ func DefaultModel(provider string) string {
 	}
 }
 
-// NewWorkspace는 root를 절대 경로로 정규화하고 항상 실행 가능한 workspace를 만들어요.
+// NewWorkspace는 root를 절대 경로로 정규화하고 즉시 실행형 workspace를 만들어요.
 func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error) {
 	root := opts.Root
 	if root == "" {

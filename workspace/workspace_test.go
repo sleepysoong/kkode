@@ -10,7 +10,7 @@ import (
 	"github.com/sleepysoong/kkode/llm"
 )
 
-func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
+func TestWorkspaceReadWriteSearchAndPathBoundary(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(dir+"/a.txt", []byte("hello kkode"), 0o644); err != nil {
 		t.Fatal(err)
@@ -28,14 +28,14 @@ func TestWorkspaceReadSearchAndDenyEscape(t *testing.T) {
 		t.Fatalf("matches=%#v err=%v", matches, err)
 	}
 	if _, err := w.ReadFile("../nope"); err == nil {
-		t.Fatal("expected escape error")
+		t.Fatal("workspace root 바깥 경로는 거부해야해요")
 	}
 	if err := w.WriteFile("b.txt", "x"); err != nil {
-		t.Fatalf("write는 항상 실행돼야해요: %v", err)
+		t.Fatalf("write failed: %v", err)
 	}
 }
 
-func TestWorkspaceToolsAndCommandAlwaysRun(t *testing.T) {
+func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)
 	if err != nil {
@@ -58,7 +58,7 @@ func TestWorkspaceToolsAndCommandAlwaysRun(t *testing.T) {
 	}
 }
 
-func TestWorkspaceWriteReplaceAndRunToolAlwaysRun(t *testing.T) {
+func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)
 	if err != nil {
@@ -127,7 +127,7 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	}
 }
 
-func TestYOLOAllowAllWritesProtectedPathsAndCommands(t *testing.T) {
+func TestWorkspaceCanWriteDotGitAndRunCommands(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestYOLOAllowAllWritesProtectedPathsAndCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := w.WriteFile(".git/config", "yolo"); err != nil {
-		t.Fatalf("YOLO 모드에서는 protected path도 막지 않아요: %v", err)
+		t.Fatalf("dot git write failed: %v", err)
 	}
 	out, err := w.Run(context.Background(), "echo", "yolo")
 	if err != nil || out != "yolo\n" {

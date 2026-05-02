@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sleepysoong/kkode/agent"
@@ -62,6 +63,9 @@ func TestRuntimeRunResumeAndTodoTools(t *testing.T) {
 	}
 	if !hasTodo {
 		t.Fatalf("todo tool missing: %#v", provider.requests[0].Tools)
+	}
+	if provider.requests[0].Messages[0].Role != llm.RoleDeveloper || !strings.Contains(provider.requests[0].Messages[0].Content, "todo_write") {
+		t.Fatalf("todo instructions missing: %#v", provider.requests[0].Messages)
 	}
 }
 

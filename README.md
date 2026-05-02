@@ -23,7 +23,9 @@ graph TD
 
     RT --> Agent[agent.Agent]
     RT --> Store
-    Agent --> Core[llm core 타입과 tool loop]
+    Agent --> PromptTemplates[prompts/*.md]
+    RT --> PromptTemplates
+    Agent --> Core[llm core 타입과 비동기 tool loop]
     Agent --> Tools[tools.FileTools / tools.WebTools]
     Tools --> WS[workspace.Workspace]
     WS --> FS[(파일 시스템 / shell / grep / glob)]
@@ -173,6 +175,12 @@ erDiagram
 - `app.BuildProvider`, `app.NewWorkspace`, `app.NewAgent`가 CLI/gateway의 중복 조립 코드를 줄여요.
 - agent 표면에는 표준 `file_*`, `shell_run`, `web_fetch` tool만 붙이고, 이전 `workspace_*` tool 자동 주입은 하지 않아요.
 
+### Prompt 템플릿: `prompts/`
+
+- `agent-system.md`, `session-summary-context.md`, `session-compaction.md`, `todo-instructions.md`를 파일로 관리해요.
+- `prompts.Render`가 Go `text/template` 기반으로 system prompt, session 압축 요약, todo 지침을 렌더링해요.
+- prompt 문구는 코드가 아니라 `prompts/*.md`를 수정해서 바꿀 수 있어요.
+
 ### Agent runtime: `agent/`
 
 - `agent.Agent`가 provider, 표준 tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요.
@@ -185,7 +193,7 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `RunToolLoop`로 tool 실행 루프를 처리해요.
+- `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
 - `Auth`, `Model`, `ModelRegistry`, `Usage.EstimatedCost`를 제공해요.
@@ -221,7 +229,7 @@ erDiagram
 
 - `cmd/kkode-agent`
   - OpenAI, OmniRoute, Copilot SDK, Codex CLI provider를 같은 CLI에서 실행해요.
-  - 항상 실행형 workspace라 파일 쓰기와 shell 실행을 바로 열어요.
+  - 즉시 실행형 workspace라 파일 쓰기와 shell 실행을 바로 열어요.
   - 기본적으로 `.kkode/state.db` SQLite DB에 session/turn/event/todo를 저장하고, `-session`, `-fork-session`, `-list-sessions`로 이어갈 수 있어요.
 - `session`
   - SQLite 기반 session store, resume/fork, turn/event/todo/checkpoint 저장 인터페이스를 제공해요.
@@ -231,7 +239,7 @@ erDiagram
   - agent가 바로 쓰기 좋은 표준 tool 이름을 제공해요: `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`.
   - `web_fetch`는 HTTP/HTTPS URL을 가져와 status, content type, body, truncate 여부를 JSON으로 돌려줘요.
 - `workspace`
-  - YOLO 모드에서 workspace path sandbox, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
+  - workspace path boundary, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
   - shell 실행은 stdout 문자열뿐 아니라 exit code, stderr, timeout 여부를 구조화해서 tool output으로 돌려줘요.
 - `transcript`
   - request/response/error turn을 JSON으로 저장해요.
@@ -239,7 +247,7 @@ erDiagram
 
 ## Agent CLI 예제
 
-기본 YOLO 모드로 저장소를 조사하거나 수정하게 할 때는 이렇게 실행해요.
+기본 실행 모드로 저장소를 조사하거나 수정하게 할 때는 이렇게 실행해요.
 
 ```bash
 go run ./cmd/kkode-agent \
@@ -292,7 +300,7 @@ go run ./cmd/kkode-gateway \
   -state .kkode/state.db
 ```
 
-원격 bind는 YOLO tool surface를 외부에 여는 것이므로 API key가 필요해요.
+원격 bind는 file/shell/web tool surface를 외부에 여는 것이므로 API key가 필요해요.
 
 ```bash
 KKODE_API_KEY=kk_live_local \
@@ -386,7 +394,6 @@ for name, handler := range webHandlers {
 ag, err := agent.New(agent.Config{
     Provider:     provider,
     Model:        "gpt-5-mini",
-    Workspace:    ws,
     Tools:        allDefs,
     ToolHandlers: fileHandlers,
 })
@@ -420,7 +427,8 @@ registry := llm.ToolRegistry{
 }
 
 resp, err := llm.RunToolLoop(ctx, client, req, registry, llm.ToolLoopOptions{
-    MaxIterations: 8,
+    MaxIterations:     8,
+    ParallelToolCalls: true,
 })
 ```
 

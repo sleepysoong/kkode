@@ -9,6 +9,7 @@ import (
 
 	"github.com/sleepysoong/kkode/agent"
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/prompts"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -55,6 +56,7 @@ func (r *Runtime) Run(ctx context.Context, opts RunOptions) (*RunResult, error) 
 	req, handlers := r.Agent.Prepare(opts.Prompt)
 	req = r.applySessionContext(sess, req)
 	if r.EnableTodos {
+		req.Messages = append([]llm.Message{llm.DeveloperText(session.TodoInstructions())}, req.Messages...)
 		defs, todoHandlers := session.TodoTools(r.Store, sess.ID)
 		req.Tools = append(req.Tools, defs...)
 		for name, handler := range todoHandlers {
@@ -126,7 +128,11 @@ func (r *Runtime) applySessionContext(sess *session.Session, req llm.Request) ll
 	messages := append([]llm.Message{}, req.Messages...)
 	history := r.historyMessages(sess)
 	if sess.Summary != "" {
-		history = append([]llm.Message{llm.DeveloperText("이전 세션 요약이에요:\n" + sess.Summary)}, history...)
+		summary, err := prompts.Render(prompts.SessionSummaryContext, map[string]any{"Summary": sess.Summary})
+		if err != nil {
+			summary = "이전 세션 요약이에요:\n" + sess.Summary
+		}
+		history = append([]llm.Message{llm.DeveloperText(summary)}, history...)
 	}
 	if len(history) > 0 {
 		req.Messages = append(history, messages...)

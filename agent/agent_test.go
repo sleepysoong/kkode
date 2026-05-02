@@ -55,6 +55,20 @@ func TestAgentRunWithWorkspaceTool(t *testing.T) {
 	}
 }
 
+func TestAgentDefaultInstructionsComeFromPromptTemplate(t *testing.T) {
+	ag, err := New(Config{Provider: &fakeProvider{}, Model: "fake", Tools: []llm.Tool{{Kind: llm.ToolFunction, Name: "file_read"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := ag.Prepare("준비해요")
+	if !strings.Contains(req.Instructions, "Go 바이브코딩 에이전트") || !strings.Contains(req.Instructions, "file_read") {
+		t.Fatalf("instructions=%q", req.Instructions)
+	}
+	if req.ParallelToolCalls == nil || !*req.ParallelToolCalls {
+		t.Fatal("tool call 병렬 실행 힌트가 기본으로 켜져야해요")
+	}
+}
+
 func TestGuardrailBlocks(t *testing.T) {
 	ag, err := New(Config{Provider: &fakeProvider{}, Model: "fake", Guardrails: Guardrails{BlockedSubstrings: []string{"password"}}})
 	if err != nil {

@@ -379,14 +379,14 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 	strict := true
 	defs = []llm.Tool{
 		{Kind: llm.ToolFunction, Name: "workspace_read_file", Description: "workspace 안의 파일을 읽어요. offset_line, limit_lines, max_bytes로 범위를 줄일 수 있어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "offset_line": integerSchema(), "limit_lines": integerSchema(), "max_bytes": integerSchema()}, []string{"path"})},
-		{Kind: llm.ToolFunction, Name: "workspace_write_file", Description: "YOLO 모드에서 workspace 안의 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
-		{Kind: llm.ToolFunction, Name: "workspace_replace_in_file", Description: "YOLO 모드에서 파일 안의 텍스트를 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": integerSchema()}, []string{"path", "old", "new"})},
-		{Kind: llm.ToolFunction, Name: "workspace_apply_patch", Description: "YOLO 모드에서 apply_patch 형식의 patch를 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
+		{Kind: llm.ToolFunction, Name: "workspace_write_file", Description: "workspace 안의 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
+		{Kind: llm.ToolFunction, Name: "workspace_replace_in_file", Description: "파일 안의 텍스트를 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": integerSchema()}, []string{"path", "old", "new"})},
+		{Kind: llm.ToolFunction, Name: "workspace_apply_patch", Description: "apply_patch 형식의 patch를 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
 		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "workspace_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_grep", Description: "workspace 파일들에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": integerSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "workspace 파일들에서 literal 문자열을 검색하고 파일 경로만 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"needle": stringSchema()}, []string{"needle"})},
-		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "YOLO 모드에서 workspace에서 명령을 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": integerSchema()}, []string{"command"})},
+		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "workspace에서 명령을 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": integerSchema()}, []string{"command"})},
 	}
 	handlers = llm.ToolRegistry{
 		"workspace_read_file": llm.JSONToolHandler(func(ctx context.Context, in struct {

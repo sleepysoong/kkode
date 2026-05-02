@@ -3,7 +3,10 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type scriptedProvider struct{ calls int }
@@ -52,4 +55,67 @@ func TestRunToolLoopPreservesProviderItemsAndAppendsToolOutput(t *testing.T) {
 	if p.calls != 2 || resp.Text != "final" {
 		t.Fatalf("unexpected loop result calls=%d resp=%#v", p.calls, resp)
 	}
+}
+
+func TestRunToolLoopCanExecuteToolCallsInParallel(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	p := &parallelProvider{}
+	var started atomic.Int32
+	release := make(chan struct{})
+	var once sync.Once
+	reg := ToolRegistry{
+		"wait": JSONToolHandler(func(ctx context.Context, in struct {
+			Text string `json:"text"`
+		}) (string, error) {
+			if started.Add(1) == 2 {
+				once.Do(func() { close(release) })
+			}
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+			return in.Text, nil
+		}),
+	}
+	resp, err := RunToolLoop(ctx, p, Request{Model: "test", Messages: []Message{UserText("go")}}, reg, ToolLoopOptions{MaxIterations: 2, ParallelToolCalls: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != "parallel done" {
+		t.Fatalf("resp=%#v", resp)
+	}
+	if p.sawOutputs != "ab" {
+		t.Fatalf("tool output order=%q", p.sawOutputs)
+	}
+}
+
+type parallelProvider struct {
+	calls      int
+	sawOutputs string
+}
+
+func (p *parallelProvider) Name() string { return "parallel" }
+func (p *parallelProvider) Capabilities() Capabilities {
+	return Capabilities{Tools: true, ParallelToolCalls: true}
+}
+func (p *parallelProvider) Generate(ctx context.Context, req Request) (*Response, error) {
+	p.calls++
+	if p.calls == 1 {
+		a, _ := json.Marshal(map[string]string{"text": "a"})
+		b, _ := json.Marshal(map[string]string{"text": "b"})
+		calls := []ToolCall{{CallID: "call_a", Name: "wait", Arguments: a}, {CallID: "call_b", Name: "wait", Arguments: b}}
+		return &Response{
+			ID:        "resp_parallel",
+			Output:    []Item{{Type: ItemFunctionCall, ToolCall: &calls[0]}, {Type: ItemFunctionCall, ToolCall: &calls[1]}},
+			ToolCalls: calls,
+		}, nil
+	}
+	for _, item := range req.InputItems {
+		if item.ToolResult != nil {
+			p.sawOutputs += item.ToolResult.Output
+		}
+	}
+	return &Response{Text: "parallel done", Output: []Item{{Type: ItemMessage, Role: RoleAssistant, Content: "parallel done"}}}, nil
 }

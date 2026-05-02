@@ -25,6 +25,7 @@ kkode/
 ├── agent/                           # 실제 coding agent loop와 guardrail/trace예요
 ├── session/                         # SQLite session store와 resume/fork 상태예요
 ├── runtime/                         # agent와 session store를 묶는 실행 runtime이에요
+├── prompts/                         # system/session/todo prompt 템플릿이에요
 ├── cmd/
 │   ├── kkode-agent/                  # provider 선택형 agent CLI예요
 │   └── kkode-gateway/                # HTTP gateway API server예요
@@ -199,6 +200,25 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 
 `NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
+## Prompt 템플릿 구현체
+
+패키지는 `prompts`예요. system prompt, session summary context, compaction prompt, todo instructions를 `prompts/*.md` 파일로 분리해요. 코드에서는 템플릿 이름만 참조하므로 문구 수정과 provider/runtime 구현 변경을 분리할 수 있어요.
+
+```go
+const (
+    AgentSystem           = "agent-system.md"
+    SessionSummaryContext = "session-summary-context.md"
+    SessionCompaction     = "session-compaction.md"
+    TodoInstructions      = "todo-instructions.md"
+)
+
+func Text(name string) (string, error)
+func Render(name string, data any) (string, error)
+func MustRender(name string, data any) string
+```
+
+`agent.Agent`는 기본 system prompt를 `prompts/agent-system.md`에서 만들어요. `runtime.Runtime`은 session summary를 대화 앞에 붙일 때 `prompts/session-summary-context.md`를 쓰고, `session.BuildExtractiveSummary`는 오래된 turn을 `prompts/session-compaction.md`로 압축해요.
+
 ## Agent runtime 구현체
 
 패키지는 `agent`예요. `llm.Provider`만 있는 상태에서는 provider 호출과 tool loop를 직접 엮어야 해요. `agent.Agent`는 이 반복 구조를 앱에서 바로 쓸 수 있게 묶어줘요.
@@ -271,10 +291,13 @@ if err != nil {
 client := openai.New(openai.Config{APIKey: os.Getenv("OPENAI_API_KEY")})
 tr := transcript.New("session-1")
 
+defs, handlers := tools.FileTools(ws)
+
 ag, err := agent.New(agent.Config{
     Provider:     client,
     Model:        "gpt-5-mini",
-    Workspace:    ws,
+    Tools:        defs,
+    ToolHandlers: handlers,
     Transcript:   tr,
     Instructions: "너는 Go 코딩 agent예요. 수정 뒤에는 테스트를 실행해야해요.",
     BaseRequest: llm.Request{
@@ -352,7 +375,7 @@ POST /api/v1/runs
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
 ```
 
-`cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요. YOLO file/shell/web tool surface가 외부에 노출될 수 있기 때문이에요.
+`cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요. file/shell/web tool surface가 외부에 노출될 수 있기 때문이에요.
 
 ```bash
 go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db
@@ -509,7 +532,7 @@ func RunToolLoop(
 1. provider를 호출해요.
 2. `Response.ToolCalls`가 없으면 최종 응답을 반환해요.
 3. provider가 돌려준 `Response.Output` item을 다음 request에 보존해요.
-4. local tool을 실행해요.
+4. local tool을 실행해요. `ToolLoopOptions.ParallelToolCalls`가 true면 여러 tool call을 비동기로 실행하고 결과 순서는 보존해요.
 5. `function_call_output` 또는 `custom_tool_call_output` item을 추가해요.
 6. 최대 반복 횟수까지 다시 호출해요.
 
@@ -529,7 +552,8 @@ registry := llm.ToolRegistry{
 }
 
 resp, err := llm.RunToolLoop(ctx, provider, req, registry, llm.ToolLoopOptions{
-    MaxIterations: 8,
+    MaxIterations:     8,
+    ParallelToolCalls: true,
 })
 ```
 
@@ -731,7 +755,7 @@ func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, ti
 
 `cmd/kkode-agent`는 기본적으로 `FileTools`와 `WebTools`를 agent에 붙여요. `web_fetch`를 끄고 싶으면 `-no-web`을 사용해요.
 
-## YOLO workspace 정책
+## Workspace 실행 정책
 
 현재 제품 방향은 빠른 구현 검증을 위해 권한 엔진을 완전히 제거하고 항상 실행 모드로 단순화해요. `cmd/kkode-agent`, `cmd/kkode-gateway`, `workspace`는 파일 쓰기와 shell 실행을 묻지 않고 바로 수행해요.
 
@@ -769,7 +793,7 @@ if err != nil {
 
 toolDefs, handlers := ws.Tools()
 req.Tools = append(req.Tools, toolDefs...)
-resp, err := llm.RunToolLoop(ctx, provider, req, handlers, llm.ToolLoopOptions{})
+resp, err := llm.RunToolLoop(ctx, provider, req, handlers, llm.ToolLoopOptions{ParallelToolCalls: true})
 ```
 
 ## Transcript 구현체
@@ -824,7 +848,7 @@ resp, err := router.Generate(ctx, llm.Request{
 
 현재 보안 경계는 다음과 같아요.
 
-- 기본 CLI는 YOLO 모드라 write/replace/apply_patch/shell을 바로 실행할 수 있어요.
+- 기본 CLI는 write/replace/apply_patch/shell을 바로 실행할 수 있어요.
 - workspace path는 root 바깥으로 탈출할 수 없게 막지만, root 안 보호 경로 차단은 하지 않아요.
 - `agent.Guardrails`는 입력/출력 substring 차단을 제공하고, 더 정교한 정책은 별도 guardrail 구현체로 확장해야해요.
 - transcript는 `SaveRedacted`로 token/API key 패턴을 지워 저장할 수 있어요.
@@ -839,6 +863,6 @@ resp, err := router.Generate(ctx, llm.Request{
 2. OmniRoute `/api/models/catalog`, `/api/combos`, `/api/combos/metrics`, `/api/resilience` typed helper를 더 추가해요.
 3. Codex app-server/harness provider를 CLI adapter와 분리해서 추가해요.
 4. streaming aggregation과 event replay를 강화해요.
-5. workspace patch tool과 command policy audit log를 추가해요.
+5. workspace patch tool과 command 실행 로그를 추가해요.
 6. agent handoff/session memory를 `SessionProvider`와 연결해요.
 7. Copilot custom agent와 OpenAI hosted MCP tool을 같은 설정 파일에서 선언할 수 있게 해요.

@@ -3,9 +3,11 @@ package agent
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/prompts"
 	"github.com/sleepysoong/kkode/transcript"
 )
 
@@ -24,7 +26,8 @@ type Config struct {
 }
 
 type Agent struct {
-	cfg Config
+	cfg        Config
+	observerMu sync.Mutex
 }
 
 type RunResult struct {
@@ -55,6 +58,11 @@ type Guardrails struct {
 }
 
 type traceEventsKey struct{}
+
+type traceBuffer struct {
+	mu     sync.Mutex
+	events []TraceEvent
+}
 
 func New(cfg Config) (*Agent, error) {
 	if cfg.Provider == nil {
@@ -90,11 +98,11 @@ func (a *Agent) RunPrepared(ctx context.Context, prompt string, req llm.Request,
 		a.emit(ctx, TraceEvent{Type: "guardrail.blocked", Error: err.Error()})
 		return nil, err
 	}
-	var trace []TraceEvent
-	ctx = context.WithValue(ctx, traceEventsKey{}, &trace)
+	trace := &traceBuffer{}
+	ctx = context.WithValue(ctx, traceEventsKey{}, trace)
 	a.emit(ctx, TraceEvent{Type: "agent.started", Message: prompt})
 	tracedHandlers := a.traceTools(handlers)
-	resp, err := llm.RunToolLoop(ctx, a.cfg.Provider, req, tracedHandlers, llm.ToolLoopOptions{MaxIterations: a.cfg.MaxIterations})
+	resp, err := llm.RunToolLoop(ctx, a.cfg.Provider, req, tracedHandlers, llm.ToolLoopOptions{MaxIterations: a.cfg.MaxIterations, ParallelToolCalls: req.ParallelToolCalls == nil || *req.ParallelToolCalls})
 	if err != nil {
 		a.emit(ctx, TraceEvent{Type: "agent.failed", Error: err.Error()})
 	} else if resp == nil {
@@ -105,14 +113,14 @@ func (a *Agent) RunPrepared(ctx context.Context, prompt string, req llm.Request,
 		if a.cfg.Transcript != nil {
 			a.cfg.Transcript.Add(req, resp, err)
 		}
-		return &RunResult{Response: resp, Trace: trace}, err
+		return &RunResult{Response: resp, Trace: trace.snapshot()}, err
 	} else {
 		a.emit(ctx, TraceEvent{Type: "agent.completed", Message: resp.Text})
 	}
 	if a.cfg.Transcript != nil {
 		a.cfg.Transcript.Add(req, resp, err)
 	}
-	return &RunResult{Response: resp, Trace: trace}, err
+	return &RunResult{Response: resp, Trace: trace.snapshot()}, err
 }
 
 func (a *Agent) Stream(ctx context.Context, prompt string) (llm.EventStream, error) {
@@ -131,10 +139,13 @@ func (a *Agent) request(prompt string, tools []llm.Tool) llm.Request {
 	req := a.cfg.BaseRequest
 	req.Model = a.cfg.Model
 	if req.Instructions == "" {
-		req.Instructions = a.instructions()
+		req.Instructions = a.instructions(tools)
 	}
 	req.Messages = append(append([]llm.Message{}, req.Messages...), llm.UserText(prompt))
 	req.Tools = append(append([]llm.Tool{}, req.Tools...), tools...)
+	if req.ParallelToolCalls == nil {
+		req.ParallelToolCalls = llm.Bool(true)
+	}
 	if req.Store == nil {
 		req.Store = llm.Bool(false)
 	}
@@ -150,11 +161,19 @@ func (a *Agent) tools() ([]llm.Tool, llm.ToolRegistry) {
 	return defs, handlers
 }
 
-func (a *Agent) instructions() string {
+func (a *Agent) instructions(tools []llm.Tool) string {
 	if a.cfg.Instructions != "" {
 		return a.cfg.Instructions
 	}
-	return "너는 Go 바이브코딩 에이전트예요. 필요한 경우 file_read/file_write/file_edit/file_apply_patch/file_glob/file_grep/shell_run/web_fetch 같은 tool을 사용해요. 현재 기본은 YOLO 모드라 요청받은 파일 수정과 명령 실행을 적극적으로 수행해요. 최종 답변에는 수행한 작업과 검증 결과를 짧게 정리해요."
+	toolNames := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		toolNames = append(toolNames, tool.Name)
+	}
+	out, err := prompts.Render(prompts.AgentSystem, map[string]any{"AgentName": a.cfg.Name, "ToolNames": toolNames})
+	if err != nil {
+		return "너는 Go 바이브코딩 에이전트예요. 요청받은 작업을 바로 수행하고, 최종 답변에는 수행한 작업과 검증 결과를 짧게 정리해요."
+	}
+	return out
 }
 
 func (a *Agent) traceTools(reg llm.ToolRegistry) llm.ToolRegistry {
@@ -178,10 +197,24 @@ func (a *Agent) traceTools(reg llm.ToolRegistry) llm.ToolRegistry {
 
 func (a *Agent) emit(ctx context.Context, event TraceEvent) {
 	event.At = time.Now().UTC()
-	if events, ok := ctx.Value(traceEventsKey{}).(*[]TraceEvent); ok && events != nil {
-		*events = append(*events, event)
+	if events, ok := ctx.Value(traceEventsKey{}).(*traceBuffer); ok && events != nil {
+		events.append(event)
 	}
 	if a.cfg.Observer != nil {
+		a.observerMu.Lock()
+		defer a.observerMu.Unlock()
 		a.cfg.Observer.OnEvent(ctx, event)
 	}
+}
+
+func (b *traceBuffer) append(event TraceEvent) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.events = append(b.events, event)
+}
+
+func (b *traceBuffer) snapshot() []TraceEvent {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]TraceEvent{}, b.events...)
 }
