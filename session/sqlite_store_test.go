@@ -247,3 +247,44 @@ func TestCheckpointStoreListsAndLoads(t *testing.T) {
 		t.Fatalf("checkpoint list가 이상해요: %+v", items)
 	}
 }
+
+func TestTodoToolsUseDedicatedSaveTodosWhenAvailable(t *testing.T) {
+	ctx := context.Background()
+	store := &trackingTodoStore{sess: NewSession("/repo", "openai", "gpt", "build", AgentModeBuild)}
+	_, handlers := TodoTools(store, store.sess.ID)
+	args, _ := json.Marshal(map[string]any{"items": []map[string]any{{"content": "원자 저장", "status": "pending"}}})
+	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "todo_write", CallID: "call_1", Arguments: args}); err != nil {
+		t.Fatal(err)
+	}
+	if store.saveTodosCalls != 1 || store.saveSessionCalls != 0 {
+		t.Fatalf("전용 SaveTodos를 써야 해요: saveTodos=%d saveSession=%d", store.saveTodosCalls, store.saveSessionCalls)
+	}
+	if len(store.sess.Todos) != 1 || store.sess.Todos[0].ID == "" || store.sess.Todos[0].UpdatedAt.IsZero() {
+		t.Fatalf("todo normalize/save가 이상해요: %+v", store.sess.Todos)
+	}
+}
+
+type trackingTodoStore struct {
+	sess             *Session
+	saveTodosCalls   int
+	saveSessionCalls int
+}
+
+func (s *trackingTodoStore) LoadSession(ctx context.Context, id string) (*Session, error) {
+	clone := *s.sess
+	clone.Todos = append([]Todo(nil), s.sess.Todos...)
+	return &clone, nil
+}
+
+func (s *trackingTodoStore) SaveSession(ctx context.Context, sess *Session) error {
+	s.saveSessionCalls++
+	s.sess = sess
+	return nil
+}
+
+func (s *trackingTodoStore) SaveTodos(ctx context.Context, sessionID string, todos []Todo) error {
+	s.saveTodosCalls++
+	s.sess.Todos = append([]Todo(nil), todos...)
+	s.sess.Touch()
+	return nil
+}

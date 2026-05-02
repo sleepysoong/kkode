@@ -16,6 +16,10 @@ type todoSaver interface {
 	SaveSession(ctx context.Context, s *Session) error
 }
 
+type todoListSaver interface {
+	SaveTodos(ctx context.Context, sessionID string, todos []Todo) error
+}
+
 func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry) {
 	strict := true
 	defs := []llm.Tool{
@@ -35,8 +39,7 @@ func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry)
 				normalizeTodo(&in.Items[i])
 			}
 			s.Todos = in.Items
-			s.Touch()
-			if err := store.SaveSession(ctx, s); err != nil {
+			if err := saveTodoList(ctx, store, s); err != nil {
 				return "", err
 			}
 			return todoText(in.Items), nil
@@ -66,8 +69,7 @@ func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry)
 			if !updated {
 				s.Todos = append(s.Todos, in)
 			}
-			s.Touch()
-			if err := store.SaveSession(ctx, s); err != nil {
+			if err := saveTodoList(ctx, store, s); err != nil {
 				return "", err
 			}
 			return todoText(s.Todos), nil
@@ -82,6 +84,14 @@ func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry)
 		},
 	}
 	return defs, handlers
+}
+
+func saveTodoList(ctx context.Context, store todoSaver, sess *Session) error {
+	if saver, ok := store.(todoListSaver); ok {
+		return saver.SaveTodos(ctx, sess.ID, sess.Todos)
+	}
+	sess.Touch()
+	return store.SaveSession(ctx, sess)
 }
 
 func todoText(items []Todo) string {

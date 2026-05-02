@@ -31,9 +31,9 @@
 
 `SQLiteStore.SaveSession`은 긴 session에서 turns/events를 모두 지우고 다시 넣기 때문에 write amplification이 커질 수 있어요. 이미 `AppendEvent`, run event append가 있으므로 runtime은 새 turn/event만 append하는 경로를 우선 사용하고, full save는 복구/마이그레이션용으로 남기는 방향이 좋아요.
 
-### 4. Todo 저장을 전용 store 경계로 분리해야 해요
+### 4. Todo 저장 전용 store 경계는 반영했어요
 
-`session.TodoTools`는 현재 `LoadSession -> SaveSession`으로 todo를 저장해요. 병렬 tool call 환경에서는 lost update 위험이 있으므로 `TodoStore` 또는 `SaveTodos`를 통해 todo만 transaction으로 갱신해야 해요.
+`session.TodoTools`는 이제 store가 `SaveTodos`를 제공하면 전체 `SaveSession` 대신 todo 목록만 저장해요. SQLiteStore에서는 이미 transaction 기반 `SaveTodos`가 있으므로 todo tool 실행 시 turns/events 전체 재삽입을 피할 수 있어요. 다음 단계에서는 `todo_update` 자체를 SQL upsert로 더 좁힐 수 있어요.
 
 ### 5. OpenAI-compatible request builder 공통화는 반영했어요
 
