@@ -18,8 +18,9 @@ graph TD
 
     CLI --> RT[runtime.Runtime]
     GW --> Store[(session.SQLiteStore)]
-    GW --> SyncRunStarter[동기 RunStarter / 다음 async RunManager]
-    SyncRunStarter --> RT
+    GW --> RunManager[gateway.AsyncRunManager / background runs]
+    RunManager --> RunStarter[RunStarter / runtime 실행 함수]
+    RunStarter --> RT
 
     RT --> Agent[agent.Agent]
     RT --> Store
@@ -88,7 +89,8 @@ sequenceDiagram
     participant UI as 웹 패널 / Discord adapter
     participant G as gateway.Server
     participant S as session.SQLiteStore
-    participant RS as 동기 RunStarter
+    participant M as gateway.AsyncRunManager
+    participant RS as RunStarter
     participant R as runtime.Runtime
     participant A as agent.Agent
 
@@ -98,18 +100,23 @@ sequenceDiagram
     G-->>UI: 201 SessionDTO
 
     UI->>G: POST /api/v1/runs
-    G->>RS: RunStartRequest 전달
-    RS-->>G: RunDTO completed/failed
-    G-->>UI: 202 RunDTO + events_url
+    G->>M: Start(RunStartRequest)
+    M-->>G: RunDTO queued + events_url
+    G-->>UI: 202 RunDTO
 
-    UI->>G: GET /api/v1/sessions/{id}/events?stream=true
-    RS->>R: 현재 요청 안에서 run 실행
-    R->>A: provider/tool loop 실행
-    A-->>R: trace/tool/text event
-    R->>S: event 저장
-    G-->>UI: SSE replay/live event
-
-    Note over RS,G: 현재는 동기 실행이에요. 다음 단계에서 async RunManager/EventBus를 붙여야해요.
+    par background 실행
+        M->>RS: context 포함 RunStartRequest 전달
+        RS->>R: runtime.Run 실행
+        R->>A: provider/tool loop 실행
+        A-->>R: trace/tool/text event
+        R->>S: event 저장
+        RS-->>M: RunDTO completed/failed/cancelled
+    and 외부 adapter polling/replay
+        UI->>G: GET /api/v1/runs/{run_id}
+        G-->>UI: RunDTO status
+        UI->>G: GET /api/v1/sessions/{id}/events?stream=true
+        G-->>UI: SSE event replay
+    end
 ```
 
 ### 저장되는 상태
@@ -222,7 +229,8 @@ erDiagram
 - `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, `POST /api/v1/sessions/{id}/fork`를 제공해요.
 - `GET /api/v1/sessions/{id}/events`는 JSON replay와 `stream=true` SSE replay를 지원해요.
 - `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
-- `POST /api/v1/runs`는 `cmd/kkode-gateway`에서 동기 `RunStarter`로 실제 agent run을 실행해요. 다음 단계에서 async `RunManager`로 확장해야해요.
+- `POST /api/v1/runs`는 `gateway.AsyncRunManager`로 즉시 접수하고 background에서 실제 agent run을 실행해요.
+- `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `POST /api/v1/runs/{id}/cancel`로 외부 adapter가 run 상태를 조회하고 취소할 수 있어요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support

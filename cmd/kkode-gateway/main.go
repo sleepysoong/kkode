@@ -52,12 +52,16 @@ func run(args []string) error {
 		return err
 	}
 	defer store.Close()
+	runManager := gateway.NewAsyncRunManager(syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}))
 	srv, err := gateway.New(gateway.Config{
 		Store:                store,
 		Version:              *version,
 		APIKey:               *apiKey,
 		AllowLocalhostNoAuth: *allowLocalhostNoAuth,
-		RunStarter:           syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}),
+		RunStarter:           runManager.Start,
+		RunGetter:            runManager.Get,
+		RunLister:            runManager.List,
+		RunCanceler:          runManager.Cancel,
 		Providers:            providerDTOs(),
 	})
 	if err != nil {
@@ -107,14 +111,17 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		rt := app.NewRuntime(store, ag, app.RuntimeOptions{ProjectRoot: absRoot, ProviderName: providerHandle.Provider.Name(), Model: model, AgentName: firstNonEmpty(sess.AgentName, "kkode-gateway"), Mode: sess.Mode})
 		started := time.Now().UTC()
 		result, runErr := rt.Run(ctx, kruntime.RunOptions{SessionID: req.SessionID, Prompt: req.Prompt})
-		run := &gateway.RunDTO{SessionID: req.SessionID, Prompt: req.Prompt, Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		runID := strings.TrimSpace(req.RunID)
+		if runID == "" {
+			runID = session.NewID("run")
+		}
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
-			run.ID = "run_" + strings.TrimPrefix(result.Turn.ID, "turn_")
 			run.TurnID = result.Turn.ID
 			run.EventsURL = "/api/v1/sessions/" + result.Session.ID + "/events"
 		}
-		if run.ID == "" {
-			run.ID = session.NewID("run")
+		if run.EventsURL == "" {
+			run.EventsURL = "/api/v1/sessions/" + req.SessionID + "/events"
 		}
 		if runErr != nil {
 			run.Status = "failed"

@@ -346,10 +346,24 @@ type Config struct {
     AllowLocalhostNoAuth bool
     Providers            []ProviderDTO
     RunStarter           RunStarter
+    RunGetter            RunGetter
+    RunLister            RunLister
+    RunCanceler          RunCanceler
     Now                  func() time.Time
 }
 
 type RunStarter func(ctx context.Context, req RunStartRequest) (*RunDTO, error)
+type RunGetter func(ctx context.Context, runID string) (*RunDTO, error)
+type RunLister func(ctx context.Context, q RunQuery) ([]RunDTO, error)
+type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
+
+type AsyncRunManager struct { /* background run 상태와 cancel 함수를 보관해요 */ }
+
+func NewAsyncRunManager(starter RunStarter) *AsyncRunManager
+func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunDTO, error)
+func (m *AsyncRunManager) Get(ctx context.Context, runID string) (*RunDTO, error)
+func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error)
+func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, error)
 
 type Server struct { /* net/http handler를 보관해요 */ }
 
@@ -371,10 +385,13 @@ GET  /api/v1/sessions/{session_id}
 POST /api/v1/sessions/{session_id}/fork
 GET  /api/v1/sessions/{session_id}/events
 GET  /api/v1/sessions/{session_id}/todos
+GET  /api/v1/runs
 POST /api/v1/runs
+GET  /api/v1/runs/{run_id}
+POST /api/v1/runs/{run_id}/cancel
 ```
 
-`/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `RunManager`와 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
+`POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. `/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
 
 ```bash
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'

@@ -153,9 +153,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/TodoListResponse'
   /api/v1/runs:
+    get:
+      summary: background run 목록을 반환해요.
+      parameters:
+        - in: query
+          name: session_id
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: run 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunListResponse'
+        '501':
+          $ref: '#/components/responses/Error'
     post:
-      summary: agent run을 시작해요.
-      description: cmd/kkode-gateway에서는 동기 RunStarter가 실제 agent run을 실행해요. 다음 단계에서 async RunManager로 확장해야해요.
+      summary: agent background run을 시작해요.
+      description: gateway는 run을 즉시 접수하고 실제 agent 실행은 background RunManager에서 이어가요.
       requestBody:
         required: true
         content:
@@ -171,6 +197,38 @@ paths:
                 $ref: '#/components/schemas/Run'
         '501':
           $ref: '#/components/responses/Error'
+  /api/v1/runs/{run_id}:
+    get:
+      summary: background run 상태를 조회해요.
+      parameters:
+        - $ref: '#/components/parameters/RunID'
+      responses:
+        '200':
+          description: run 상세예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '404':
+          $ref: '#/components/responses/Error'
+        '501':
+          $ref: '#/components/responses/Error'
+  /api/v1/runs/{run_id}/cancel:
+    post:
+      summary: background run을 취소해요.
+      parameters:
+        - $ref: '#/components/parameters/RunID'
+      responses:
+        '200':
+          description: 취소 요청이 반영된 run이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '404':
+          $ref: '#/components/responses/Error'
+        '501':
+          $ref: '#/components/responses/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -180,6 +238,12 @@ components:
     SessionID:
       in: path
       name: session_id
+      required: true
+      schema:
+        type: string
+    RunID:
+      in: path
+      name: run_id
       required: true
       schema:
         type: string
@@ -337,6 +401,7 @@ components:
           type: string
         status:
           type: string
+          enum: [pending, in_progress, completed, cancelled]
         priority:
           type: string
         updated_at:
@@ -358,6 +423,14 @@ components:
           type: object
           additionalProperties:
             type: string
+    RunListResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Run'
     Run:
       type: object
       required: [id, session_id, status]
@@ -370,6 +443,7 @@ components:
           type: string
         status:
           type: string
+          enum: [queued, running, cancelling, completed, failed, cancelled]
         prompt:
           type: string
         events_url:

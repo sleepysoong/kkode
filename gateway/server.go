@@ -25,6 +25,9 @@ type Config struct {
 	AllowLocalhostNoAuth bool
 	Providers            []ProviderDTO
 	RunStarter           RunStarter
+	RunGetter            RunGetter
+	RunLister            RunLister
+	RunCanceler          RunCanceler
 	Now                  func() time.Time
 }
 
@@ -297,10 +300,51 @@ func (s *Server) getSessionTodos(w http.ResponseWriter, r *http.Request, session
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []string) {
-	if len(parts) != 1 || r.Method != http.MethodPost {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 runs 요청이에요")
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			s.listRuns(w, r)
+		case http.MethodPost:
+			s.startRun(w, r)
+		default:
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 runs method예요")
+		}
 		return
 	}
+	if len(parts) < 2 {
+		writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
+		return
+	}
+	runID := parts[1]
+	if len(parts) == 2 && r.Method == http.MethodGet {
+		s.getRun(w, r, runID)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "cancel" && r.Method == http.MethodPost {
+		s.cancelRun(w, r, runID)
+		return
+	}
+	writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
+}
+
+func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.RunLister == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
+		return
+	}
+	limit := queryInt(r, "limit", 50)
+	if limit > 200 {
+		limit = 200
+	}
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), Limit: limit})
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
+		return
+	}
+	writeJSON(w, RunListResponse{Runs: runs})
+}
+
+func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.RunStarter == nil {
 		writeError(w, r, http.StatusNotImplemented, "run_starter_missing", "이 gateway에는 RunStarter가 연결되지 않았어요")
 		return
@@ -320,6 +364,32 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		return
 	}
 	writeJSONStatus(w, http.StatusAccepted, run)
+}
+
+func (s *Server) getRun(w http.ResponseWriter, r *http.Request, runID string) {
+	if s.cfg.RunGetter == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_getter_missing", "이 gateway에는 RunGetter가 연결되지 않았어요")
+		return
+	}
+	run, err := s.cfg.RunGetter(r.Context(), runID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
+		return
+	}
+	writeJSON(w, run)
+}
+
+func (s *Server) cancelRun(w http.ResponseWriter, r *http.Request, runID string) {
+	if s.cfg.RunCanceler == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_canceler_missing", "이 gateway에는 RunCanceler가 연결되지 않았어요")
+		return
+	}
+	run, err := s.cfg.RunCanceler(r.Context(), runID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
+		return
+	}
+	writeJSON(w, run)
 }
 
 func decodeJSON(r *http.Request, out any) error {

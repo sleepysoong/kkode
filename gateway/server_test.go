@@ -151,3 +151,71 @@ func newTestServer(t *testing.T, store session.Store, apiKey string) *Server {
 	}
 	return srv
 }
+
+func TestGatewayListsGetsAndCancelsRuns(t *testing.T) {
+	store := openTestStore(t)
+	runs := map[string]RunDTO{
+		"run_1": {ID: "run_1", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"},
+	}
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return []RunDTO{runs["run_1"]}, nil
+		},
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			run := runs[runID]
+			return &run, nil
+		},
+		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
+			run := runs[runID]
+			run.Status = "cancelled"
+			runs[runID] = run
+			return &run, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?session_id=sess_1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed RunListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Runs) != 1 || listed.Runs[0].ID != "run_1" {
+		t.Fatalf("run 목록이 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got RunDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "running" {
+		t.Fatalf("run 상세가 이상해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runs/run_1/cancel", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var cancelled RunDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &cancelled); err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Status != "cancelled" {
+		t.Fatalf("cancel 응답이 이상해요: %+v", cancelled)
+	}
+}

@@ -83,6 +83,7 @@ type RunStartRequest struct {
 	Provider  string            `json:"provider,omitempty"`
 	Model     string            `json:"model,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+	RunID     string            `json:"-"`
 }
 
 // RunDTO는 gateway에서 관리하는 실행 단위예요. gateway RunStarter가 실행을 접수하거나 완료했을 때 생성해요.
@@ -97,6 +98,11 @@ type RunDTO struct {
 	EndedAt   time.Time         `json:"ended_at,omitempty"`
 	Error     string            `json:"error,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+// RunListResponse는 background run 목록 응답이에요.
+type RunListResponse struct {
+	Runs []RunDTO `json:"runs"`
 }
 
 // ProviderDTO는 gateway가 알고 있는 provider capability를 설명해요.
