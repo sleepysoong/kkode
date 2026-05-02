@@ -1197,3 +1197,46 @@ func TestGatewaySessionTranscriptAPI(t *testing.T) {
 		t.Fatalf("redact=false transcript가 이상해요: %+v", got)
 	}
 }
+
+func TestGatewayCompactsSessionAndCreatesCheckpoint(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "web", session.AgentModeBuild)
+	for _, prompt := range []string{"첫 요청", "둘째 요청", "셋째 요청"} {
+		turn := session.NewTurn(prompt, llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText(prompt)}})
+		turn.Response = llm.TextResponse("openai", "gpt-5-mini", prompt+" 응답")
+		turn.EndedAt = turn.StartedAt.Add(time.Second)
+		sess.AppendTurn(turn)
+	}
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/compact", bytes.NewBufferString(`{"preserve_first_n_turns":1,"preserve_last_n_turns":1,"checkpoint":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got SessionCompactResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Session.ID != sess.ID || got.Summary == "" || !strings.Contains(got.Summary, "둘째 요청") || got.Checkpoint == nil {
+		t.Fatalf("compact 응답이 이상해요: %+v", got)
+	}
+	loaded, err := store.LoadSession(context.Background(), sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Summary != got.Summary {
+		t.Fatalf("session summary가 저장되지 않았어요: %q != %q", loaded.Summary, got.Summary)
+	}
+	cp, err := store.LoadCheckpoint(context.Background(), sess.ID, got.Checkpoint.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cp.Payload), "session.compaction") {
+		t.Fatalf("checkpoint payload가 이상해요: %s", cp.Payload)
+	}
+}

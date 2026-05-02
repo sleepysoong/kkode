@@ -233,6 +233,26 @@ paths:
                 $ref: '#/components/schemas/Session'
         '404':
           $ref: '#/components/responses/Error'
+  /api/v1/sessions/{session_id}/compact:
+    post:
+      summary: session turn을 extractive summary로 압축해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCompactRequest'
+      responses:
+        '200':
+          description: compaction 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionCompactResponse'
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/fork:
     post:
       summary: 기존 session을 fork해요.
@@ -1415,6 +1435,28 @@ components:
           type: object
           additionalProperties:
             type: string
+    SessionCompactRequest:
+      type: object
+      properties:
+        preserve_first_n_turns:
+          type: integer
+          default: 0
+        preserve_last_n_turns:
+          type: integer
+          default: 4
+        checkpoint:
+          type: boolean
+          default: false
+    SessionCompactResponse:
+      type: object
+      required: [session, summary]
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        summary:
+          type: string
+        checkpoint:
+          $ref: '#/components/schemas/Checkpoint'
     TurnListResponse:
       type: object
       required: [turns]

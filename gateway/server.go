@@ -240,6 +240,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.handleSessionCheckpoints(w, r, sessionID, parts[3:])
 		return
 	}
+	if len(parts) == 3 && parts[2] == "compact" {
+		s.compactSession(w, r, sessionID)
+		return
+	}
 	if len(parts) == 3 && parts[2] == "fork" && r.Method == http.MethodPost {
 		s.forkSession(w, r, sessionID)
 		return
