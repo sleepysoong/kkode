@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -820,6 +821,80 @@ while True:
 	}
 	if prompts.Server.ID != resource.ID || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "review" || len(prompts.Prompts[0].Arguments) != 1 || !prompts.Prompts[0].Arguments[0].Required {
 		t.Fatalf("MCP prompts/list 결과가 이상해요: %+v", prompts)
+	}
+}
+
+func TestGatewayReadsMCPResourceAndGetsPrompt(t *testing.T) {
+	root := t.TempDir()
+	serverPath := filepath.Join(root, "fake_mcp_read_prompt.py")
+	writeTestFile(t, serverPath, `import json, sys
+
+def read_frame():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline().decode().strip()
+        if not line:
+            break
+        key, value = line.split(":", 1)
+        headers[key.lower()] = value.strip()
+    body = sys.stdin.buffer.read(int(headers["content-length"]))
+    return json.loads(body)
+
+def write_frame(payload):
+    data = json.dumps(payload).encode()
+    sys.stdout.buffer.write(b"Content-Length: %d\r\n\r\n" % len(data) + data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_frame()
+    method = msg.get("method")
+    if method == "initialize":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"protocolVersion":"2024-11-05","capabilities":{"resources":{},"prompts":{}}}})
+    elif method == "resources/read":
+        uri = msg.get("params", {}).get("uri", "")
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"contents":[{"uri":uri,"mimeType":"text/plain","text":"hello resource"}]}})
+        break
+    elif method == "prompts/get":
+        params = msg.get("params", {})
+        name = params.get("name", "")
+        path = params.get("arguments", {}).get("path", "README.md")
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"messages":[{"role":"user","content":{"type":"text","text":"review " + name + " " + path}}]}})
+        break
+`)
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceMCPServer, Name: "fake", Enabled: true, Config: []byte(`{"kind":"stdio","command":"python3","args":["` + serverPath + `"],"timeout":3}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/resources/read?uri="+url.QueryEscape("file:///README.md"), nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resource read status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resourceRead MCPResourceReadResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resourceRead); err != nil {
+		t.Fatal(err)
+	}
+	if resourceRead.URI != "file:///README.md" || len(resourceRead.Contents) != 1 || resourceRead.Contents[0].Text != "hello resource" {
+		t.Fatalf("MCP resources/read 결과가 이상해요: %+v", resourceRead)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"arguments":{"path":"main.go"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prompt get status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var promptGet MCPPromptGetResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &promptGet); err != nil {
+		t.Fatal(err)
+	}
+	if promptGet.Prompt != "review" || len(promptGet.Messages) != 1 || promptGet.Messages[0].Content["text"] != "review review main.go" {
+		t.Fatalf("MCP prompts/get 결과가 이상해요: %+v", promptGet)
 	}
 }
 

@@ -38,8 +38,16 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, parts []strin
 		s.listMCPServerResources(w, r, parts[2])
 		return
 	}
+	if len(parts) == 5 && parts[3] == "resources" && parts[4] == "read" && r.Method == http.MethodGet {
+		s.readMCPServerResource(w, r, parts[2])
+		return
+	}
 	if len(parts) == 4 && parts[3] == "prompts" && r.Method == http.MethodGet {
 		s.listMCPServerPrompts(w, r, parts[2])
+		return
+	}
+	if len(parts) == 6 && parts[3] == "prompts" && parts[5] == "get" && r.Method == http.MethodPost {
+		s.getMCPServerPrompt(w, r, parts[2], parts[4])
 		return
 	}
 	if len(parts) == 6 && parts[3] == "tools" && parts[5] == "call" && r.Method == http.MethodPost {

@@ -41,6 +41,20 @@ type MCPResourceListResponse struct {
 	Resources []MCPResourceDTO `json:"resources"`
 }
 
+// MCPResourceContentDTO는 MCP resources/read 결과의 content 항목이에요.
+type MCPResourceContentDTO struct {
+	URI      string `json:"uri,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Blob     string `json:"blob,omitempty"`
+}
+
+type MCPResourceReadResponse struct {
+	Server   ResourceDTO             `json:"server"`
+	URI      string                  `json:"uri"`
+	Contents []MCPResourceContentDTO `json:"contents"`
+}
+
 // MCPPromptDTO는 MCP prompts/list 결과를 외부 API에 노출하는 항목이에요.
 type MCPPromptDTO struct {
 	Name        string                 `json:"name"`
@@ -57,6 +71,21 @@ type MCPPromptArgumentDTO struct {
 type MCPPromptListResponse struct {
 	Server  ResourceDTO    `json:"server"`
 	Prompts []MCPPromptDTO `json:"prompts"`
+}
+
+type MCPPromptGetRequest struct {
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+type MCPPromptMessageDTO struct {
+	Role    string         `json:"role"`
+	Content map[string]any `json:"content,omitempty"`
+}
+
+type MCPPromptGetResponse struct {
+	Server   ResourceDTO           `json:"server"`
+	Prompt   string                `json:"prompt"`
+	Messages []MCPPromptMessageDTO `json:"messages"`
 }
 
 type MCPToolCallRequest struct {
@@ -88,6 +117,40 @@ func (s *Server) listMCPServerResources(w http.ResponseWriter, r *http.Request, 
 
 func (s *Server) listMCPServerPrompts(w http.ResponseWriter, r *http.Request, serverID string) {
 	s.listMCPServerToolsLike(w, r, serverID, "prompts")
+}
+
+func (s *Server) readMCPServerResource(w http.ResponseWriter, r *http.Request, serverID string) {
+	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
+		uri := strings.TrimSpace(r.URL.Query().Get("uri"))
+		if uri == "" {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_resource", "resource uri가 필요해요")
+			return
+		}
+		contents, err := readMCPResource(r.Context(), resource, uri)
+		if err != nil {
+			writeError(w, r, http.StatusBadGateway, "mcp_resource_read_failed", err.Error())
+			return
+		}
+		writeJSON(w, MCPResourceReadResponse{Server: toResourceDTO(resource), URI: uri, Contents: contents})
+	})
+}
+
+func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serverID string, promptName string) {
+	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
+		var req MCPPromptGetRequest
+		if r.Body != nil && r.ContentLength != 0 {
+			if err := decodeJSON(r, &req); err != nil {
+				writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+				return
+			}
+		}
+		messages, err := getMCPPrompt(r.Context(), resource, promptName, req.Arguments)
+		if err != nil {
+			writeError(w, r, http.StatusBadGateway, "mcp_prompt_get_failed", err.Error())
+			return
+		}
+		writeJSON(w, MCPPromptGetResponse{Server: toResourceDTO(resource), Prompt: promptName, Messages: messages})
+	})
 }
 
 func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, serverID string, kind string) {
@@ -172,6 +235,33 @@ func probeMCPPrompts(ctx context.Context, resource session.Resource) ([]MCPPromp
 		return nil, err
 	}
 	return parseMCPPrompts(resp)
+}
+
+func readMCPResource(ctx context.Context, resource session.Resource, uri string) ([]MCPResourceContentDTO, error) {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return nil, fmt.Errorf("MCP resource uri가 필요해요")
+	}
+	resp, err := runStdioMCPRequest(ctx, resource, "resources/read", map[string]any{"uri": uri})
+	if err != nil {
+		return nil, err
+	}
+	return parseMCPResourceContents(resp), nil
+}
+
+func getMCPPrompt(ctx context.Context, resource session.Resource, promptName string, arguments map[string]any) ([]MCPPromptMessageDTO, error) {
+	promptName = strings.TrimSpace(promptName)
+	if promptName == "" {
+		return nil, fmt.Errorf("MCP prompt 이름이 필요해요")
+	}
+	if arguments == nil {
+		arguments = map[string]any{}
+	}
+	resp, err := runStdioMCPRequest(ctx, resource, "prompts/get", map[string]any{"name": promptName, "arguments": arguments})
+	if err != nil {
+		return nil, err
+	}
+	return parseMCPPromptMessages(resp), nil
 }
 
 func callMCPTool(ctx context.Context, resource session.Resource, toolName string, arguments map[string]any) (map[string]any, error) {
@@ -353,6 +443,23 @@ func parseMCPResources(msg map[string]any) ([]MCPResourceDTO, error) {
 	return out, nil
 }
 
+func parseMCPResourceContents(msg map[string]any) []MCPResourceContentDTO {
+	result, _ := msg["result"].(map[string]any)
+	items, _ := result["contents"].([]any)
+	out := make([]MCPResourceContentDTO, 0, len(items))
+	for _, item := range items {
+		raw, _ := item.(map[string]any)
+		if raw == nil {
+			continue
+		}
+		content := MCPResourceContentDTO{URI: stringValue(raw["uri"]), MimeType: stringValue(raw["mimeType"]), Text: stringValue(raw["text"]), Blob: stringValue(raw["blob"])}
+		if content.URI != "" || content.Text != "" || content.Blob != "" {
+			out = append(out, content)
+		}
+	}
+	return out
+}
+
 func parseMCPPrompts(msg map[string]any) ([]MCPPromptDTO, error) {
 	result, _ := msg["result"].(map[string]any)
 	items, _ := result["prompts"].([]any)
@@ -368,6 +475,24 @@ func parseMCPPrompts(msg map[string]any) ([]MCPPromptDTO, error) {
 		}
 	}
 	return out, nil
+}
+
+func parseMCPPromptMessages(msg map[string]any) []MCPPromptMessageDTO {
+	result, _ := msg["result"].(map[string]any)
+	items, _ := result["messages"].([]any)
+	out := make([]MCPPromptMessageDTO, 0, len(items))
+	for _, item := range items {
+		raw, _ := item.(map[string]any)
+		if raw == nil {
+			continue
+		}
+		content, _ := raw["content"].(map[string]any)
+		message := MCPPromptMessageDTO{Role: stringValue(raw["role"]), Content: content}
+		if message.Role != "" {
+			out = append(out, message)
+		}
+	}
+	return out
 }
 
 func parseMCPPromptArguments(value any) []MCPPromptArgumentDTO {

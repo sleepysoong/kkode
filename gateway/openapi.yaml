@@ -633,6 +633,27 @@ paths:
           $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
+  /api/v1/mcp/servers/{resource_id}/resources/read:
+    get:
+      summary: MCP stdio server resource를 resources/read로 읽어요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - in: query
+          name: uri
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: MCP resource content예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResourceReadResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/prompts:
     get:
       summary: MCP stdio server를 probe해서 prompts/list 결과를 반환해요.
@@ -645,6 +666,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MCPPromptListResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+  /api/v1/mcp/servers/{resource_id}/prompts/{prompt_name}/get:
+    post:
+      summary: MCP stdio server prompt를 prompts/get으로 가져와요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - in: path
+          name: prompt_name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPPromptGetRequest'
+      responses:
+        '200':
+          description: MCP prompt message 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPPromptGetResponse'
         '404':
           $ref: '#/components/responses/Error'
         '502':
@@ -1683,6 +1731,29 @@ components:
           type: string
         mime_type:
           type: string
+    MCPResourceReadResponse:
+      type: object
+      required: [server, uri, contents]
+      properties:
+        server:
+          $ref: '#/components/schemas/Resource'
+        uri:
+          type: string
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPResourceContent'
+    MCPResourceContent:
+      type: object
+      properties:
+        uri:
+          type: string
+        mime_type:
+          type: string
+        text:
+          type: string
+        blob:
+          type: string
     MCPPromptListResponse:
       type: object
       required: [server, prompts]
@@ -1715,6 +1786,33 @@ components:
           type: string
         required:
           type: boolean
+    MCPPromptGetRequest:
+      type: object
+      properties:
+        arguments:
+          type: object
+          additionalProperties: true
+    MCPPromptGetResponse:
+      type: object
+      required: [server, prompt, messages]
+      properties:
+        server:
+          $ref: '#/components/schemas/Resource'
+        prompt:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPPromptMessage'
+    MCPPromptMessage:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+        content:
+          type: object
+          additionalProperties: true
     MCPToolCallRequest:
       type: object
       properties:
