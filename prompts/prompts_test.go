@@ -1,9 +1,21 @@
 package prompts
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestListTemplates(t *testing.T) {
+	got, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{AgentSystem, SessionCompaction, SessionSummaryContext, TodoInstructions}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("template 목록이 이상해요: got=%v want=%v", got, want)
+	}
+}
 
 func TestRenderAgentSystem(t *testing.T) {
 	out, err := Render(AgentSystem, map[string]any{"AgentName": "kkode", "ToolNames": []string{"file_read", "shell_run"}})

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"text/template"
@@ -20,6 +21,22 @@ const (
 var files embed.FS
 
 var templateCache sync.Map
+
+func List() ([]string, error) {
+	entries, err := files.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return names, nil
+}
 
 func Text(name string) (string, error) {
 	b, err := files.ReadFile(name)

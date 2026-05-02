@@ -289,6 +289,55 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	}
 }
 
+func TestGatewayPromptTemplateAPIs(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/prompts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed PromptTemplateListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Prompts) == 0 || listed.Prompts[0].Name == "" {
+		t.Fatalf("prompt 목록이 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got PromptTemplateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "agent-system.md" || !strings.Contains(got.Text, "{{.AgentName}}") {
+		t.Fatalf("prompt 원문이 이상해요: %+v", got)
+	}
+
+	body := bytes.NewBufferString(`{"data":{"AgentName":"kkode","ToolNames":["file_read","shell_run"]}}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/prompts/agent-system.md/render", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var rendered PromptRenderResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &rendered); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered.Text, "kkode") || !strings.Contains(rendered.Text, "shell_run") {
+		t.Fatalf("prompt 렌더링이 이상해요: %+v", rendered)
+	}
+}
+
 func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")

@@ -114,6 +114,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleProviders(w, r, parts)
 	case "models":
 		s.handleModels(w, r, parts)
+	case "prompts":
+		s.handlePrompts(w, r, parts)
 	case "capabilities":
 		s.handleCapabilities(w, r, parts)
 	case "sessions":

@@ -386,6 +386,58 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/v1/prompts:
+    get:
+      summary: 내장 prompt template 목록을 반환해요.
+      responses:
+        '200':
+          description: prompt template 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplateListResponse'
+  /api/v1/prompts/{template_name}:
+    get:
+      summary: 내장 prompt template 원문을 반환해요.
+      parameters:
+        - in: path
+          name: template_name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: prompt template 원문이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplateResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/prompts/{template_name}/render:
+    post:
+      summary: 내장 prompt template을 입력 data로 렌더링해요.
+      parameters:
+        - in: path
+          name: template_name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptRenderRequest'
+      responses:
+        '200':
+          description: 렌더링된 prompt예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptRenderResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/mcp/servers:
     get:
       summary: MCP server manifest 목록을 반환해요.
@@ -1550,6 +1602,42 @@ components:
           type: string
         truncated:
           type: boolean
+    PromptTemplateListResponse:
+      type: object
+      required: [prompts]
+      properties:
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptTemplate'
+    PromptTemplate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    PromptTemplateResponse:
+      type: object
+      required: [name, text]
+      properties:
+        name:
+          type: string
+        text:
+          type: string
+    PromptRenderRequest:
+      type: object
+      properties:
+        data:
+          type: object
+          additionalProperties: true
+    PromptRenderResponse:
+      type: object
+      required: [name, text]
+      properties:
+        name:
+          type: string
+        text:
+          type: string
     ResourceListResponse:
       type: object
       required: [resources]
