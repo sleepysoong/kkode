@@ -54,7 +54,7 @@ func run(args []string) error {
 		return err
 	}
 	defer store.Close()
-	runManager := gateway.NewAsyncRunManager(syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}))
+	runManager := gateway.NewAsyncRunManagerWithStore(syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}), store)
 	srv, err := gateway.New(gateway.Config{
 		Store:                store,
 		Version:              *version,

@@ -142,3 +142,38 @@ func openSQLiteForTest(t *testing.T) *SQLiteStore {
 	t.Cleanup(func() { _ = store.Close() })
 	return store
 }
+
+func TestRunStorePersistsBackgroundRuns(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveRun(ctx, Run{ID: "run_1", SessionID: sess.ID, Status: "queued", Prompt: "go", EventsURL: "/api/v1/sessions/" + sess.ID + "/events", Metadata: map[string]string{"source": "test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.ID != "run_1" || saved.Status != "queued" {
+		t.Fatalf("saved run이 이상해요: %+v", saved)
+	}
+	saved.Status = "completed"
+	saved.TurnID = "turn_1"
+	if _, err := store.SaveRun(ctx, saved); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.LoadRun(ctx, "run_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Status != "completed" || loaded.TurnID != "turn_1" || loaded.Metadata["source"] != "test" {
+		t.Fatalf("loaded run이 이상해요: %+v", loaded)
+	}
+	listed, err := store.ListRuns(ctx, RunQuery{SessionID: sess.ID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != "run_1" {
+		t.Fatalf("run list가 이상해요: %+v", listed)
+	}
+}

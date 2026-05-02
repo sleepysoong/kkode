@@ -30,8 +30,9 @@ type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 // AsyncRunManager는 HTTP 요청과 실제 agent 실행을 분리하는 in-memory background run 관리자예요.
 // run 결과의 원본 상태는 session/event SQLite에 남기고, 이 구조체는 gateway 프로세스 안의 실행 제어면을 맡아요.
 type AsyncRunManager struct {
-	starter RunStarter
-	now     func() time.Time
+	starter  RunStarter
+	runStore session.RunStore
+	now      func() time.Time
 
 	mu   sync.RWMutex
 	runs map[string]*managedRun
@@ -44,7 +45,11 @@ type managedRun struct {
 
 // NewAsyncRunManager는 RunStarter를 background 작업으로 실행하는 관리자를 만들어요.
 func NewAsyncRunManager(starter RunStarter) *AsyncRunManager {
-	return &AsyncRunManager{starter: starter, now: func() time.Time { return time.Now().UTC() }, runs: map[string]*managedRun{}}
+	return NewAsyncRunManagerWithStore(starter, nil)
+}
+
+func NewAsyncRunManagerWithStore(starter RunStarter, store session.RunStore) *AsyncRunManager {
+	return &AsyncRunManager{starter: starter, runStore: store, now: func() time.Time { return time.Now().UTC() }, runs: map[string]*managedRun{}}
 }
 
 // Start는 run을 접수한 뒤 goroutine에서 실제 agent 실행을 진행해요.
@@ -66,6 +71,13 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	}
 	m.runs[runID] = &managedRun{run: accepted, cancel: cancel}
 	m.mu.Unlock()
+	if err := m.persist(ctx, &accepted); err != nil {
+		cancel()
+		m.mu.Lock()
+		delete(m.runs, runID)
+		m.mu.Unlock()
+		return nil, err
+	}
 	go m.execute(runCtx, cancel, req.withRunID(runID))
 	return cloneRun(&accepted), nil
 }
@@ -76,12 +88,21 @@ func (m *AsyncRunManager) Get(ctx context.Context, runID string) (*RunDTO, error
 		return nil, errors.New("run manager가 필요해요")
 	}
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	managed, ok := m.runs[runID]
-	if !ok {
-		return nil, errors.New("run을 찾을 수 없어요")
+	if ok {
+		run := cloneRun(&managed.run)
+		m.mu.RUnlock()
+		return run, nil
 	}
-	return cloneRun(&managed.run), nil
+	m.mu.RUnlock()
+	if m.runStore != nil {
+		run, err := m.runStore.LoadRun(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		return runDTOFromSession(run), nil
+	}
+	return nil, errors.New("run을 찾을 수 없어요")
 }
 
 // List는 최근 run 목록을 반환해요.
@@ -92,6 +113,17 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 50
+	}
+	if m.runStore != nil {
+		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, Limit: limit})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]RunDTO, 0, len(runs))
+		for _, run := range runs {
+			out = append(out, *runDTOFromSession(run))
+		}
+		return out, nil
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -123,6 +155,23 @@ func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, er
 	managed, ok := m.runs[runID]
 	if !ok {
 		m.mu.Unlock()
+		if m.runStore != nil {
+			run, err := m.runStore.LoadRun(ctx, runID)
+			if err != nil {
+				return nil, err
+			}
+			if run.Status == "queued" || run.Status == "running" || run.Status == "cancelling" {
+				run.Status = "cancelled"
+				run.EndedAt = m.timestamp()
+				run.Error = "gateway process does not own this run anymore"
+				saved, saveErr := m.runStore.SaveRun(ctx, run)
+				if saveErr != nil {
+					return nil, saveErr
+				}
+				run = saved
+			}
+			return runDTOFromSession(run), nil
+		}
 		return nil, errors.New("run을 찾을 수 없어요")
 	}
 	if managed.run.Status == "queued" || managed.run.Status == "running" {
@@ -132,6 +181,7 @@ func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, er
 	}
 	run := *cloneRun(&managed.run)
 	m.mu.Unlock()
+	_ = m.persist(ctx, &run)
 	if cancel != nil {
 		cancel()
 	}
@@ -193,12 +243,31 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 
 func (m *AsyncRunManager) update(runID string, fn func(*RunDTO)) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	managed, ok := m.runs[runID]
 	if !ok {
+		m.mu.Unlock()
 		return
 	}
 	fn(&managed.run)
+	run := *cloneRun(&managed.run)
+	m.mu.Unlock()
+	_ = m.persist(context.Background(), &run)
+}
+
+func (m *AsyncRunManager) persist(ctx context.Context, run *RunDTO) error {
+	if m.runStore == nil || run == nil {
+		return nil
+	}
+	_, err := m.runStore.SaveRun(ctx, sessionRunFromDTO(*run))
+	return err
+}
+
+func sessionRunFromDTO(run RunDTO) session.Run {
+	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+}
+
+func runDTOFromSession(run session.Run) *RunDTO {
+	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func (m *AsyncRunManager) timestamp() time.Time {

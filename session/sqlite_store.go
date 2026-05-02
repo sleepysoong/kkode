@@ -83,6 +83,22 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			error TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_session_ordinal ON events(session_id, ordinal);`,
+		`CREATE TABLE IF NOT EXISTS runs (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+			turn_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			prompt TEXT NOT NULL DEFAULT '',
+			events_url TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL DEFAULT '',
+			ended_at TEXT NOT NULL DEFAULT '',
+			error TEXT NOT NULL DEFAULT '',
+			metadata_json BLOB NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_runs_session_updated ON runs(session_id, updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_runs_status_updated ON runs(status, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS todos (
 			id TEXT NOT NULL,
 			session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -343,6 +359,131 @@ func (s *SQLiteStore) SaveTodos(ctx context.Context, sessionID string, todos []T
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *SQLiteStore) SaveRun(ctx context.Context, run Run) (Run, error) {
+	normalizeRun(&run)
+	metadata, err := json.Marshal(run.Metadata)
+	if err != nil {
+		return run, err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			session_id=excluded.session_id,
+			turn_id=excluded.turn_id,
+			status=excluded.status,
+			prompt=excluded.prompt,
+			events_url=excluded.events_url,
+			started_at=excluded.started_at,
+			ended_at=excluded.ended_at,
+			error=excluded.error,
+			metadata_json=excluded.metadata_json,
+			updated_at=excluded.updated_at`,
+		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+	return run, err
+}
+
+func (s *SQLiteStore) LoadRun(ctx context.Context, id string) (Run, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
+	return scanRun(row)
+}
+
+func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `SELECT id, session_id, turn_id, status, prompt, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs`
+	args := []any{}
+	where := []string{}
+	if q.SessionID != "" {
+		where = append(where, `session_id = ?`)
+		args = append(args, q.SessionID)
+	}
+	if q.Status != "" {
+		where = append(where, `status = ?`)
+		args = append(args, q.Status)
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Run
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
+
+type runScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanRun(scanner runScanner) (Run, error) {
+	var run Run
+	var started, ended, created, updated string
+	var metadata []byte
+	if err := scanner.Scan(&run.ID, &run.SessionID, &run.TurnID, &run.Status, &run.Prompt, &run.EventsURL, &started, &ended, &run.Error, &metadata, &created, &updated); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Run{}, fmt.Errorf("run not found")
+		}
+		return Run{}, err
+	}
+	run.StartedAt = parseOptionalTime(started)
+	run.EndedAt = parseOptionalTime(ended)
+	run.CreatedAt = parseTime(created)
+	run.UpdatedAt = parseTime(updated)
+	if len(metadata) > 0 {
+		if err := json.Unmarshal(metadata, &run.Metadata); err != nil {
+			return Run{}, err
+		}
+	}
+	if run.Metadata == nil {
+		run.Metadata = map[string]string{}
+	}
+	return run, nil
+}
+
+func normalizeRun(run *Run) {
+	now := time.Now().UTC()
+	if run.ID == "" {
+		run.ID = NewID("run")
+	}
+	if run.Status == "" {
+		run.Status = "queued"
+	}
+	if run.Metadata == nil {
+		run.Metadata = map[string]string{}
+	}
+	if run.CreatedAt.IsZero() {
+		run.CreatedAt = now
+	}
+	run.UpdatedAt = now
+}
+
+func formatOptionalTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func parseOptionalTime(value string) time.Time {
+	if value == "" {
+		return time.Time{}
+	}
+	return parseTime(value)
 }
 
 func (s *SQLiteStore) SaveResource(ctx context.Context, resource Resource) (Resource, error) {

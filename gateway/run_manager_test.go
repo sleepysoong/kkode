@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/sleepysoong/kkode/session"
 )
 
 func TestAsyncRunManagerStartsAndCompletesRun(t *testing.T) {
@@ -87,4 +89,55 @@ func waitForRunStatus(t *testing.T, manager *AsyncRunManager, runID string, stat
 	run, _ := manager.Get(context.Background(), runID)
 	t.Fatalf("run 상태가 %s가 되지 않았어요: %+v", status, run)
 	return nil
+}
+
+func TestAsyncRunManagerPersistsRunState(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", TurnID: "turn_1"}, nil
+	}, store)
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRunStatus(t, manager, run.ID, "completed")
+	loaded := waitForPersistedRunStatus(t, store, run.ID, "completed")
+	if loaded.TurnID != "turn_1" {
+		t.Fatalf("persisted run이 이상해요: %+v", loaded)
+	}
+	restarted := NewAsyncRunManagerWithStore(nil, store)
+	got, err := restarted.Get(ctx, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "completed" || got.TurnID != "turn_1" {
+		t.Fatalf("restart 후 run 조회가 이상해요: %+v", got)
+	}
+}
+
+func waitForPersistedRunStatus(t *testing.T, store session.RunStore, runID string, status string) session.Run {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		run, err := store.LoadRun(context.Background(), runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.Status == status {
+			return run
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	run, _ := store.LoadRun(context.Background(), runID)
+	t.Fatalf("persisted run 상태가 %s가 되지 않았어요: %+v", status, run)
+	return session.Run{}
 }
