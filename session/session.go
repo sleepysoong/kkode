@@ -93,6 +93,39 @@ type CheckpointQuery struct {
 	Limit     int
 }
 
+// EventQuery는 session event replay를 필요한 범위만 읽을 때 써요.
+type EventQuery struct {
+	SessionID string
+	AfterSeq  int
+	Limit     int
+}
+
+// EventRecord는 저장소 ordinal을 외부 API seq로 보존한 event예요.
+type EventRecord struct {
+	Seq   int
+	Event Event
+}
+
+// TurnQuery는 session turn 목록을 필요한 범위만 읽을 때 써요.
+type TurnQuery struct {
+	SessionID string
+	AfterSeq  int
+	Limit     int
+}
+
+// TurnRecord는 저장소 ordinal을 외부 API seq로 보존한 turn이에요.
+type TurnRecord struct {
+	Seq  int
+	Turn Turn
+}
+
+// TimelineStore는 긴 session을 전체 로드하지 않고 event/turn timeline만 읽는 최적화 인터페이스예요.
+type TimelineStore interface {
+	ListEvents(ctx context.Context, q EventQuery) ([]EventRecord, error)
+	ListTurns(ctx context.Context, q TurnQuery) ([]TurnRecord, error)
+	LoadTurn(ctx context.Context, sessionID string, turnID string) (TurnRecord, error)
+}
+
 type SessionSummary struct {
 	ID           string    `json:"id"`
 	ProjectRoot  string    `json:"project_root"`

@@ -350,6 +350,99 @@ func (s *SQLiteStore) AppendEvent(ctx context.Context, ev Event) error {
 	return tx.Commit()
 }
 
+func (s *SQLiteStore) ListEvents(ctx context.Context, q EventQuery) ([]EventRecord, error) {
+	if strings.TrimSpace(q.SessionID) == "" {
+		return nil, errors.New("session id is required")
+	}
+	if err := s.requireSession(ctx, q.SessionID); err != nil {
+		return nil, err
+	}
+	afterOrdinal := q.AfterSeq
+	if afterOrdinal < 0 {
+		afterOrdinal = 0
+	}
+	query := `SELECT ordinal, id, turn_id, at, type, tool, payload_json, error FROM events WHERE session_id = ? AND ordinal >= ? ORDER BY ordinal`
+	args := []any{q.SessionID, afterOrdinal}
+	if q.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, q.Limit)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []EventRecord
+	for rows.Next() {
+		record, err := scanEventRecord(rows, q.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) ListTurns(ctx context.Context, q TurnQuery) ([]TurnRecord, error) {
+	if strings.TrimSpace(q.SessionID) == "" {
+		return nil, errors.New("session id is required")
+	}
+	if err := s.requireSession(ctx, q.SessionID); err != nil {
+		return nil, err
+	}
+	afterOrdinal := q.AfterSeq
+	if afterOrdinal < 0 {
+		afterOrdinal = 0
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT ordinal, id, prompt, request_json, response_json, started_at, ended_at, error FROM turns WHERE session_id = ? AND ordinal >= ? ORDER BY ordinal LIMIT ?`, q.SessionID, afterOrdinal, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TurnRecord
+	for rows.Next() {
+		record, err := scanTurnRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) LoadTurn(ctx context.Context, sessionID string, turnID string) (TurnRecord, error) {
+	if strings.TrimSpace(sessionID) == "" || strings.TrimSpace(turnID) == "" {
+		return TurnRecord{}, errors.New("session id and turn id are required")
+	}
+	row := s.db.QueryRowContext(ctx, `SELECT ordinal, id, prompt, request_json, response_json, started_at, ended_at, error FROM turns WHERE session_id = ? AND id = ?`, sessionID, turnID)
+	record, err := scanTurnRecord(row)
+	if err == nil {
+		return record, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		if existsErr := s.requireSession(ctx, sessionID); existsErr != nil {
+			return TurnRecord{}, existsErr
+		}
+		return TurnRecord{}, fmt.Errorf("turn not found: %s", turnID)
+	}
+	return TurnRecord{}, err
+}
+
+func (s *SQLiteStore) requireSession(ctx context.Context, sessionID string) error {
+	var exists int
+	if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE id = ?`, sessionID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("session not found: %s", sessionID)
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *SQLiteStore) SaveCheckpoint(ctx context.Context, cp Checkpoint) error {
 	normalizeCheckpoint(&cp)
 	_, err := s.db.ExecContext(ctx, `INSERT INTO checkpoints (id, session_id, turn_id, created_at, payload_json) VALUES (?, ?, ?, ?, ?)
@@ -756,6 +849,47 @@ func boolInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+func scanTurnRecord(scanner interface{ Scan(dest ...any) error }) (TurnRecord, error) {
+	var record TurnRecord
+	var req, resp []byte
+	var started, ended string
+	ordinal := 0
+	if err := scanner.Scan(&ordinal, &record.Turn.ID, &record.Turn.Prompt, &req, &resp, &started, &ended, &record.Turn.Error); err != nil {
+		return TurnRecord{}, err
+	}
+	record.Seq = ordinal + 1
+	if err := json.Unmarshal(req, &record.Turn.Request); err != nil {
+		return TurnRecord{}, err
+	}
+	if len(resp) > 0 {
+		var response llm.Response
+		if err := json.Unmarshal(resp, &response); err != nil {
+			return TurnRecord{}, err
+		}
+		record.Turn.Response = &response
+	}
+	record.Turn.StartedAt = parseTime(started)
+	record.Turn.EndedAt = parseTime(ended)
+	return record, nil
+}
+
+func scanEventRecord(scanner interface{ Scan(dest ...any) error }, sessionID string) (EventRecord, error) {
+	var record EventRecord
+	var at string
+	var payload []byte
+	ordinal := 0
+	if err := scanner.Scan(&ordinal, &record.Event.ID, &record.Event.TurnID, &at, &record.Event.Type, &record.Event.Tool, &payload, &record.Event.Error); err != nil {
+		return EventRecord{}, err
+	}
+	record.Seq = ordinal + 1
+	record.Event.SessionID = sessionID
+	record.Event.At = parseTime(at)
+	if len(payload) > 0 {
+		record.Event.Payload = append([]byte(nil), payload...)
+	}
+	return record, nil
 }
 
 func (s *SQLiteStore) loadTurns(ctx context.Context, sessionID string) ([]Turn, error) {

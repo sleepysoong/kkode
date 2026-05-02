@@ -323,19 +323,32 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request, sessionID s
 }
 
 func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessionID string) {
-	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
-	if err != nil {
-		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
-		return
-	}
 	afterSeq := queryInt(r, "after_seq", 0)
-	events := make([]EventDTO, 0, len(sess.Events))
-	for i, ev := range sess.Events {
-		seq := i + 1
-		if seq <= afterSeq {
-			continue
+	var events []EventDTO
+	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
+		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq})
+		if err != nil {
+			writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+			return
 		}
-		events = append(events, toEventDTO(seq, ev))
+		events = make([]EventDTO, 0, len(records))
+		for _, record := range records {
+			events = append(events, toEventDTO(record.Seq, record.Event))
+		}
+	} else {
+		sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
+		if err != nil {
+			writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+			return
+		}
+		events = make([]EventDTO, 0, len(sess.Events))
+		for i, ev := range sess.Events {
+			seq := i + 1
+			if seq <= afterSeq {
+				continue
+			}
+			events = append(events, toEventDTO(seq, ev))
+		}
 	}
 	if wantsSSE(r) {
 		s.writeSSEEvents(w, r, events)
@@ -347,6 +360,18 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
 	if r.Method != http.MethodGet {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 turns method예요")
+		return
+	}
+	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
+		if len(rest) == 0 {
+			s.listSessionTurnsFromTimeline(w, r, timeline, sessionID)
+			return
+		}
+		if len(rest) == 1 {
+			s.getSessionTurnFromTimeline(w, r, timeline, sessionID, rest[0])
+			return
+		}
+		writeError(w, r, http.StatusNotFound, "not_found", "turn endpoint를 찾을 수 없어요")
 		return
 	}
 	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
@@ -363,6 +388,34 @@ func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "turn endpoint를 찾을 수 없어요")
+}
+
+func (s *Server) listSessionTurnsFromTimeline(w http.ResponseWriter, r *http.Request, timeline session.TimelineStore, sessionID string) {
+	afterSeq := queryInt(r, "after_seq", 0)
+	limit := queryLimit(r, "limit", 100, 500)
+	records, err := timeline.ListTurns(r.Context(), session.TurnQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit})
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+		return
+	}
+	out := make([]TurnDTO, 0, len(records))
+	for _, record := range records {
+		out = append(out, toTurnDTO(sessionID, record.Seq, record.Turn))
+	}
+	writeJSON(w, TurnListResponse{Turns: out})
+}
+
+func (s *Server) getSessionTurnFromTimeline(w http.ResponseWriter, r *http.Request, timeline session.TimelineStore, sessionID string, turnID string) {
+	record, err := timeline.LoadTurn(r.Context(), sessionID, turnID)
+	if err != nil {
+		code := "session_not_found"
+		if strings.Contains(err.Error(), "turn not found") {
+			code = "turn_not_found"
+		}
+		writeError(w, r, http.StatusNotFound, code, err.Error())
+		return
+	}
+	writeJSON(w, toTurnDTO(sessionID, record.Seq, record.Turn))
 }
 
 func (s *Server) listSessionTurns(w http.ResponseWriter, r *http.Request, sess *session.Session) {

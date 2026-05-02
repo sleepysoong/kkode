@@ -51,6 +51,53 @@ func TestSQLiteStoreSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestSQLiteTimelineStoreListsTurnsAndEventsWithoutFullSession(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt-5-mini", "agent", AgentModeBuild)
+	for _, prompt := range []string{"첫 번째", "두 번째", "세 번째"} {
+		turn := NewTurn(prompt, llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText(prompt)}})
+		turn.Response = &llm.Response{ID: prompt, Text: prompt}
+		turn.EndedAt = turn.StartedAt
+		sess.AppendTurn(turn)
+		sess.AppendEvent(Event{ID: NewID("ev"), SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed"})
+	}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+
+	turns, err := store.ListTurns(ctx, TurnQuery{SessionID: sess.ID, AfterSeq: 1, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 1 || turns[0].Seq != 2 || turns[0].Turn.Prompt != "두 번째" || turns[0].Turn.Response.Text != "두 번째" {
+		t.Fatalf("timeline turns가 이상해요: %+v", turns)
+	}
+
+	loadedTurn, err := store.LoadTurn(ctx, sess.ID, sess.Turns[2].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedTurn.Seq != 3 || loadedTurn.Turn.Prompt != "세 번째" {
+		t.Fatalf("timeline turn load가 이상해요: %+v", loadedTurn)
+	}
+
+	events, err := store.ListEvents(ctx, EventQuery{SessionID: sess.ID, AfterSeq: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Seq != 3 || events[0].Event.TurnID != sess.Turns[2].ID {
+		t.Fatalf("timeline events가 이상해요: %+v", events)
+	}
+
+	if _, err := store.ListTurns(ctx, TurnQuery{SessionID: "missing", Limit: 1}); err == nil {
+		t.Fatal("없는 session timeline은 오류를 내야 해요")
+	}
+	if _, err := store.LoadTurn(ctx, sess.ID, "missing_turn"); err == nil {
+		t.Fatal("없는 turn은 오류를 내야 해요")
+	}
+}
+
 func TestForkSession(t *testing.T) {
 	sess := NewSession("/repo", "openai", "gpt", "build", AgentModeBuild)
 	for _, prompt := range []string{"첫 번째", "두 번째"} {
