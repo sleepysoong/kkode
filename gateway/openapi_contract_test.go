@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -20,6 +21,36 @@ func TestFeatureCatalogEndpointsExistInOpenAPI(t *testing.T) {
 			methods := paths[path]
 			if !methods[method] {
 				t.Fatalf("feature endpoint가 OpenAPI paths에 없어요: feature=%s endpoint=%s", feature.Name, endpoint)
+			}
+		}
+	}
+}
+
+func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
+	schemas := readOpenAPISchemaProperties(t)
+	cases := []struct {
+		schema string
+		dto    any
+	}{
+		{schema: "SessionCreateRequest", dto: SessionCreateRequest{}},
+		{schema: "RunStartRequest", dto: RunStartRequest{}},
+		{schema: "ToolCallRequest", dto: ToolCallRequest{}},
+		{schema: "FileWriteRequest", dto: FileWriteRequest{}},
+		{schema: "Resource", dto: ResourceDTO{}},
+		{schema: "GitStatusResponse", dto: GitStatusResponse{}},
+		{schema: "GitStatusEntry", dto: GitStatusEntryDTO{}},
+		{schema: "GitDiffResponse", dto: GitDiffResponse{}},
+		{schema: "GitLogResponse", dto: GitLogResponse{}},
+		{schema: "GitLogEntry", dto: GitLogEntryDTO{}},
+	}
+	for _, tc := range cases {
+		props := schemas[tc.schema]
+		if len(props) == 0 {
+			t.Fatalf("OpenAPI schema %s properties를 찾지 못했어요", tc.schema)
+		}
+		for _, field := range jsonFieldNames(tc.dto) {
+			if !props[field] {
+				t.Fatalf("OpenAPI schema %s에 DTO json field %s가 빠졌어요", tc.schema, field)
 			}
 		}
 	}
@@ -67,4 +98,73 @@ func readOpenAPIPaths(t *testing.T) map[string]map[string]bool {
 		t.Fatal("OpenAPI paths를 읽지 못했어요")
 	}
 	return paths
+}
+
+func readOpenAPISchemaProperties(t *testing.T) map[string]map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemaRe := regexp.MustCompile(`^    ([A-Za-z0-9]+):$`)
+	propRe := regexp.MustCompile(`^        ([A-Za-z0-9_]+):$`)
+	out := map[string]map[string]bool{}
+	inSchemas := false
+	inProperties := false
+	current := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "  schemas:" {
+			inSchemas = true
+			continue
+		}
+		if !inSchemas {
+			continue
+		}
+		if m := schemaRe.FindStringSubmatch(line); m != nil {
+			current = m[1]
+			inProperties = false
+			if out[current] == nil {
+				out[current] = map[string]bool{}
+			}
+			continue
+		}
+		if current == "" {
+			continue
+		}
+		if strings.TrimSpace(line) == "properties:" {
+			inProperties = true
+			continue
+		}
+		if !inProperties {
+			continue
+		}
+		if m := propRe.FindStringSubmatch(line); m != nil {
+			out[current][m[1]] = true
+		}
+	}
+	return out
+}
+
+func jsonFieldNames(dto any) []string {
+	t := reflect.TypeOf(dto)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	out := []string{}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		tag := field.Tag.Get("json")
+		name, _, _ := strings.Cut(tag, ",")
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+		out = append(out, name)
+	}
+	return out
 }
