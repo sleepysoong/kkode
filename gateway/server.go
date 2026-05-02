@@ -108,6 +108,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch parts[0] {
+	case "openapi.yaml":
+		s.handleOpenAPI(w, r, parts)
 	case "version":
 		s.handleVersion(w, r, parts)
 	case "providers":
@@ -222,6 +224,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.getSessionEvents(w, r, sessionID)
 		return
 	}
+	if len(parts) >= 3 && parts[2] == "turns" {
+		s.handleSessionTurns(w, r, sessionID, parts[3:])
+		return
+	}
 	if len(parts) >= 3 && parts[2] == "todos" {
 		s.handleSessionTodos(w, r, sessionID, parts[3:])
 		return
@@ -326,6 +332,54 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 		return
 	}
 	writeJSON(w, EventListResponse{Events: events})
+}
+
+func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
+	if r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 turns method예요")
+		return
+	}
+	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+		return
+	}
+	if len(rest) == 0 {
+		s.listSessionTurns(w, r, sess)
+		return
+	}
+	if len(rest) == 1 {
+		s.getSessionTurn(w, r, sess, rest[0])
+		return
+	}
+	writeError(w, r, http.StatusNotFound, "not_found", "turn endpoint를 찾을 수 없어요")
+}
+
+func (s *Server) listSessionTurns(w http.ResponseWriter, r *http.Request, sess *session.Session) {
+	afterSeq := queryInt(r, "after_seq", 0)
+	limit := queryLimit(r, "limit", 100, 500)
+	out := make([]TurnDTO, 0, min(len(sess.Turns), limit))
+	for i, turn := range sess.Turns {
+		seq := i + 1
+		if seq <= afterSeq {
+			continue
+		}
+		out = append(out, toTurnDTO(sess.ID, seq, turn))
+		if len(out) >= limit {
+			break
+		}
+	}
+	writeJSON(w, TurnListResponse{Turns: out})
+}
+
+func (s *Server) getSessionTurn(w http.ResponseWriter, r *http.Request, sess *session.Session, turnID string) {
+	for i, turn := range sess.Turns {
+		if turn.ID == turnID {
+			writeJSON(w, toTurnDTO(sess.ID, i+1, turn))
+			return
+		}
+	}
+	writeError(w, r, http.StatusNotFound, "turn_not_found", "turn을 찾을 수 없어요")
 }
 
 func (s *Server) writeSSEEvents(w http.ResponseWriter, r *http.Request, events []EventDTO) {

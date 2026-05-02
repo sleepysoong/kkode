@@ -3,7 +3,8 @@ package gateway
 // DefaultFeatureCatalog는 웹 패널/Discord/Slack adapter가 사용할 수 있는 gateway 기능 표면을 알려줘요.
 func DefaultFeatureCatalog() []FeatureDTO {
 	return []FeatureDTO{
-		{Name: "sessions", Status: "implemented", Description: "session 생성, 목록, 상세, fork를 제공해요.", Endpoints: []string{"GET /api/v1/sessions", "POST /api/v1/sessions", "GET /api/v1/sessions/{session_id}", "POST /api/v1/sessions/{session_id}/fork"}},
+		{Name: "openapi", Status: "implemented", Description: "외부 adapter와 SDK generator가 현재 gateway OpenAPI 계약을 직접 내려받을 수 있어요.", Endpoints: []string{"GET /api/v1/openapi.yaml"}},
+		{Name: "sessions", Status: "implemented", Description: "session 생성, 목록, 상세, turn 조회, fork를 제공해요.", Endpoints: []string{"GET /api/v1/sessions", "POST /api/v1/sessions", "GET /api/v1/sessions/{session_id}", "GET /api/v1/sessions/{session_id}/turns", "GET /api/v1/sessions/{session_id}/turns/{turn_id}", "POST /api/v1/sessions/{session_id}/fork"}},
 		{Name: "session_events", Status: "implemented", Description: "session event JSON replay와 SSE replay를 제공해요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/events"}},
 		{Name: "todos", Status: "implemented", Description: "agent todo 상태를 외부 status UI에서 읽고 수정할 수 있어요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/todos", "PUT /api/v1/sessions/{session_id}/todos", "POST /api/v1/sessions/{session_id}/todos", "DELETE /api/v1/sessions/{session_id}/todos/{todo_id}"}},
 		{Name: "checkpoints", Status: "implemented", Description: "session checkpoint를 저장하고 replay/복구용 snapshot payload를 조회할 수 있어요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/checkpoints", "POST /api/v1/sessions/{session_id}/checkpoints", "GET /api/v1/sessions/{session_id}/checkpoints/{checkpoint_id}"}},

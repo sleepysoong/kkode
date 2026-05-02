@@ -24,6 +24,16 @@ paths:
       responses:
         '200':
           description: 준비됐어요.
+  /api/v1/openapi.yaml:
+    get:
+      summary: 현재 OpenAPI YAML 스펙을 반환해요.
+      responses:
+        '200':
+          description: OpenAPI YAML 문서예요.
+          content:
+            application/yaml:
+              schema:
+                type: string
   /api/v1/version:
     get:
       summary: gateway version과 provider 목록을 반환해요.
@@ -244,6 +254,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+  /api/v1/sessions/{session_id}/turns:
+    get:
+      summary: session turn 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: query
+          name: after_seq
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+      responses:
+        '200':
+          description: turn 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnListResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/sessions/{session_id}/turns/{turn_id}:
+    get:
+      summary: session turn 상세를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: path
+          name: turn_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: turn 상세예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Turn'
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/events:
     get:
       summary: session event를 JSON 또는 SSE로 replay해요.
@@ -1309,6 +1363,67 @@ components:
           type: object
           additionalProperties:
             type: string
+    TurnListResponse:
+      type: object
+      required: [turns]
+      properties:
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/Turn'
+    Turn:
+      type: object
+      required: [seq, id, session_id, prompt]
+      properties:
+        seq:
+          type: integer
+        id:
+          type: string
+        session_id:
+          type: string
+        prompt:
+          type: string
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        response_id:
+          type: string
+        response_status:
+          type: string
+        response_text:
+          type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+    Message:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+    Usage:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        reasoning_tokens:
+          type: integer
     EventListResponse:
       type: object
       required: [events]

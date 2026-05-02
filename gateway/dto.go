@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -44,6 +45,39 @@ type SessionDTO struct {
 
 type SessionListResponse struct {
 	Sessions []SessionDTO `json:"sessions"`
+}
+
+// TurnDTO는 웹 패널이 session 대화를 렌더링할 때 쓰는 turn 요약/상세예요.
+type TurnDTO struct {
+	Seq            int          `json:"seq"`
+	ID             string       `json:"id"`
+	SessionID      string       `json:"session_id"`
+	Prompt         string       `json:"prompt"`
+	Model          string       `json:"model,omitempty"`
+	Messages       []MessageDTO `json:"messages,omitempty"`
+	ResponseID     string       `json:"response_id,omitempty"`
+	ResponseStatus string       `json:"response_status,omitempty"`
+	ResponseText   string       `json:"response_text,omitempty"`
+	Usage          *UsageDTO    `json:"usage,omitempty"`
+	StartedAt      time.Time    `json:"started_at,omitempty"`
+	EndedAt        time.Time    `json:"ended_at,omitempty"`
+	Error          string       `json:"error,omitempty"`
+}
+
+type MessageDTO struct {
+	Role    string `json:"role"`
+	Content string `json:"content,omitempty"`
+}
+
+type UsageDTO struct {
+	InputTokens     int `json:"input_tokens,omitempty"`
+	OutputTokens    int `json:"output_tokens,omitempty"`
+	TotalTokens     int `json:"total_tokens,omitempty"`
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+}
+
+type TurnListResponse struct {
+	Turns []TurnDTO `json:"turns"`
 }
 
 // EventDTO는 session event를 API cursor와 함께 표현해요.
@@ -197,6 +231,48 @@ func toSessionSummaryDTO(summary session.SessionSummary) SessionDTO {
 		TurnCount:    summary.TurnCount,
 		UpdatedAt:    summary.UpdatedAt,
 	}
+}
+
+func toTurnDTO(sessionID string, seq int, turn session.Turn) TurnDTO {
+	out := TurnDTO{
+		Seq:       seq,
+		ID:        turn.ID,
+		SessionID: sessionID,
+		Prompt:    turn.Prompt,
+		Model:     turn.Request.Model,
+		Messages:  toMessageDTOs(turn.Request.Messages),
+		StartedAt: turn.StartedAt,
+		EndedAt:   turn.EndedAt,
+		Error:     turn.Error,
+	}
+	if turn.Response != nil {
+		out.ResponseID = turn.Response.ID
+		out.ResponseStatus = turn.Response.Status
+		out.ResponseText = turn.Response.Text
+		out.Usage = toUsageDTO(turn.Response.Usage)
+		if out.Model == "" {
+			out.Model = turn.Response.Model
+		}
+	}
+	return out
+}
+
+func toMessageDTOs(messages []llm.Message) []MessageDTO {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]MessageDTO, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, MessageDTO{Role: string(message.Role), Content: message.Content})
+	}
+	return out
+}
+
+func toUsageDTO(usage llm.Usage) *UsageDTO {
+	if usage == (llm.Usage{}) {
+		return nil
+	}
+	return &UsageDTO{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens, ReasoningTokens: usage.ReasoningTokens}
 }
 
 func toEventDTO(seq int, ev session.Event) EventDTO {

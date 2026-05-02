@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -249,6 +250,71 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	}
 	if !sawBackground {
 		t.Fatalf("background run feature를 discovery해야 해요: %+v", caps.Features)
+	}
+}
+
+func TestGatewayServesOpenAPISpec(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(rec.Header().Get("Content-Type"), "application/yaml") || !strings.Contains(body, "openapi: 3.0.3") || !strings.Contains(body, "/api/v1/openapi.yaml") {
+		t.Fatalf("openapi 응답이 이상해요: content_type=%s body=%s", rec.Header().Get("Content-Type"), body[:min(len(body), 120)])
+	}
+}
+
+func TestGatewaySessionTurnsAPI(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "web", session.AgentModeBuild)
+	first := session.NewTurn("첫 요청", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("첫 요청")}})
+	first.Response = llm.TextResponse("openai", "gpt-5-mini", "첫 응답")
+	first.Response.ID = "resp_1"
+	first.Response.Usage = llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
+	first.EndedAt = first.StartedAt.Add(time.Second)
+	sess.AppendTurn(first)
+	second := session.NewTurn("둘째 요청", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("둘째 요청")}})
+	second.Response = llm.TextResponse("openai", "gpt-5-mini", "둘째 응답")
+	second.EndedAt = second.StartedAt.Add(time.Second)
+	sess.AppendTurn(second)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns?after_seq=0&limit=1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed TurnListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Turns) != 1 || listed.Turns[0].Seq != 1 || listed.Turns[0].Prompt != "첫 요청" || listed.Turns[0].ResponseText != "첫 응답" {
+		t.Fatalf("turn 목록이 이상해요: %+v", listed)
+	}
+	if listed.Turns[0].Usage == nil || listed.Turns[0].Usage.TotalTokens != 15 {
+		t.Fatalf("turn usage가 이상해요: %+v", listed.Turns[0])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns/"+second.ID, nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got TurnDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != second.ID || got.Seq != 2 || got.Messages[0].Content != "둘째 요청" {
+		t.Fatalf("turn 상세가 이상해요: %+v", got)
 	}
 }
 
