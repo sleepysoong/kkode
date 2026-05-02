@@ -94,12 +94,8 @@ func (m *AsyncRunManager) RecoverStaleRuns(ctx context.Context) error {
 			run.Status = "failed"
 			run.EndedAt = m.timestamp()
 			run.Error = "gateway restarted before this run completed"
-			saved, err := m.runStore.SaveRun(ctx, run)
-			if err != nil {
-				return err
-			}
-			dto := runDTOFromSession(saved)
-			if err := m.recordEvent(ctx, dto); err != nil {
+			dto := runDTOFromSession(run)
+			if err := m.persist(ctx, dto); err != nil {
 				return err
 			}
 			m.publish(*dto)
@@ -221,11 +217,11 @@ func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, er
 				run.Status = "cancelled"
 				run.EndedAt = m.timestamp()
 				run.Error = "gateway process does not own this run anymore"
-				saved, saveErr := m.runStore.SaveRun(ctx, run)
-				if saveErr != nil {
+				dto := runDTOFromSession(run)
+				if saveErr := m.persist(ctx, dto); saveErr != nil {
 					return nil, saveErr
 				}
-				run = saved
+				return dto, nil
 			}
 			return runDTOFromSession(run), nil
 		}
@@ -339,7 +335,16 @@ func (m *AsyncRunManager) persist(ctx context.Context, run *RunDTO) error {
 		return nil
 	}
 	if m.runStore != nil {
-		if _, err := m.runStore.SaveRun(ctx, sessionRunFromDTO(*run)); err != nil {
+		snapshot := sessionRunFromDTO(*run)
+		if snapshotStore, ok := m.runStore.(session.RunSnapshotStore); ok && m.runEventStore != nil {
+			saved, _, err := snapshotStore.SaveRunWithEvent(ctx, snapshot, session.RunEvent{RunID: snapshot.ID, Type: runEventType(snapshot.Status), At: m.timestamp(), Run: snapshot})
+			if err != nil {
+				return err
+			}
+			*run = *runDTOFromSession(saved)
+			return nil
+		}
+		if _, err := m.runStore.SaveRun(ctx, snapshot); err != nil {
 			return err
 		}
 	}

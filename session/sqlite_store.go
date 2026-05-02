@@ -717,23 +717,59 @@ func (s *SQLiteStore) SaveTodos(ctx context.Context, sessionID string, todos []T
 
 func (s *SQLiteStore) SaveRun(ctx context.Context, run Run) (Run, error) {
 	normalizeRun(&run)
+	if err := saveRun(ctx, s.db, run); err != nil {
+		return run, err
+	}
+	return run, nil
+}
+
+// SaveRunWithEvent는 run snapshot과 durable replay event를 같은 SQLite transaction에 저장해요.
+// gateway 재시작이나 adapter replay가 같은 상태 전이를 보도록 SaveRun+AppendRunEvent 분리보다 이 경로를 우선 써야 해요.
+func (s *SQLiteStore) SaveRunWithEvent(ctx context.Context, run Run, event RunEvent) (Run, RunEvent, error) {
+	normalizeRun(&run)
+	event.Run = run
+	normalizeRunEvent(&event)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return run, event, err
+	}
+	defer tx.Rollback()
+	if err := saveRun(ctx, tx, run); err != nil {
+		return run, event, err
+	}
+	if err := appendRunEvent(ctx, tx, &event); err != nil {
+		return run, event, err
+	}
+	return run, event, tx.Commit()
+}
+
+type runWriter interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type runEventWriter interface {
+	runWriter
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func saveRun(ctx context.Context, writer runWriter, run Run) error {
 	metadata, err := json.Marshal(run.Metadata)
 	if err != nil {
-		return run, err
+		return err
 	}
 	mcpServers, err := json.Marshal(run.MCPServers)
 	if err != nil {
-		return run, err
+		return err
 	}
 	skills, err := json.Marshal(run.Skills)
 	if err != nil {
-		return run, err
+		return err
 	}
 	subagents, err := json.Marshal(run.Subagents)
 	if err != nil {
-		return run, err
+		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
+	_, err = writer.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			session_id=excluded.session_id,
@@ -752,7 +788,7 @@ func (s *SQLiteStore) SaveRun(ctx context.Context, run Run) (Run, error) {
 			metadata_json=excluded.metadata_json,
 			updated_at=excluded.updated_at`,
 		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, mcpServers, skills, subagents, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
-	return run, err
+	return err
 }
 
 func (s *SQLiteStore) LoadRun(ctx context.Context, id string) (Run, error) {
@@ -799,25 +835,29 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 
 func (s *SQLiteStore) AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error) {
 	normalizeRunEvent(&event)
-	runJSON, err := json.Marshal(event.Run)
-	if err != nil {
-		return event, err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return event, err
 	}
 	defer tx.Rollback()
-	if event.Seq <= 0 {
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) + 1 FROM run_events WHERE run_id = ?`, event.RunID).Scan(&event.Seq); err != nil {
-			return event, err
-		}
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO run_events (id, run_id, seq, at, type, run_json) VALUES (?, ?, ?, ?, ?, ?)`, event.ID, event.RunID, event.Seq, formatTime(event.At), event.Type, runJSON)
-	if err != nil {
+	if err := appendRunEvent(ctx, tx, &event); err != nil {
 		return event, err
 	}
 	return event, tx.Commit()
+}
+
+func appendRunEvent(ctx context.Context, writer runEventWriter, event *RunEvent) error {
+	runJSON, err := json.Marshal(event.Run)
+	if err != nil {
+		return err
+	}
+	if event.Seq <= 0 {
+		if err := writer.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) + 1 FROM run_events WHERE run_id = ?`, event.RunID).Scan(&event.Seq); err != nil {
+			return err
+		}
+	}
+	_, err = writer.ExecContext(ctx, `INSERT INTO run_events (id, run_id, seq, at, type, run_json) VALUES (?, ?, ?, ?, ?, ?)`, event.ID, event.RunID, event.Seq, formatTime(event.At), event.Type, runJSON)
+	return err
 }
 
 func (s *SQLiteStore) ListRunEvents(ctx context.Context, q RunEventQuery) ([]RunEvent, error) {

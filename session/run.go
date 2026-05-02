@@ -58,3 +58,9 @@ type RunEventStore interface {
 	AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error)
 	ListRunEvents(ctx context.Context, q RunEventQuery) ([]RunEvent, error)
 }
+
+// RunSnapshotStore는 run 상태와 replay event를 한 transaction으로 남기는 저장소예요.
+// gateway는 이 interface가 있으면 SaveRun 뒤 AppendRunEvent가 갈라지는 경로 대신 원자 저장을 써요.
+type RunSnapshotStore interface {
+	SaveRunWithEvent(ctx context.Context, run Run, event RunEvent) (Run, RunEvent, error)
+}

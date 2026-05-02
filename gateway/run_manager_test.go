@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,6 +123,30 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	}
 	if got.Status != "completed" || got.TurnID != "turn_1" || got.Provider != "copilot" || got.Model != "gpt-5-mini" || len(got.MCPServers) != 1 || got.MCPServers[0] != "mcp_1" {
 		t.Fatalf("restart 후 run 조회가 이상해요: %+v", got)
+	}
+}
+
+func TestAsyncRunManagerUsesAtomicRunSnapshotStore(t *testing.T) {
+	ctx := context.Background()
+	store := &atomicRunStore{runs: map[string]session.Run{}}
+	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
+	}, store)
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: "sess_atomic", Prompt: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRunStatus(t, manager, run.ID, "completed")
+	events := waitForRunEventType(t, manager, run.ID, "run.completed")
+	plainSaves, plainEvents, snapshotSaves := store.counts()
+	if snapshotSaves == 0 {
+		t.Fatal("RunSnapshotStore 경로를 써야 해요")
+	}
+	if plainSaves != 0 || plainEvents != 0 {
+		t.Fatalf("SaveRun과 AppendRunEvent를 분리하면 안 돼요: saves=%d events=%d", plainSaves, plainEvents)
+	}
+	if len(events) == 0 || events[len(events)-1].Type != "run.completed" {
+		t.Fatalf("원자 event replay가 이상해요: %+v", events)
 	}
 }
 
@@ -255,4 +280,80 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	if len(afterFirst) == 0 || afterFirst[0].Seq <= 1 {
 		t.Fatalf("restart 후 after_seq replay가 이상해요: %+v", afterFirst)
 	}
+}
+
+type atomicRunStore struct {
+	mu            sync.Mutex
+	runs          map[string]session.Run
+	events        []session.RunEvent
+	plainSaves    int
+	plainEvents   int
+	snapshotSaves int
+}
+
+func (s *atomicRunStore) SaveRun(ctx context.Context, run session.Run) (session.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.plainSaves++
+	s.runs[run.ID] = run
+	return run, nil
+}
+
+func (s *atomicRunStore) LoadRun(ctx context.Context, id string) (session.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, ok := s.runs[id]
+	if !ok {
+		return session.Run{}, errors.New("run not found")
+	}
+	return run, nil
+}
+
+func (s *atomicRunStore) ListRuns(ctx context.Context, q session.RunQuery) ([]session.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]session.Run, 0, len(s.runs))
+	for _, run := range s.runs {
+		out = append(out, run)
+	}
+	return out, nil
+}
+
+func (s *atomicRunStore) AppendRunEvent(ctx context.Context, event session.RunEvent) (session.RunEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.plainEvents++
+	event.Seq = len(s.events) + 1
+	s.events = append(s.events, event)
+	return event, nil
+}
+
+func (s *atomicRunStore) ListRunEvents(ctx context.Context, q session.RunEventQuery) ([]session.RunEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []session.RunEvent{}
+	for _, event := range s.events {
+		if event.RunID == q.RunID && event.Seq > q.AfterSeq {
+			out = append(out, event)
+		}
+	}
+	return out, nil
+}
+
+func (s *atomicRunStore) SaveRunWithEvent(ctx context.Context, run session.Run, event session.RunEvent) (session.Run, session.RunEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.snapshotSaves++
+	s.runs[run.ID] = run
+	event.RunID = run.ID
+	event.Run = run
+	event.Seq = len(s.events) + 1
+	s.events = append(s.events, event)
+	return run, event, nil
+}
+
+func (s *atomicRunStore) counts() (plainSaves int, plainEvents int, snapshotSaves int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.plainSaves, s.plainEvents, s.snapshotSaves
 }

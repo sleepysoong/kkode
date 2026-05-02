@@ -308,6 +308,45 @@ func TestRunEventStorePersistsReplay(t *testing.T) {
 	}
 }
 
+func TestRunSnapshotStorePersistsRunAndEventTogether(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	run, event, err := store.SaveRunWithEvent(ctx, Run{ID: "run_snapshot", SessionID: sess.ID, Status: "queued", Prompt: "go", Provider: "copilot"}, RunEvent{Type: "run.queued"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.ID != "run_snapshot" || event.RunID != run.ID || event.Seq != 1 {
+		t.Fatalf("원자 저장 결과가 이상해요: run=%+v event=%+v", run, event)
+	}
+	loaded, err := store.LoadRun(ctx, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := store.ListRunEvents(ctx, RunEventQuery{RunID: run.ID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Status != "queued" || loaded.Provider != "copilot" || len(replay) != 1 || replay[0].Type != "run.queued" || replay[0].Run.ID != run.ID {
+		t.Fatalf("run/event replay가 같은 snapshot을 가져야 해요: loaded=%+v replay=%+v", loaded, replay)
+	}
+	run.Status = "completed"
+	event.ID = ""
+	event.Run = run
+	event.Type = "run.completed"
+	event.Seq = 0
+	_, second, err := store.SaveRunWithEvent(ctx, run, event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Seq != 2 {
+		t.Fatalf("두 번째 event seq가 이상해요: %+v", second)
+	}
+}
+
 func TestCheckpointStoreListsAndLoads(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
