@@ -421,6 +421,52 @@ func main() {
 	}
 }
 
+func TestGatewayLSPDiagnosticsAndHover(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.go"), `package demo
+
+// Runner는 작업을 실행해요.
+type Runner struct{}
+
+// Run은 실행 진입점이에요.
+func (r *Runner) Run() {}
+`)
+	writeTestFile(t, filepath.Join(root, "broken.go"), `package demo
+
+func Broken( {
+`)
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/diagnostics?project_root="+root+"&path=broken.go", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var diagnostics LSPDiagnosticListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics.Diagnostics) == 0 || diagnostics.Diagnostics[0].File != "broken.go" || diagnostics.Diagnostics[0].Severity != "error" {
+		t.Fatalf("diagnostics 결과가 이상해요: %+v", diagnostics)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/hover?project_root="+root+"&symbol=Runner.Run", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var hover LSPHoverResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &hover); err != nil {
+		t.Fatal(err)
+	}
+	if !hover.Found || hover.Symbol != "Run" || !strings.Contains(hover.Documentation, "실행 진입점") || !strings.Contains(hover.Signature, "func (r *Runner) Run()") {
+		t.Fatalf("hover 결과가 이상해요: %+v", hover)
+	}
+}
+
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

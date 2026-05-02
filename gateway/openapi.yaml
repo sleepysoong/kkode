@@ -764,6 +764,57 @@ paths:
                 $ref: '#/components/schemas/LSPReferenceListResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/lsp/diagnostics:
+    get:
+      summary: Go parse diagnostics를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 1000
+      responses:
+        '200':
+          description: diagnostic 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LSPDiagnosticListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/lsp/hover:
+    get:
+      summary: Go symbol hover 정보를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: symbol
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: hover 정보예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LSPHoverResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/runs:
     get:
       summary: background run 목록을 반환해요.
@@ -1367,6 +1418,53 @@ components:
         column:
           type: integer
         excerpt:
+          type: string
+    LSPDiagnosticListResponse:
+      type: object
+      required: [diagnostics]
+      properties:
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/LSPDiagnostic'
+    LSPDiagnostic:
+      type: object
+      required: [file, line, column, severity, source, message]
+      properties:
+        file:
+          type: string
+        line:
+          type: integer
+        column:
+          type: integer
+        severity:
+          type: string
+          enum: [error, warning, information, hint]
+        source:
+          type: string
+        message:
+          type: string
+    LSPHoverResponse:
+      type: object
+      required: [found]
+      properties:
+        found:
+          type: boolean
+        symbol:
+          type: string
+        kind:
+          type: string
+        file:
+          type: string
+        line:
+          type: integer
+        column:
+          type: integer
+        container:
+          type: string
+        signature:
+          type: string
+        documentation:
           type: string
     SubagentPreviewResponse:
       type: object
