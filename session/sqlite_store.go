@@ -146,13 +146,17 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			if strings.HasPrefix(stmt, "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column name") {
+			if isIgnorableMigrationError(stmt, err) {
 				continue
 			}
 			return err
 		}
 	}
 	return nil
+}
+
+func isIgnorableMigrationError(stmt string, err error) bool {
+	return strings.HasPrefix(strings.TrimSpace(stmt), "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column name")
 }
 
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess *Session) error {

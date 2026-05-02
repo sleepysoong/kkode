@@ -9,6 +9,16 @@ import (
 	"github.com/sleepysoong/kkode/llm"
 )
 
+func TestSQLiteMigrationIsIdempotent(t *testing.T) {
+	store := openSQLiteForTest(t)
+	if err := store.migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSQLiteStoreSessionLifecycle(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
