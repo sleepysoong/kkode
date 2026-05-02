@@ -609,6 +609,18 @@ paths:
       parameters:
         - $ref: '#/components/parameters/RunID'
         - in: query
+          name: after_seq
+          schema:
+            type: integer
+            default: 0
+          description: 이 seq 이후 durable run event만 replay해요.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 1000
+        - in: query
           name: stream
           schema:
             type: boolean
@@ -1084,6 +1096,9 @@ components:
       properties:
         seq:
           type: integer
+        at:
+          type: string
+          format: date-time
         type:
           type: string
         run:

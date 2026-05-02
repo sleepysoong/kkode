@@ -230,7 +230,7 @@ erDiagram
 - `GET /api/v1/sessions/{id}/events`는 JSON replay와 `stream=true` SSE replay를 지원해요.
 - `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
 - `POST /api/v1/runs`는 `gateway.AsyncRunManager`로 즉시 접수하고 background에서 실제 agent run을 실행해요. run 상태는 SQLite에도 저장돼서 gateway 재시작 뒤에도 조회할 수 있어요. `GET /api/v1/runs/{id}/events?stream=true`로 run 상태 변경을 live SSE로 받을 수 있어요.
-- `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `POST /api/v1/runs/{id}/cancel`, `POST /api/v1/runs/{id}/retry`로 외부 adapter가 run 상태를 조회하고 취소/재시도할 수 있어요.
+- `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `GET /api/v1/runs/{id}/events`, `POST /api/v1/runs/{id}/cancel`, `POST /api/v1/runs/{id}/retry`로 외부 adapter가 run 상태를 조회하고 취소/재시도할 수 있어요. Run 상태 변경 event는 SQLite에 저장돼서 gateway 재시작 뒤에도 `after_seq` 기준으로 replay할 수 있어요.
 - `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요.
 - `GET/POST/PUT/DELETE /api/v1/mcp/servers`, `/api/v1/skills`, `/api/v1/subagents`는 외부 adapter가 실행 자산 manifest를 SQLite에 저장하고 재사용하게 해요. `POST /api/v1/runs`의 `mcp_servers`, `skills`, `subagents` ID 목록으로 선택한 manifest를 provider 설정에 반영해요. `GET /api/v1/mcp/servers/{id}/tools`는 stdio MCP server를 probe해서 `tools/list` 결과를 확인하고, `POST /api/v1/mcp/servers/{id}/tools/{tool}/call`은 디버그/웹 패널에서 저장된 stdio MCP tool을 직접 호출해요.
 - `GET /api/v1/lsp/symbols?project_root=...&query=...`는 웹 패널 코드 탐색을 위한 Go workspace symbol 검색을 제공해요. `GET /api/v1/lsp/document-symbols?project_root=...&path=...`는 파일 outline을 반환해요.
@@ -350,7 +350,8 @@ run 상태와 상태 변경 SSE는 아래처럼 읽어요. `events_url`은 sessi
 
 ```bash
 curl http://127.0.0.1:41234/api/v1/runs/run_...
-curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true'
+curl 'http://127.0.0.1:41234/api/v1/runs/run_.../events?after_seq=0&limit=200'
+curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true&after_seq=0'
 curl -X POST http://127.0.0.1:41234/api/v1/mcp/servers/mcp_.../tools/echo/call \
   -H 'Content-Type: application/json' \
   -d '{"arguments":{"text":"ping"}}'

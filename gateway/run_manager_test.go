@@ -142,6 +142,24 @@ func waitForPersistedRunStatus(t *testing.T, store session.RunStore, runID strin
 	return session.Run{}
 }
 
+func waitForRunEventType(t *testing.T, manager *AsyncRunManager, runID string, eventType string) []RunEventDTO {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		replay, err := manager.Events(context.Background(), runID, 0, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(replay) > 0 && replay[len(replay)-1].Type == eventType {
+			return replay
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	replay, _ := manager.Events(context.Background(), runID, 0, 10)
+	t.Fatalf("run event type %s가 기록되지 않았어요: %+v", eventType, replay)
+	return nil
+}
+
 func TestRunEventBusPublishesRunUpdates(t *testing.T) {
 	bus := NewRunEventBus()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,5 +174,38 @@ func TestRunEventBusPublishesRunUpdates(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("run event를 받지 못했어요")
+	}
+}
+
+func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
+	}, store)
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRunStatus(t, manager, run.ID, "completed")
+	replay := waitForRunEventType(t, manager, run.ID, "run.completed")
+	if len(replay) < 3 || replay[0].Type != "run.queued" || replay[len(replay)-1].Type != "run.completed" {
+		t.Fatalf("run event replay가 이상해요: %+v", replay)
+	}
+	restarted := NewAsyncRunManagerWithStore(nil, store)
+	afterFirst, err := restarted.Events(ctx, run.ID, 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(afterFirst) == 0 || afterFirst[0].Seq <= 1 {
+		t.Fatalf("restart 후 after_seq replay가 이상해요: %+v", afterFirst)
 	}
 }

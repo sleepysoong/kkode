@@ -64,6 +64,7 @@ func run(args []string) error {
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
 		RunCanceler:          runManager.Cancel,
+		RunEventLister:       runManager.Events,
 		RunSubscriber:        runManager.Subscribe,
 		Providers:            providerDTOs(),
 		ResourceStore:        store,

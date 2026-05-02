@@ -99,6 +99,16 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_session_updated ON runs(session_id, updated_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_status_updated ON runs(status, updated_at);`,
+		`CREATE TABLE IF NOT EXISTS run_events (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+			seq INTEGER NOT NULL,
+			at TEXT NOT NULL,
+			type TEXT NOT NULL,
+			run_json BLOB NOT NULL,
+			UNIQUE(run_id, seq)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_run_events_run_seq ON run_events(run_id, seq);`,
 		`CREATE TABLE IF NOT EXISTS todos (
 			id TEXT NOT NULL,
 			session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -424,6 +434,93 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 		out = append(out, run)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteStore) AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error) {
+	normalizeRunEvent(&event)
+	runJSON, err := json.Marshal(event.Run)
+	if err != nil {
+		return event, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return event, err
+	}
+	defer tx.Rollback()
+	if event.Seq <= 0 {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) + 1 FROM run_events WHERE run_id = ?`, event.RunID).Scan(&event.Seq); err != nil {
+			return event, err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO run_events (id, run_id, seq, at, type, run_json) VALUES (?, ?, ?, ?, ?, ?)`, event.ID, event.RunID, event.Seq, formatTime(event.At), event.Type, runJSON)
+	if err != nil {
+		return event, err
+	}
+	return event, tx.Commit()
+}
+
+func (s *SQLiteStore) ListRunEvents(ctx context.Context, q RunEventQuery) ([]RunEvent, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	query := `SELECT id, run_id, seq, at, type, run_json FROM run_events WHERE run_id = ?`
+	args := []any{q.RunID}
+	if q.AfterSeq > 0 {
+		query += ` AND seq > ?`
+		args = append(args, q.AfterSeq)
+	}
+	query += ` ORDER BY seq ASC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RunEvent
+	for rows.Next() {
+		event, err := scanRunEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
+type runEventScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanRunEvent(scanner runEventScanner) (RunEvent, error) {
+	var event RunEvent
+	var at string
+	var runJSON []byte
+	if err := scanner.Scan(&event.ID, &event.RunID, &event.Seq, &at, &event.Type, &runJSON); err != nil {
+		return RunEvent{}, err
+	}
+	event.At = parseTime(at)
+	if len(runJSON) > 0 {
+		if err := json.Unmarshal(runJSON, &event.Run); err != nil {
+			return RunEvent{}, err
+		}
+	}
+	return event, nil
+}
+
+func normalizeRunEvent(event *RunEvent) {
+	if event.ID == "" {
+		event.ID = NewID("runev")
+	}
+	if event.RunID == "" {
+		event.RunID = event.Run.ID
+	}
+	if event.Type == "" {
+		event.Type = "run." + event.Run.Status
+	}
+	if event.At.IsZero() {
+		event.At = time.Now().UTC()
+	}
 }
 
 type runScanner interface {

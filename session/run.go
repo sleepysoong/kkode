@@ -27,8 +27,29 @@ type RunQuery struct {
 	Limit     int
 }
 
+// RunEvent는 run 상태 변경 snapshot을 durable replay용으로 남기는 레코드예요.
+type RunEvent struct {
+	ID    string    `json:"id"`
+	RunID string    `json:"run_id"`
+	Seq   int       `json:"seq"`
+	Type  string    `json:"type"`
+	At    time.Time `json:"at"`
+	Run   Run       `json:"run"`
+}
+
+type RunEventQuery struct {
+	RunID    string
+	AfterSeq int
+	Limit    int
+}
+
 type RunStore interface {
 	SaveRun(ctx context.Context, run Run) (Run, error)
 	LoadRun(ctx context.Context, id string) (Run, error)
 	ListRuns(ctx context.Context, q RunQuery) ([]Run, error)
+}
+
+type RunEventStore interface {
+	AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error)
+	ListRunEvents(ctx context.Context, q RunEventQuery) ([]RunEvent, error)
 }

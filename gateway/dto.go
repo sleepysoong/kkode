@@ -110,9 +110,10 @@ type RunListResponse struct {
 
 // RunEventDTO는 run 상태 변경을 SSE/JSON replay로 표현해요.
 type RunEventDTO struct {
-	Seq  int    `json:"seq"`
-	Type string `json:"type"`
-	Run  RunDTO `json:"run"`
+	Seq  int       `json:"seq"`
+	At   time.Time `json:"at,omitempty"`
+	Type string    `json:"type"`
+	Run  RunDTO    `json:"run"`
 }
 
 type RunEventListResponse struct {

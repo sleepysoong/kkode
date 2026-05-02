@@ -27,13 +27,17 @@ type RunLister func(ctx context.Context, q RunQuery) ([]RunDTO, error)
 // RunCanceler는 실행 중인 background run을 멈추는 경계예요.
 type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 
+// RunEventLister는 durable run event replay 경계예요.
+type RunEventLister func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error)
+
 // AsyncRunManager는 HTTP 요청과 실제 agent 실행을 분리하는 in-memory background run 관리자예요.
 // run 결과의 원본 상태는 session/event SQLite에 남기고, 이 구조체는 gateway 프로세스 안의 실행 제어면을 맡아요.
 type AsyncRunManager struct {
-	starter  RunStarter
-	runStore session.RunStore
-	eventBus *RunEventBus
-	now      func() time.Time
+	starter       RunStarter
+	runStore      session.RunStore
+	runEventStore session.RunEventStore
+	eventBus      *RunEventBus
+	now           func() time.Time
 
 	mu   sync.RWMutex
 	runs map[string]*managedRun
@@ -57,7 +61,11 @@ func NewAsyncRunManagerWithStoreAndBus(starter RunStarter, store session.RunStor
 	if bus == nil {
 		bus = NewRunEventBus()
 	}
-	return &AsyncRunManager{starter: starter, runStore: store, eventBus: bus, now: func() time.Time { return time.Now().UTC() }, runs: map[string]*managedRun{}}
+	manager := &AsyncRunManager{starter: starter, runStore: store, eventBus: bus, now: func() time.Time { return time.Now().UTC() }, runs: map[string]*managedRun{}}
+	if eventStore, ok := store.(session.RunEventStore); ok {
+		manager.runEventStore = eventStore
+	}
+	return manager
 }
 
 func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -279,11 +287,48 @@ func (m *AsyncRunManager) publish(run RunDTO) {
 }
 
 func (m *AsyncRunManager) persist(ctx context.Context, run *RunDTO) error {
-	if m.runStore == nil || run == nil {
+	if run == nil {
 		return nil
 	}
-	_, err := m.runStore.SaveRun(ctx, sessionRunFromDTO(*run))
+	if m.runStore != nil {
+		if _, err := m.runStore.SaveRun(ctx, sessionRunFromDTO(*run)); err != nil {
+			return err
+		}
+	}
+	return m.recordEvent(ctx, run)
+}
+
+func (m *AsyncRunManager) recordEvent(ctx context.Context, run *RunDTO) error {
+	if m == nil || m.runEventStore == nil || run == nil || run.ID == "" {
+		return nil
+	}
+	_, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{RunID: run.ID, Type: runEventType(run.Status), At: m.timestamp(), Run: sessionRunFromDTO(*run)})
 	return err
+}
+
+func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+	if m == nil {
+		return nil, errors.New("run manager가 필요해요")
+	}
+	if m.runEventStore != nil {
+		events, err := m.runEventStore.ListRunEvents(ctx, session.RunEventQuery{RunID: runID, AfterSeq: afterSeq, Limit: limit})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]RunEventDTO, 0, len(events))
+		for _, event := range events {
+			out = append(out, RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Run: *runDTOFromSession(event.Run)})
+		}
+		return out, nil
+	}
+	run, err := m.Get(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if afterSeq >= 1 {
+		return []RunEventDTO{}, nil
+	}
+	return []RunEventDTO{{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: *run}}, nil
 }
 
 func sessionRunFromDTO(run RunDTO) session.Run {

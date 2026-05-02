@@ -177,3 +177,42 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 		t.Fatalf("run list가 이상해요: %+v", listed)
 	}
 }
+
+func TestRunEventStorePersistsReplay(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := NewSession("/repo", "openai", "gpt", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	run, err := store.SaveRun(ctx, Run{ID: "run_1", SessionID: sess.ID, Status: "queued", Prompt: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.AppendRunEvent(ctx, RunEvent{RunID: run.ID, Type: "run.queued", Run: run})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Status = "completed"
+	if _, err := store.SaveRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.AppendRunEvent(ctx, RunEvent{RunID: run.ID, Type: "run.completed", Run: run})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Seq != 1 || second.Seq != 2 {
+		t.Fatalf("run event seq가 이상해요: %d %d", first.Seq, second.Seq)
+	}
+	replay, err := store.ListRunEvents(ctx, RunEventQuery{RunID: run.ID, AfterSeq: 1, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replay) != 1 || replay[0].Type != "run.completed" || replay[0].Run.Status != "completed" {
+		t.Fatalf("run event replay가 이상해요: %+v", replay)
+	}
+}

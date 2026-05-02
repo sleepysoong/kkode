@@ -30,6 +30,7 @@ type Config struct {
 	RunGetter            RunGetter
 	RunLister            RunLister
 	RunCanceler          RunCanceler
+	RunEventLister       RunEventLister
 	RunSubscriber        RunEventSubscriber
 	Now                  func() time.Time
 }
@@ -448,19 +449,48 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		return
 	}
 	if !wantsSSE(r) {
-		writeJSON(w, RunEventListResponse{Events: []RunEventDTO{{Seq: 1, Type: runEventType(run.Status), Run: *run}}})
+		writeJSON(w, RunEventListResponse{Events: s.runEventSnapshot(r, runID, *run)})
 		return
 	}
-	s.writeRunSSE(w, r, *run)
+	s.writeRunSSE(w, r, runID, *run)
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, initial RunDTO) {
+func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO) []RunEventDTO {
+	afterSeq := queryInt(r, "after_seq", 0)
+	limit := queryInt(r, "limit", 200)
+	if limit > 1000 {
+		limit = 1000
+	}
+	if s.cfg.RunEventLister != nil {
+		events, err := s.cfg.RunEventLister(r.Context(), runID, afterSeq, limit)
+		if err == nil && len(events) > 0 {
+			return events
+		}
+		if err == nil && afterSeq > 0 {
+			return []RunEventDTO{}
+		}
+	}
+	if afterSeq >= 1 {
+		return []RunEventDTO{}
+	}
+	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}}
+}
+
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
-	seq := 1
-	writeRunSSEEvent(w, flusher, seq, initial)
+	events := s.runEventSnapshot(r, runID, initial)
+	seq := 0
+	for _, event := range events {
+		seq = event.Seq
+		writeRunSSEEvent(w, flusher, event)
+	}
+	if seq == 0 {
+		seq = 1
+		writeRunSSEEvent(w, flusher, RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(initial.Status), Run: initial})
+	}
 	if isTerminalRunStatus(initial.Status) || s.cfg.RunSubscriber == nil {
 		return
 	}
@@ -475,7 +505,7 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, initial Run
 				return
 			}
 			seq++
-			writeRunSSEEvent(w, flusher, seq, run)
+			writeRunSSEEvent(w, flusher, RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run})
 			if isTerminalRunStatus(run.Status) {
 				return
 			}
@@ -483,13 +513,13 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, initial Run
 	}
 }
 
-func writeRunSSEEvent(w http.ResponseWriter, flusher http.Flusher, seq int, run RunDTO) {
-	data, err := json.Marshal(RunEventDTO{Seq: seq, Type: runEventType(run.Status), Run: run})
+func writeRunSSEEvent(w http.ResponseWriter, flusher http.Flusher, event RunEventDTO) {
+	data, err := json.Marshal(event)
 	if err != nil {
 		return
 	}
-	fmt.Fprintf(w, "id: %d\n", seq)
-	fmt.Fprintf(w, "event: %s\n", runEventType(run.Status))
+	fmt.Fprintf(w, "id: %d\n", event.Seq)
+	fmt.Fprintf(w, "event: %s\n", event.Type)
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	if flusher != nil {
 		flusher.Flush()
