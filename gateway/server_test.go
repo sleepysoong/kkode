@@ -124,6 +124,31 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 	}
 }
 
+func TestGatewayLimitsSessionEvents(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	for _, typ := range []string{"one", "two", "three"} {
+		sess.AppendEvent(session.NewEvent(sess.ID, "turn_1", typ))
+	}
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?after_seq=1&limit=1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var events EventListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events.Events) != 1 || events.Events[0].Seq != 2 || events.Events[0].Type != "two" {
+		t.Fatalf("limited events가 이상해요: %+v", events)
+	}
+}
+
 func TestGatewayRequiresAPIKeyWhenConfigured(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "secret")

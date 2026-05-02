@@ -430,6 +430,12 @@ paths:
             type: integer
             default: 0
         - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 500
+            maximum: 5000
+        - in: query
           name: stream
           schema:
             type: boolean

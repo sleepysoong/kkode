@@ -326,9 +326,10 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request, sessionID s
 
 func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessionID string) {
 	afterSeq := queryInt(r, "after_seq", 0)
+	limit := queryLimit(r, "limit", 500, 5000)
 	var events []EventDTO
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
-		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq})
+		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit})
 		if err != nil {
 			writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 			return
@@ -350,6 +351,9 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 				continue
 			}
 			events = append(events, toEventDTO(seq, ev))
+			if len(events) >= limit {
+				break
+			}
 		}
 	}
 	if wantsSSE(r) {
