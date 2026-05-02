@@ -431,3 +431,54 @@ func TestGatewayRetriesRun(t *testing.T) {
 		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
 	}
 }
+
+func TestGatewayProbesMCPServerTools(t *testing.T) {
+	root := t.TempDir()
+	serverPath := filepath.Join(root, "fake_mcp.py")
+	writeTestFile(t, serverPath, `import json, sys
+
+def read_frame():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline().decode().strip()
+        if not line:
+            break
+        key, value = line.split(":", 1)
+        headers[key.lower()] = value.strip()
+    body = sys.stdin.buffer.read(int(headers["content-length"]))
+    return json.loads(body)
+
+def write_frame(payload):
+    data = json.dumps(payload).encode()
+    sys.stdout.buffer.write(b"Content-Length: %d\r\n\r\n" % len(data) + data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_frame()
+    method = msg.get("method")
+    if method == "initialize":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}}}})
+    elif method == "tools/list":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"tools":[{"name":"echo","description":"Echo text","inputSchema":{"type":"object"}}]}})
+        break
+`)
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceMCPServer, Name: "fake", Enabled: true, Config: []byte(`{"kind":"stdio","command":"python3","args":["` + serverPath + `"],"timeout":3}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var tools MCPToolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &tools); err != nil {
+		t.Fatal(err)
+	}
+	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "echo" {
+		t.Fatalf("MCP tools/list 결과가 이상해요: %+v", tools)
+	}
+}

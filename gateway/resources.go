@@ -30,6 +30,10 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, parts []strin
 		writeError(w, r, http.StatusNotFound, "not_found", "mcp endpoint를 찾을 수 없어요")
 		return
 	}
+	if len(parts) == 4 && parts[3] == "tools" && r.Method == http.MethodGet {
+		s.listMCPServerTools(w, r, parts[2])
+		return
+	}
 	s.handleResources(w, r, parts[2:], resourceRoute{Kind: session.ResourceMCPServer, Name: "mcp server"})
 }
 

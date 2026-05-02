@@ -231,6 +231,23 @@ paths:
           description: 삭제됐어요.
         '404':
           $ref: '#/components/responses/Error'
+
+  /api/v1/mcp/servers/{resource_id}/tools:
+    get:
+      summary: MCP stdio server를 probe해서 tools/list 결과를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: MCP tool 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPToolListResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
   /api/v1/skills:
     get:
       summary: skill manifest 목록을 반환해요.
@@ -770,6 +787,27 @@ components:
           description: run에 연결할 subagent resource id 목록이에요.
           items:
             type: string
+    MCPToolListResponse:
+      type: object
+      required: [server, tools]
+      properties:
+        server:
+          $ref: '#/components/schemas/Resource'
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPTool'
+    MCPTool:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+          additionalProperties: true
     LSPSymbolListResponse:
       type: object
       required: [symbols]
