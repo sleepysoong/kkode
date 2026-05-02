@@ -225,14 +225,15 @@ erDiagram
 ### Gateway API: `gateway/`
 
 - `gateway.Server`는 `net/http` 기반 API server예요. 외부 의존성 없이 `/api/v1` REST surface를 만들어요.
-- `GET /healthz`, `GET /readyz`, `GET /api/v1/version`, `GET /api/v1/capabilities`, `GET /api/v1/providers`를 제공해요.
+- `GET /healthz`, `GET /readyz`, `GET /api/v1/version`, `GET /api/v1/capabilities`, `GET /api/v1/providers`, `GET /api/v1/models`를 제공해요.
 - `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, `POST /api/v1/sessions/{id}/fork`를 제공해요.
 - `GET /api/v1/sessions/{id}/events`는 JSON replay와 `stream=true` SSE replay를 지원해요.
 - `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
 - `POST /api/v1/runs`는 `gateway.AsyncRunManager`로 즉시 접수하고 background에서 실제 agent run을 실행해요. run 상태는 SQLite에도 저장돼서 gateway 재시작 뒤에도 조회할 수 있어요. `GET /api/v1/runs/{id}/events?stream=true`로 run 상태 변경을 live SSE로 받을 수 있어요.
 - `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `GET /api/v1/runs/{id}/events`, `POST /api/v1/runs/{id}/cancel`, `POST /api/v1/runs/{id}/retry`로 외부 adapter가 run 상태를 조회하고 취소/재시도할 수 있어요. Run 상태 변경 event는 SQLite에 저장돼서 gateway 재시작 뒤에도 `after_seq` 기준으로 replay할 수 있어요.
 - `GET/POST /api/v1/sessions/{id}/checkpoints`, `GET /api/v1/sessions/{id}/checkpoints/{checkpoint_id}`는 외부 adapter가 복구용 snapshot payload를 저장하고 다시 읽게 해요.
-- `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요.
+- `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/models/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요.
+- `GET /api/v1/models`는 provider별 모델 catalog, 기본 모델, capability, auth 상태를 반환해서 외부 adapter가 모델 선택 UI를 만들게 해요.
 - `GET/POST/PUT/DELETE /api/v1/mcp/servers`, `/api/v1/skills`, `/api/v1/subagents`는 외부 adapter가 실행 자산 manifest를 SQLite에 저장하고 재사용하게 해요. `POST /api/v1/runs`의 `mcp_servers`, `skills`, `subagents` ID 목록으로 선택한 manifest를 provider 설정에 반영해요. `GET /api/v1/skills/{id}/preview`는 SKILL.md/README.md 내용을 웹 패널에서 보여줄 수 있게 하고, `GET /api/v1/subagents/{id}/preview`는 prompt/tools/skills/MCP 연결을 실행 전 확인하게 해요. `GET /api/v1/mcp/servers/{id}/tools`는 stdio MCP server를 probe해서 `tools/list` 결과를 확인하고, `POST /api/v1/mcp/servers/{id}/tools/{tool}/call`은 디버그/웹 패널에서 저장된 stdio MCP tool을 직접 호출해요.
 - `GET /api/v1/lsp/symbols?project_root=...&query=...`는 웹 패널 코드 탐색을 위한 Go workspace symbol 검색을 제공해요. `GET /api/v1/lsp/document-symbols?project_root=...&path=...`는 파일 outline을 반환하고, `GET /api/v1/lsp/definitions?symbol=...`와 `GET /api/v1/lsp/references?symbol=...`는 definition/reference 위치를 반환해요. `GET /api/v1/lsp/diagnostics`와 `GET /api/v1/lsp/hover`는 parse diagnostic과 symbol hover 문서를 제공해요.
 - `GET /api/v1/tools`, `POST /api/v1/tools/call`은 웹 패널/Discord adapter가 agent run 없이도 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`를 직접 실행하게 해요. 권한 프롬프트 없이 바로 실행하는 YOLO API예요.
@@ -329,6 +330,12 @@ session 생성 예시는 다음과 같아요.
 curl -X POST http://127.0.0.1:41234/api/v1/sessions \
   -H 'Content-Type: application/json' \
   -d '{"project_root":"/home/user/kkode","provider":"openai","model":"gpt-5-mini","agent":"web-panel"}'
+```
+
+모델 선택 UI는 model catalog API를 먼저 읽으면 돼요.
+
+```bash
+curl 'http://127.0.0.1:41234/api/v1/models?provider=openai'
 ```
 
 저장해둔 MCP server, skill, subagent manifest를 골라 background run에 붙일 수 있어요. 응답은 즉시 `202 Accepted`와 `run_id`를 돌려주고, 실제 agent 실행은 gateway 내부 goroutine에서 이어져요.

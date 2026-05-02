@@ -42,10 +42,14 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 		t.Fatal("provider registry가 비면 안 돼요")
 	}
 	specs[0].Aliases = append(specs[0].Aliases, "mutated")
+	specs[0].Models = append(specs[0].Models, "mutated-model")
 	specs[0].Capabilities["tools"] = false
 	fresh := ProviderSpecs()
 	if len(fresh[0].Aliases) > 0 && fresh[0].Aliases[len(fresh[0].Aliases)-1] == "mutated" {
 		t.Fatal("ProviderSpecs는 alias slice를 방어 복사해야 해요")
+	}
+	if len(fresh[0].Models) > 0 && fresh[0].Models[len(fresh[0].Models)-1] == "mutated-model" {
+		t.Fatal("ProviderSpecs는 model slice를 방어 복사해야 해요")
 	}
 	if fresh[0].Capabilities["tools"] != true {
 		t.Fatal("ProviderSpecs는 capability map을 방어 복사해야 해요")

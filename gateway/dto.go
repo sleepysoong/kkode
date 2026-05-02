@@ -124,12 +124,27 @@ type RunEventListResponse struct {
 type ProviderDTO struct {
 	Name         string         `json:"name"`
 	Models       []string       `json:"models,omitempty"`
+	DefaultModel string         `json:"default_model,omitempty"`
 	Capabilities map[string]any `json:"capabilities,omitempty"`
 	AuthStatus   string         `json:"auth_status,omitempty"`
 }
 
 type ProviderListResponse struct {
 	Providers []ProviderDTO `json:"providers"`
+}
+
+// ModelDTO는 외부 adapter가 모델 선택 UI를 만들 때 쓰는 정규화된 모델 항목이에요.
+type ModelDTO struct {
+	ID           string         `json:"id"`
+	Provider     string         `json:"provider"`
+	DisplayName  string         `json:"display_name,omitempty"`
+	Default      bool           `json:"default,omitempty"`
+	Capabilities map[string]any `json:"capabilities,omitempty"`
+	AuthStatus   string         `json:"auth_status,omitempty"`
+}
+
+type ModelListResponse struct {
+	Models []ModelDTO `json:"models"`
 }
 
 // FeatureDTO는 외부 adapter가 kkode gateway 기능 상태와 endpoint를 발견할 때 쓰는 항목이에요.
@@ -206,4 +221,15 @@ func toTodoDTO(todo session.Todo) TodoDTO {
 		Priority:  todo.Priority,
 		UpdatedAt: todo.UpdatedAt,
 	}
+}
+
+func cloneAnyMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }

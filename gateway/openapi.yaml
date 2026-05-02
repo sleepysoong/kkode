@@ -54,6 +54,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderListResponse'
+  /api/v1/models:
+    get:
+      summary: provider별 model catalog를 반환해요.
+      parameters:
+        - in: query
+          name: provider
+          schema:
+            type: string
+      responses:
+        '200':
+          description: model 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelListResponse'
   /api/v1/files:
     get:
       summary: workspace 디렉터리 항목을 나열해요.
@@ -1047,6 +1062,33 @@ components:
           type: array
           items:
             type: string
+        default_model:
+          type: string
+        capabilities:
+          type: object
+          additionalProperties: true
+        auth_status:
+          type: string
+    ModelListResponse:
+      type: object
+      required: [models]
+      properties:
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+    Model:
+      type: object
+      required: [id, provider]
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+        display_name:
+          type: string
+        default:
+          type: boolean
         capabilities:
           type: object
           additionalProperties: true

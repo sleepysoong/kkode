@@ -112,6 +112,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleVersion(w, r, parts)
 	case "providers":
 		s.handleProviders(w, r, parts)
+	case "models":
+		s.handleModels(w, r, parts)
 	case "capabilities":
 		s.handleCapabilities(w, r, parts)
 	case "sessions":
@@ -153,6 +155,32 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 		return
 	}
 	writeJSON(w, ProviderListResponse{Providers: s.cfg.Providers})
+}
+
+func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) != 1 || r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 models 요청이에요")
+		return
+	}
+	providerFilter := strings.TrimSpace(r.URL.Query().Get("provider"))
+	out := []ModelDTO{}
+	for _, provider := range s.cfg.Providers {
+		if providerFilter != "" && !strings.EqualFold(provider.Name, providerFilter) {
+			continue
+		}
+		models := provider.Models
+		if len(models) == 0 && provider.DefaultModel != "" {
+			models = []string{provider.DefaultModel}
+		}
+		for _, model := range models {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			out = append(out, ModelDTO{ID: model, Provider: provider.Name, DisplayName: model, Default: model == provider.DefaultModel, Capabilities: cloneAnyMap(provider.Capabilities), AuthStatus: provider.AuthStatus})
+		}
+	}
+	writeJSON(w, ModelListResponse{Models: out})
 }
 
 func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, parts []string) {

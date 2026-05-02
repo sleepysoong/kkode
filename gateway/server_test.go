@@ -252,6 +252,43 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	}
 }
 
+func TestGatewayModelsDiscovery(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Providers: []ProviderDTO{
+		{Name: "openai", Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured"},
+		{Name: "codex", Models: []string{"gpt-5.3-codex"}, DefaultModel: "gpt-5.3-codex", AuthStatus: "local"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed ModelListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Models) != 2 {
+		t.Fatalf("openai model 목록이 이상해요: %+v", listed)
+	}
+	if listed.Models[0].Provider != "openai" || listed.Models[0].ID != "gpt-5-mini" || !listed.Models[0].Default || listed.Models[0].AuthStatus != "configured" {
+		t.Fatalf("기본 model discovery가 이상해요: %+v", listed.Models[0])
+	}
+	listed.Models[0].Capabilities["tools"] = false
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed.Models[0].Capabilities["tools"] != true {
+		t.Fatal("model capability map은 응답마다 방어 복사해야 해요")
+	}
+}
+
 func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
