@@ -693,3 +693,25 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 		t.Fatalf("skill preview가 이상해요: %+v", preview)
 	}
 }
+
+func TestGatewayPreviewsSubagentManifest(t *testing.T) {
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceSubagent, Name: "planner", Description: "계획 agent예요", Enabled: true, Config: []byte(`{"display_name":"Planner","prompt":"계획을 세워요","tools":["file_read"],"skills":["review"],"mcp_servers":{"fs":"mcp-fs"},"infer":true}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/subagents/"+resource.ID+"/preview", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var preview SubagentPreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.Subagent.ID != resource.ID || preview.DisplayName != "Planner" || preview.Prompt == "" || len(preview.Tools) != 1 || preview.MCPServers["fs"] != "mcp-fs" || preview.Infer == nil || !*preview.Infer {
+		t.Fatalf("subagent preview가 이상해요: %+v", preview)
+	}
+}

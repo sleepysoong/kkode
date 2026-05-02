@@ -510,6 +510,21 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/v1/subagents/{resource_id}/preview:
+    get:
+      summary: subagent manifest를 실행 전 preview 형태로 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: subagent preview예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubagentPreviewResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/v1/lsp/symbols:
     get:
       summary: Go source symbol을 LSP-style로 검색해요.
@@ -1061,6 +1076,34 @@ components:
           type: integer
         container:
           type: string
+    SubagentPreviewResponse:
+      type: object
+      required: [subagent, name]
+      properties:
+        subagent:
+          $ref: '#/components/schemas/Resource'
+        name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        prompt:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        mcp_servers:
+          type: object
+          additionalProperties:
+            type: string
+        skills:
+          type: array
+          items:
+            type: string
+        infer:
+          type: boolean
     SkillPreviewResponse:
       type: object
       required: [skill, truncated]
