@@ -482,3 +482,58 @@ while True:
 		t.Fatalf("MCP tools/list 결과가 이상해요: %+v", tools)
 	}
 }
+
+func TestGatewayCallsMCPServerTool(t *testing.T) {
+	root := t.TempDir()
+	serverPath := filepath.Join(root, "fake_mcp_call.py")
+	writeTestFile(t, serverPath, `import json, sys
+
+def read_frame():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline().decode().strip()
+        if not line:
+            break
+        key, value = line.split(":", 1)
+        headers[key.lower()] = value.strip()
+    body = sys.stdin.buffer.read(int(headers["content-length"]))
+    return json.loads(body)
+
+def write_frame(payload):
+    data = json.dumps(payload).encode()
+    sys.stdout.buffer.write(b"Content-Length: %d\r\n\r\n" % len(data) + data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_frame()
+    method = msg.get("method")
+    if method == "initialize":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}}}})
+    elif method == "tools/call":
+        args = msg.get("params", {}).get("arguments", {})
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"content":[{"type":"text","text":"hello " + args.get("name", "world")}],"isError":False}})
+        break
+`)
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceMCPServer, Name: "fake", Enabled: true, Config: []byte(`{"kind":"stdio","command":"python3","args":["` + serverPath + `"],"timeout":3}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/echo/call", bytes.NewBufferString(`{"arguments":{"name":"kkode"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got MCPToolCallResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := got.Result["content"].([]any)
+	first, _ := content[0].(map[string]any)
+	if got.Tool != "echo" || first["text"] != "hello kkode" {
+		t.Fatalf("MCP tools/call 결과가 이상해요: %+v", got)
+	}
+}

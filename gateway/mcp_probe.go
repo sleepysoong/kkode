@@ -28,6 +28,16 @@ type MCPToolListResponse struct {
 	Tools  []MCPToolDTO `json:"tools"`
 }
 
+type MCPToolCallRequest struct {
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+type MCPToolCallResponse struct {
+	Server ResourceDTO    `json:"server"`
+	Tool   string         `json:"tool"`
+	Result map[string]any `json:"result"`
+}
+
 type mcpProbeConfig struct {
 	Kind    string            `json:"kind"`
 	Command string            `json:"command"`
@@ -56,12 +66,66 @@ func (s *Server) listMCPServerTools(w http.ResponseWriter, r *http.Request, serv
 	writeJSON(w, MCPToolListResponse{Server: toResourceDTO(resource), Tools: tools})
 }
 
-func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO, error) {
-	var cfg mcpProbeConfig
-	if len(resource.Config) > 0 {
-		if err := json.Unmarshal(resource.Config, &cfg); err != nil {
-			return nil, err
+func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serverID string, toolName string) {
+	store := s.resourceStore()
+	if store == nil {
+		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
+		return
+	}
+	resource, err := store.LoadResource(r.Context(), session.ResourceMCPServer, serverID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
+		return
+	}
+	var req MCPToolCallRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+			return
 		}
+	}
+	result, err := callMCPTool(r.Context(), resource, toolName, req.Arguments)
+	if err != nil {
+		writeError(w, r, http.StatusBadGateway, "mcp_tool_call_failed", err.Error())
+		return
+	}
+	writeJSON(w, MCPToolCallResponse{Server: toResourceDTO(resource), Tool: toolName, Result: result})
+}
+
+func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO, error) {
+	resp, err := runStdioMCPRequest(ctx, resource, "tools/list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	return parseMCPTools(resp)
+}
+
+func callMCPTool(ctx context.Context, resource session.Resource, toolName string, arguments map[string]any) (map[string]any, error) {
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return nil, fmt.Errorf("MCP tool 이름이 필요해요")
+	}
+	if arguments == nil {
+		arguments = map[string]any{}
+	}
+	resp, err := runStdioMCPRequest(ctx, resource, "tools/call", map[string]any{"name": toolName, "arguments": arguments})
+	if err != nil {
+		return nil, err
+	}
+	result, _ := resp["result"].(map[string]any)
+	if result == nil {
+		result = map[string]any{}
+	}
+	return result, nil
+}
+
+func runStdioMCPRequest(ctx context.Context, resource session.Resource, method string, params map[string]any) (map[string]any, error) {
+	cfg, err := parseMCPProbeConfig(resource)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Kind != "" && cfg.Kind != "stdio" {
+		return nil, fmt.Errorf("현재 gateway MCP probe/call은 stdio manifest만 지원해요: %s", cfg.Kind)
 	}
 	if cfg.Command == "" {
 		return nil, fmt.Errorf("stdio MCP command가 필요해요")
@@ -101,14 +165,24 @@ func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO
 		return nil, withStderr(err, stderr.String())
 	}
 	_ = writeMCPFrame(stdin, map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized", "params": map[string]any{}})
-	if err := writeMCPFrame(stdin, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": map[string]any{}}); err != nil {
+	if err := writeMCPFrame(stdin, map[string]any{"jsonrpc": "2.0", "id": 2, "method": method, "params": params}); err != nil {
 		return nil, err
 	}
 	resp, err := readMCPResponse(ctx, reader, 2)
 	if err != nil {
 		return nil, withStderr(err, stderr.String())
 	}
-	return parseMCPTools(resp)
+	return resp, nil
+}
+
+func parseMCPProbeConfig(resource session.Resource) (mcpProbeConfig, error) {
+	var cfg mcpProbeConfig
+	if len(resource.Config) > 0 {
+		if err := json.Unmarshal(resource.Config, &cfg); err != nil {
+			return cfg, err
+		}
+	}
+	return cfg, nil
 }
 
 func writeMCPFrame(w io.Writer, payload map[string]any) error {

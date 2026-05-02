@@ -35,7 +35,7 @@
 | Checkpoint/undo | SQLite checkpoint 저장 타입과 compaction은 있음 | `/undo`, `/redo`, rewind, code vs conversation restore | P0 | `02-tools-sandbox-permissions.md` |
 | Project instructions | `prompts/*` 템플릿, system/compaction/todo prompt 분리 | AGENTS.md/CLAUDE.md/rules auto-load, hierarchical scopes | P0 | `03-context-skills-mcp.md` |
 | Skills/commands/plugins | skill manifest API와 Copilot skill directory 연결 일부 구현 | SKILL.md progressive disclosure, slash commands, plugins, marketplaces | P1 | `03-context-skills-mcp.md` |
-| MCP | MCP manifest CRUD, Copilot 연결, stdio `tools/list` probe | stdio/HTTP/SSE OAuth, tool call endpoint, tool search, resource/prompt support | P0 | `03-context-skills-mcp.md` |
+| MCP | MCP manifest CRUD, Copilot 연결, stdio `tools/list` probe와 `tools/call` API | stdio/HTTP/SSE OAuth, tool call endpoint, tool search, resource/prompt support | P0 | `03-context-skills-mcp.md` |
 | Provider auth/model catalog | env 기반 auth status, provider registry, default model/capability discovery | login/logout, credentials store, dynamic model registry, budget | P0 | `04-provider-auth-model-router-cost.md` |
 | UI surfaces | API-only gateway, background run/session/event/resource/LSP endpoints | TUI/desktop/IDE/ACP는 별도 프로젝트에서 붙여요 | P1 | `05-product-surfaces.md` |
 | Observability | transcript, session events, run status, provider usage 일부 | OTel spans, cost/usage 집계, hook lifecycle, metrics endpoint | P1 | `01-agent-loop-session-state.md`, `05-product-surfaces.md` |
