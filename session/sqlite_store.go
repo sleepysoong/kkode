@@ -71,6 +71,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			error TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_turns_session_ordinal ON turns(session_id, ordinal);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_session_ordinal_unique ON turns(session_id, ordinal);`,
 		`CREATE TABLE IF NOT EXISTS events (
 			id TEXT PRIMARY KEY,
 			session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -83,6 +84,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			error TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_session_ordinal ON events(session_id, ordinal);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_session_ordinal_unique ON events(session_id, ordinal);`,
 		`CREATE TABLE IF NOT EXISTS runs (
 			id TEXT PRIMARY KEY,
 			session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -157,6 +159,26 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 
 func isIgnorableMigrationError(stmt string, err error) bool {
 	return strings.HasPrefix(strings.TrimSpace(stmt), "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column name")
+}
+
+const sqliteSequenceRetryLimit = 4
+
+func retrySQLiteSequence(ctx context.Context, fn func() error) error {
+	var err error
+	for attempt := 0; attempt < sqliteSequenceRetryLimit; attempt++ {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		err = fn()
+		if !isSQLiteUniqueConstraintError(err) {
+			return err
+		}
+	}
+	return err
+}
+
+func isSQLiteUniqueConstraintError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func (s *SQLiteStore) CreateSession(ctx context.Context, sess *Session) error {
@@ -294,33 +316,34 @@ func (s *SQLiteStore) AppendTurnWithEvents(ctx context.Context, sess *Session, t
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
-	sess.UpdatedAt = now
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var turnOrdinal int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM turns WHERE session_id = ?`, sess.ID).Scan(&turnOrdinal); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO turns (id, session_id, ordinal, prompt, request_json, response_json, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		turn.ID, sess.ID, turnOrdinal, turn.Prompt, turnReq, nullableBytes(turnResp), formatTime(turn.StartedAt), formatTime(turn.EndedAt), turn.Error); err != nil {
-		return err
-	}
-	var eventOrdinal int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM events WHERE session_id = ?`, sess.ID).Scan(&eventOrdinal); err != nil {
-		return err
-	}
-	for i, ev := range events {
-		normalizeEvent(sess.ID, &ev)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO events (id, session_id, turn_id, ordinal, at, type, tool, payload_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			ev.ID, ev.SessionID, ev.TurnID, eventOrdinal+i, formatTime(ev.At), ev.Type, ev.Tool, nullableBytes(ev.Payload), ev.Error); err != nil {
+	return retrySQLiteSequence(ctx, func() error {
+		now := time.Now().UTC()
+		sess.UpdatedAt = now
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
 			return err
 		}
-	}
-	res, err := tx.ExecContext(ctx, `UPDATE sessions SET
+		defer tx.Rollback()
+		var turnOrdinal int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM turns WHERE session_id = ?`, sess.ID).Scan(&turnOrdinal); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO turns (id, session_id, ordinal, prompt, request_json, response_json, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			turn.ID, sess.ID, turnOrdinal, turn.Prompt, turnReq, nullableBytes(turnResp), formatTime(turn.StartedAt), formatTime(turn.EndedAt), turn.Error); err != nil {
+			return err
+		}
+		var eventOrdinal int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM events WHERE session_id = ?`, sess.ID).Scan(&eventOrdinal); err != nil {
+			return err
+		}
+		for i, ev := range events {
+			normalizeEvent(sess.ID, &ev)
+			if _, err := tx.ExecContext(ctx, `INSERT INTO events (id, session_id, turn_id, ordinal, at, type, tool, payload_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				ev.ID, ev.SessionID, ev.TurnID, eventOrdinal+i, formatTime(ev.At), ev.Type, ev.Tool, nullableBytes(ev.Payload), ev.Error); err != nil {
+				return err
+			}
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE sessions SET
 		project_root = ?,
 		provider_name = ?,
 		model = ?,
@@ -332,14 +355,15 @@ func (s *SQLiteStore) AppendTurnWithEvents(ctx context.Context, sess *Session, t
 		metadata_json = ?,
 		updated_at = ?
 		WHERE id = ?`,
-		sess.ProjectRoot, sess.ProviderName, sess.Model, sess.AgentName, string(sess.Mode), sess.Summary, sess.LastResponseID, lastItems, metadata, formatTime(now), sess.ID)
-	if err != nil {
-		return err
-	}
-	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
-		return fmt.Errorf("session not found: %s", sess.ID)
-	}
-	return tx.Commit()
+			sess.ProjectRoot, sess.ProviderName, sess.Model, sess.AgentName, string(sess.Mode), sess.Summary, sess.LastResponseID, lastItems, metadata, formatTime(now), sess.ID)
+		if err != nil {
+			return err
+		}
+		if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+			return fmt.Errorf("session not found: %s", sess.ID)
+		}
+		return tx.Commit()
+	})
 }
 
 func (s *SQLiteStore) SaveSessionState(ctx context.Context, sess *Session) error {
@@ -403,27 +427,29 @@ func (s *SQLiteStore) AppendTurn(ctx context.Context, sessionID string, turn Tur
 			return err
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var ordinal int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM turns WHERE session_id = ?`, sessionID).Scan(&ordinal); err != nil {
-		return err
-	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO turns (id, session_id, ordinal, prompt, request_json, response_json, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		turn.ID, sessionID, ordinal, turn.Prompt, req, nullableBytes(resp), formatTime(turn.StartedAt), formatTime(turn.EndedAt), turn.Error)
-	if err != nil {
-		return err
-	}
-	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
-		return fmt.Errorf("turn append failed: %s", turn.ID)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), sessionID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return retrySQLiteSequence(ctx, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		var ordinal int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM turns WHERE session_id = ?`, sessionID).Scan(&ordinal); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `INSERT INTO turns (id, session_id, ordinal, prompt, request_json, response_json, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			turn.ID, sessionID, ordinal, turn.Prompt, req, nullableBytes(resp), formatTime(turn.StartedAt), formatTime(turn.EndedAt), turn.Error)
+		if err != nil {
+			return err
+		}
+		if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+			return fmt.Errorf("turn append failed: %s", turn.ID)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), sessionID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
 }
 
 func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, error) {
@@ -534,23 +560,25 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]Sessi
 
 func (s *SQLiteStore) AppendEvent(ctx context.Context, ev Event) error {
 	normalizeEvent(ev.SessionID, &ev)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var ordinal int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM events WHERE session_id = ?`, ev.SessionID).Scan(&ordinal); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO events (id, session_id, turn_id, ordinal, at, type, tool, payload_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ev.ID, ev.SessionID, ev.TurnID, ordinal, formatTime(ev.At), ev.Type, ev.Tool, nullableBytes(ev.Payload), ev.Error); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), ev.SessionID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return retrySQLiteSequence(ctx, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		var ordinal int
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM events WHERE session_id = ?`, ev.SessionID).Scan(&ordinal); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO events (id, session_id, turn_id, ordinal, at, type, tool, payload_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ev.ID, ev.SessionID, ev.TurnID, ordinal, formatTime(ev.At), ev.Type, ev.Tool, nullableBytes(ev.Payload), ev.Error); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), ev.SessionID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
 }
 
 func (s *SQLiteStore) ListEvents(ctx context.Context, q EventQuery) ([]EventRecord, error) {
@@ -729,18 +757,31 @@ func (s *SQLiteStore) SaveRunWithEvent(ctx context.Context, run Run, event RunEv
 	normalizeRun(&run)
 	event.Run = run
 	normalizeRunEvent(&event)
-	tx, err := s.db.BeginTx(ctx, nil)
+	var savedEvent RunEvent
+	err := retrySQLiteSequence(ctx, func() error {
+		candidate := event
+		candidate.Seq = event.Seq
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err := saveRun(ctx, tx, run); err != nil {
+			return err
+		}
+		if err := appendRunEvent(ctx, tx, &candidate); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		savedEvent = candidate
+		return nil
+	})
 	if err != nil {
 		return run, event, err
 	}
-	defer tx.Rollback()
-	if err := saveRun(ctx, tx, run); err != nil {
-		return run, event, err
-	}
-	if err := appendRunEvent(ctx, tx, &event); err != nil {
-		return run, event, err
-	}
-	return run, event, tx.Commit()
+	return run, savedEvent, nil
 }
 
 type runWriter interface {
@@ -835,15 +876,28 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 
 func (s *SQLiteStore) AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error) {
 	normalizeRunEvent(&event)
-	tx, err := s.db.BeginTx(ctx, nil)
+	var saved RunEvent
+	err := retrySQLiteSequence(ctx, func() error {
+		candidate := event
+		candidate.Seq = event.Seq
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err := appendRunEvent(ctx, tx, &candidate); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		saved = candidate
+		return nil
+	})
 	if err != nil {
 		return event, err
 	}
-	defer tx.Rollback()
-	if err := appendRunEvent(ctx, tx, &event); err != nil {
-		return event, err
-	}
-	return event, tx.Commit()
+	return saved, nil
 }
 
 func appendRunEvent(ctx context.Context, writer runEventWriter, event *RunEvent) error {

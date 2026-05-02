@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -16,6 +17,23 @@ func TestSQLiteMigrationIsIdempotent(t *testing.T) {
 	}
 	if err := store.migrate(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRetrySQLiteSequenceRetriesUniqueConstraint(t *testing.T) {
+	attempts := 0
+	err := retrySQLiteSequence(context.Background(), func() error {
+		attempts++
+		if attempts < 3 {
+			return errors.New("constraint failed: UNIQUE constraint failed: events.session_id, events.ordinal (2067)")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("unique constraint retry 횟수가 이상해요: %d", attempts)
 	}
 }
 

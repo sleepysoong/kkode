@@ -14,8 +14,9 @@
 
 ## 다음 우선순위 후보예요
 
-1. SQLite append 순번 경합을 줄여야 해요.
-   - `session/sqlite_store.go`의 `MAX(seq)+1`, `MAX(ordinal)+1` 경로에 unique 제약이나 retry/직렬화 전략을 붙이는 게 좋아요.
+1. SQLite append 순번 경합을 줄였어요.
+   - `turns(session_id, ordinal)`, `events(session_id, ordinal)`에 unique index를 추가하고, `run_events(run_id, seq)`의 기존 unique 제약과 함께 `retrySQLiteSequence`로 짧게 재시도해요.
+   - `MAX(seq)+1`, `MAX(ordinal)+1` 경로가 동시에 같은 값을 잡아도 constraint가 막고 append helper가 다시 계산해요.
 
 2. run 상태 저장과 durable run event 저장을 한 transaction으로 묶었어요.
    - `session.RunSnapshotStore.SaveRunWithEvent`를 추가하고 SQLite 구현체에서 run snapshot과 `run_events` insert를 같은 transaction으로 처리해요.
