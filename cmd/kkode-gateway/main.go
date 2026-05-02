@@ -63,6 +63,7 @@ func run(args []string) error {
 		RunLister:            runManager.List,
 		RunCanceler:          runManager.Cancel,
 		Providers:            providerDTOs(),
+		ResourceStore:        store,
 	})
 	if err != nil {
 		return err

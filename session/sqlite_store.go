@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -99,6 +100,18 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL,
 			payload_json BLOB
 		);`,
+		`CREATE TABLE IF NOT EXISTS resources (
+			id TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			enabled INTEGER NOT NULL DEFAULT 1,
+			config_json BLOB NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY(kind, id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_resources_kind_updated ON resources(kind, updated_at);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -330,6 +343,133 @@ func (s *SQLiteStore) SaveTodos(ctx context.Context, sessionID string, todos []T
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *SQLiteStore) SaveResource(ctx context.Context, resource Resource) (Resource, error) {
+	normalizeResource(&resource)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO resources (id, kind, name, description, enabled, config_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(kind, id) DO UPDATE SET
+			name=excluded.name,
+			description=excluded.description,
+			enabled=excluded.enabled,
+			config_json=excluded.config_json,
+			updated_at=excluded.updated_at`,
+		resource.ID, string(resource.Kind), resource.Name, resource.Description, boolInt(resource.Enabled), nullableBytes(resource.Config), formatTime(resource.CreatedAt), formatTime(resource.UpdatedAt))
+	return resource, err
+}
+
+func (s *SQLiteStore) LoadResource(ctx context.Context, kind ResourceKind, id string) (Resource, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, kind, name, description, enabled, config_json, created_at, updated_at FROM resources WHERE kind = ? AND id = ?`, string(kind), id)
+	return scanResource(row)
+}
+
+func (s *SQLiteStore) ListResources(ctx context.Context, q ResourceQuery) ([]Resource, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	query := `SELECT id, kind, name, description, enabled, config_json, created_at, updated_at FROM resources`
+	args := []any{}
+	where := []string{}
+	if q.Kind != "" {
+		where = append(where, `kind = ?`)
+		args = append(args, string(q.Kind))
+	}
+	if q.Enabled != nil {
+		where = append(where, `enabled = ?`)
+		args = append(args, boolInt(*q.Enabled))
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Resource
+	for rows.Next() {
+		resource, err := scanResource(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, resource)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteResource(ctx context.Context, kind ResourceKind, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM resources WHERE kind = ? AND id = ?`, string(kind), id)
+	if err != nil {
+		return err
+	}
+	if count, err := res.RowsAffected(); err == nil && count == 0 {
+		return fmt.Errorf("resource not found: %s/%s", kind, id)
+	}
+	return nil
+}
+
+type resourceScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanResource(scanner resourceScanner) (Resource, error) {
+	var resource Resource
+	var kind string
+	var enabled int
+	var config []byte
+	var created, updated string
+	if err := scanner.Scan(&resource.ID, &kind, &resource.Name, &resource.Description, &enabled, &config, &created, &updated); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Resource{}, fmt.Errorf("resource not found")
+		}
+		return Resource{}, err
+	}
+	resource.Kind = ResourceKind(kind)
+	resource.Enabled = enabled != 0
+	if len(config) > 0 {
+		resource.Config = append([]byte(nil), config...)
+	}
+	resource.CreatedAt = parseTime(created)
+	resource.UpdatedAt = parseTime(updated)
+	return resource, nil
+}
+
+func normalizeResource(resource *Resource) {
+	now := time.Now().UTC()
+	if resource.ID == "" {
+		resource.ID = NewID(resourcePrefix(resource.Kind))
+	}
+	if len(resource.Config) == 0 {
+		resource.Config = json.RawMessage(`{}`)
+	}
+	if resource.CreatedAt.IsZero() {
+		resource.CreatedAt = now
+	}
+	resource.UpdatedAt = now
+}
+
+func resourcePrefix(kind ResourceKind) string {
+	switch kind {
+	case ResourceMCPServer:
+		return "mcp"
+	case ResourceSkill:
+		return "skill"
+	case ResourceSubagent:
+		return "subagent"
+	default:
+		return "resource"
+	}
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (s *SQLiteStore) loadTurns(ctx context.Context, sessionID string) ([]Turn, error) {

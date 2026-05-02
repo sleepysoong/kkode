@@ -162,6 +162,211 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TodoListResponse'
+
+  /api/v1/mcp/servers:
+    get:
+      summary: MCP server manifest 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/Enabled'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: MCP server manifest 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+    post:
+      summary: MCP server manifest를 저장해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '201':
+          description: 저장된 MCP server manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+  /api/v1/mcp/servers/{resource_id}:
+    get:
+      summary: MCP server manifest를 조회해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: MCP server manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: MCP server manifest를 갱신해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '200':
+          description: 갱신된 MCP server manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+    delete:
+      summary: MCP server manifest를 삭제해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '204':
+          description: 삭제됐어요.
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/skills:
+    get:
+      summary: skill manifest 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/Enabled'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: skill manifest 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+    post:
+      summary: skill manifest를 저장해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '201':
+          description: 저장된 skill manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+  /api/v1/skills/{resource_id}:
+    get:
+      summary: skill manifest를 조회해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: skill manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: skill manifest를 갱신해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '200':
+          description: 갱신된 skill manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+    delete:
+      summary: skill manifest를 삭제해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '204':
+          description: 삭제됐어요.
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/subagents:
+    get:
+      summary: subagent manifest 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/Enabled'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: subagent manifest 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+    post:
+      summary: subagent manifest를 저장해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '201':
+          description: 저장된 subagent manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+  /api/v1/subagents/{resource_id}:
+    get:
+      summary: subagent manifest를 조회해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: subagent manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: subagent manifest를 갱신해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resource'
+      responses:
+        '200':
+          description: 갱신된 subagent manifest예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+    delete:
+      summary: subagent manifest를 삭제해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '204':
+          description: 삭제됐어요.
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/runs:
     get:
       summary: background run 목록을 반환해요.
@@ -257,6 +462,24 @@ components:
       required: true
       schema:
         type: string
+    ResourceID:
+      in: path
+      name: resource_id
+      required: true
+      schema:
+        type: string
+    Enabled:
+      in: query
+      name: enabled
+      schema:
+        type: boolean
+    Limit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        default: 100
+        maximum: 500
   responses:
     Error:
       description: 표준 error envelope이에요.
@@ -463,6 +686,39 @@ components:
           type: object
           additionalProperties:
             type: string
+    ResourceListResponse:
+      type: object
+      required: [resources]
+      properties:
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+    Resource:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [mcp_server, skill, subagent]
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        config:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     RunListResponse:
       type: object
       required: [runs]

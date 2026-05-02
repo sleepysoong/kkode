@@ -7,9 +7,9 @@ func DefaultFeatureCatalog() []FeatureDTO {
 		{Name: "session_events", Status: "implemented", Description: "session event JSON replay와 SSE replay를 제공해요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/events"}},
 		{Name: "todos", Status: "implemented", Description: "agent todo 상태를 외부 status UI에서 읽을 수 있어요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/todos"}},
 		{Name: "background_runs", Status: "implemented", Description: "run을 즉시 접수하고 background 상태 조회와 취소를 제공해요.", Endpoints: []string{"GET /api/v1/runs", "POST /api/v1/runs", "GET /api/v1/runs/{run_id}", "POST /api/v1/runs/{run_id}/cancel"}},
-		{Name: "mcp", Status: "provider_pass_through", Description: "llm.MCPServer 타입과 Copilot/Codex/OmniRoute provider capability를 통해 연결할 수 있어요."},
-		{Name: "skills", Status: "provider_pass_through", Description: "llm.SessionRequest.Skills와 Copilot/Codex provider capability를 통해 연결할 수 있어요."},
-		{Name: "subagents", Status: "provider_pass_through", Description: "llm.Agent custom agent 타입과 Copilot provider 변환 경로를 제공해요."},
+		{Name: "mcp", Status: "implemented", Description: "MCP server manifest를 API와 SQLite에 저장하고 provider 연결 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/mcp/servers", "POST /api/v1/mcp/servers", "GET /api/v1/mcp/servers/{resource_id}", "PUT /api/v1/mcp/servers/{resource_id}", "DELETE /api/v1/mcp/servers/{resource_id}"}},
+		{Name: "skills", Status: "implemented", Description: "Skill manifest를 API와 SQLite에 저장하고 provider skill directory/prompt 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/skills", "POST /api/v1/skills", "GET /api/v1/skills/{resource_id}", "PUT /api/v1/skills/{resource_id}", "DELETE /api/v1/skills/{resource_id}"}},
+		{Name: "subagents", Status: "implemented", Description: "Subagent manifest를 API와 SQLite에 저장하고 custom agent 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/subagents", "POST /api/v1/subagents", "GET /api/v1/subagents/{resource_id}", "PUT /api/v1/subagents/{resource_id}", "DELETE /api/v1/subagents/{resource_id}"}},
 		{Name: "lsp", Status: "planned", Description: "LSP index/query API는 아직 runtime에 직접 연결되지 않았어요."},
 	}
 }

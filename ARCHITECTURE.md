@@ -386,13 +386,22 @@ GET  /api/v1/sessions/{session_id}
 POST /api/v1/sessions/{session_id}/fork
 GET  /api/v1/sessions/{session_id}/events
 GET  /api/v1/sessions/{session_id}/todos
+GET  /api/v1/mcp/servers
+POST /api/v1/mcp/servers
+GET  /api/v1/mcp/servers/{resource_id}
+PUT  /api/v1/mcp/servers/{resource_id}
+DELETE /api/v1/mcp/servers/{resource_id}
+GET  /api/v1/skills
+POST /api/v1/skills
+GET  /api/v1/subagents
+POST /api/v1/subagents
 GET  /api/v1/runs
 POST /api/v1/runs
 GET  /api/v1/runs/{run_id}
 POST /api/v1/runs/{run_id}/cancel
 ```
 
-`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. `/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
+`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. `/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
 
 ```bash
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'

@@ -25,6 +25,7 @@ type Config struct {
 	AllowLocalhostNoAuth bool
 	Providers            []ProviderDTO
 	Features             []FeatureDTO
+	ResourceStore        session.ResourceStore
 	RunStarter           RunStarter
 	RunGetter            RunGetter
 	RunLister            RunLister
@@ -115,6 +116,12 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSessions(w, r, parts)
 	case "runs":
 		s.handleRuns(w, r, parts)
+	case "mcp":
+		s.handleMCP(w, r, parts)
+	case "skills":
+		s.handleSkills(w, r, parts)
+	case "subagents":
+		s.handleSubagents(w, r, parts)
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}

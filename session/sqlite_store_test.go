@@ -99,3 +99,46 @@ func TestTodoToolsPersist(t *testing.T) {
 		t.Fatalf("todos=%#v", loaded.Todos)
 	}
 }
+
+func TestResourceStorePersistsManifests(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	enabled := true
+	saved, err := store.SaveResource(ctx, Resource{Kind: ResourceMCPServer, Name: "fs", Description: "filesystem mcp", Enabled: enabled, Config: []byte(`{"command":"mcp-fs"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.ID == "" || saved.Kind != ResourceMCPServer {
+		t.Fatalf("saved resource가 이상해요: %+v", saved)
+	}
+	loaded, err := store.LoadResource(ctx, ResourceMCPServer, saved.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Name != "fs" || string(loaded.Config) != `{"command":"mcp-fs"}` {
+		t.Fatalf("loaded resource가 이상해요: %+v", loaded)
+	}
+	items, err := store.ListResources(ctx, ResourceQuery{Kind: ResourceMCPServer, Enabled: &enabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != saved.ID {
+		t.Fatalf("resource list가 이상해요: %+v", items)
+	}
+	if err := store.DeleteResource(ctx, ResourceMCPServer, saved.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LoadResource(ctx, ResourceMCPServer, saved.ID); err == nil {
+		t.Fatal("삭제한 resource는 다시 읽히면 안 돼요")
+	}
+}
+
+func openSQLiteForTest(t *testing.T) *SQLiteStore {
+	t.Helper()
+	store, err := OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
