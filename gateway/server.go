@@ -136,6 +136,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleTools(w, r, parts)
 	case "files":
 		s.handleFiles(w, r, parts)
+	case "git":
+		s.handleGit(w, r, parts)
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -951,6 +952,83 @@ while True:
 	if got.Tool != "echo" || first["text"] != "hello kkode" {
 		t.Fatalf("MCP tools/call 결과가 이상해요: %+v", got)
 	}
+}
+
+func TestGatewayGitStatusDiffAndLog(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary가 없어요")
+	}
+	root := t.TempDir()
+	runTestGit(t, root, "init")
+	runTestGit(t, root, "config", "user.email", "kkode@example.com")
+	runTestGit(t, root, "config", "user.name", "kkode")
+	writeTestFile(t, filepath.Join(root, "README.md"), "hello\n")
+	runTestGit(t, root, "add", "README.md")
+	runTestGit(t, root, "commit", "-m", "initial")
+	writeTestFile(t, filepath.Join(root, "README.md"), "hello\nworld\n")
+	writeTestFile(t, filepath.Join(root, "new.txt"), "new\n")
+
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/git/status?project_root="+url.QueryEscape(root), nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var status GitStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.ProjectRoot == "" || len(status.Entries) < 2 || !hasGitPath(status.Entries, "README.md") || !hasGitPath(status.Entries, "new.txt") {
+		t.Fatalf("git status 응답이 이상해요: %+v", status)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&path=README.md", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("diff status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var diff GitDiffResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &diff); err != nil {
+		t.Fatal(err)
+	}
+	if diff.Path != "README.md" || !strings.Contains(diff.Diff, "+world") {
+		t.Fatalf("git diff 응답이 이상해요: %+v", diff)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/log?project_root="+url.QueryEscape(root)+"&limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("log status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var log GitLogResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &log); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.Commits) != 1 || log.Commits[0].Subject != "initial" {
+		t.Fatalf("git log 응답이 이상해요: %+v", log)
+	}
+}
+
+func runTestGit(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
+}
+
+func hasGitPath(entries []GitStatusEntryDTO, path string) bool {
+	for _, entry := range entries {
+		if entry.Path == path {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGatewayListsAndCallsStandardTools(t *testing.T) {

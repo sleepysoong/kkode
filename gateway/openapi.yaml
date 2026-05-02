@@ -154,6 +154,75 @@ paths:
                 $ref: '#/components/schemas/FileContentResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/git/status:
+    get:
+      summary: workspace git status를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: git status 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitStatusResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/git/diff:
+    get:
+      summary: workspace git diff를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          schema:
+            type: string
+        - in: query
+          name: max_bytes
+          schema:
+            type: integer
+            default: 1048576
+      responses:
+        '200':
+          description: git diff 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitDiffResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/git/log:
+    get:
+      summary: workspace git log를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: git log 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitLogResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/tools:
     get:
       summary: 표준 file/shell/web tool 목록을 반환해요.
@@ -1368,6 +1437,60 @@ components:
         path:
           type: string
         content:
+          type: string
+    GitStatusResponse:
+      type: object
+      required: [project_root, entries]
+      properties:
+        project_root:
+          type: string
+        branch:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitStatusEntry'
+    GitStatusEntry:
+      type: object
+      required: [xy, path, raw]
+      properties:
+        xy:
+          type: string
+        path:
+          type: string
+        raw:
+          type: string
+    GitDiffResponse:
+      type: object
+      required: [project_root, diff]
+      properties:
+        project_root:
+          type: string
+        path:
+          type: string
+        diff:
+          type: string
+        truncated:
+          type: boolean
+    GitLogResponse:
+      type: object
+      required: [project_root, commits]
+      properties:
+        project_root:
+          type: string
+        commits:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitLogEntry'
+    GitLogEntry:
+      type: object
+      required: [hash, subject, raw]
+      properties:
+        hash:
+          type: string
+        subject:
+          type: string
+        raw:
           type: string
     ToolListResponse:
       type: object
