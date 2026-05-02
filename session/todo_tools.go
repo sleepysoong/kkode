@@ -20,7 +20,8 @@ type todoListSaver interface {
 	SaveTodos(ctx context.Context, sessionID string, todos []Todo) error
 }
 
-func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry) {
+// TodoToolSet은 session todo 관리 tool을 한 묶음으로 조립해요.
+func TodoToolSet(store todoSaver, sessionID string) llm.ToolSet {
 	strict := true
 	defs := []llm.Tool{
 		{Kind: llm.ToolFunction, Name: "todo_write", Description: "현재 session의 todo 목록 전체를 저장해요", Strict: &strict, Parameters: tooldefs.ObjectSchema(map[string]any{"items": tooldefs.ArraySchema(tooldefs.ObjectSchema(map[string]any{"id": tooldefs.StringSchema(), "content": tooldefs.StringSchema(), "status": tooldefs.StringSchema(), "priority": tooldefs.StringSchema()}))})},
@@ -83,7 +84,12 @@ func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry)
 			return llm.ToolResult{CallID: call.CallID, Name: call.Name, Output: out}, nil
 		},
 	}
-	return defs, handlers
+	return llm.NewToolSet(defs, handlers)
+}
+
+// TodoTools는 기존 caller가 정의/handler를 따로 받을 수 있게 유지하는 wrapper예요.
+func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry) {
+	return TodoToolSet(store, sessionID).Parts()
 }
 
 func saveTodoList(ctx context.Context, store todoSaver, sess *Session) error {

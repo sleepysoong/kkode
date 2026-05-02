@@ -215,14 +215,13 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 	if opts.Model == "" && provider != nil {
 		opts.Model = DefaultModel(provider.Name())
 	}
-	toolDefs, toolHandlers := ktools.StandardTools(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+	toolSet := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
 	return agent.New(agent.Config{
 		Provider:      provider,
 		Model:         opts.Model,
 		Instructions:  opts.Instructions,
 		BaseRequest:   opts.BaseRequest,
-		Tools:         toolDefs,
-		ToolHandlers:  toolHandlers,
+		ToolSet:       toolSet,
 		MaxIterations: opts.MaxIterations,
 		Transcript:    opts.Transcript,
 		Guardrails:    opts.Guardrails,

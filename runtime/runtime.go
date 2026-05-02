@@ -57,11 +57,9 @@ func (r *Runtime) Run(ctx context.Context, opts RunOptions) (*RunResult, error) 
 	req = r.applySessionContext(sess, req)
 	if r.EnableTodos {
 		req.Messages = append([]llm.Message{llm.DeveloperText(session.TodoInstructions())}, req.Messages...)
-		defs, todoHandlers := session.TodoTools(r.Store, sess.ID)
-		req.Tools = append(req.Tools, defs...)
-		for name, handler := range todoHandlers {
-			handlers[name] = handler
-		}
+		tools := llm.NewToolSet(req.Tools, handlers)
+		tools.Merge(session.TodoToolSet(r.Store, sess.ID))
+		req.Tools, handlers = tools.Parts()
 	}
 	turn := session.NewTurn(opts.Prompt, req)
 	r.appendRuntimeEvent(sess, turn.ID, "turn.started", "", nil, "")

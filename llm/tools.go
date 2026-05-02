@@ -11,6 +11,49 @@ type ToolHandler func(ctx context.Context, call ToolCall) (ToolResult, error)
 
 type ToolRegistry map[string]ToolHandler
 
+// ToolSet은 model에 노출할 tool 정의와 실제 실행 handler를 한 묶음으로 들고 다녀요.
+// 같은 이름이 충돌하면 나중에 Merge된 handler가 이겨서 runtime이 명시적으로 덮어쓸 수 있어요.
+type ToolSet struct {
+	Definitions []Tool
+	Handlers    ToolRegistry
+}
+
+// NewToolSet은 외부 slice/map을 방어 복사해서 재사용 가능한 tool 묶음을 만들어요.
+func NewToolSet(defs []Tool, handlers ToolRegistry) ToolSet {
+	set := ToolSet{}
+	set.Definitions = append(set.Definitions, defs...)
+	if len(handlers) > 0 {
+		set.Handlers = ToolRegistry{}
+		for name, handler := range handlers {
+			set.Handlers[name] = handler
+		}
+	}
+	return set
+}
+
+// Clone은 caller가 안전하게 수정할 수 있는 복사본을 돌려줘요.
+func (s ToolSet) Clone() ToolSet { return NewToolSet(s.Definitions, s.Handlers) }
+
+// Merge는 다른 tool 묶음을 현재 묶음 뒤에 붙여요. handler 이름 충돌은 뒤쪽 묶음이 이겨요.
+func (s *ToolSet) Merge(other ToolSet) {
+	s.Definitions = append(s.Definitions, other.Definitions...)
+	if len(other.Handlers) == 0 {
+		return
+	}
+	if s.Handlers == nil {
+		s.Handlers = ToolRegistry{}
+	}
+	for name, handler := range other.Handlers {
+		s.Handlers[name] = handler
+	}
+}
+
+// Parts는 기존 API와 연결할 수 있게 정의와 handler registry를 복사해서 분리해요.
+func (s ToolSet) Parts() ([]Tool, ToolRegistry) {
+	cloned := s.Clone()
+	return cloned.Definitions, cloned.Handlers
+}
+
 func (r ToolRegistry) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	h, ok := r[call.Name]
 	if !ok {

@@ -54,7 +54,7 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []str
 }
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
-	defs, _ := ktools.StandardTools(ktools.SurfaceOptions{})
+	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
 	out := make([]ToolDTO, 0, len(defs))
 	for _, tool := range defs {
 		out = append(out, toToolDTO(tool))
@@ -79,7 +79,7 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
 		return
 	}
-	_, handlers := ktools.StandardTools(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes})
+	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes}).Parts()
 	args, err := json.Marshal(req.Arguments)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_arguments", err.Error())

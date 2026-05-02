@@ -17,6 +17,7 @@ type Config struct {
 	Model         string
 	Instructions  string
 	BaseRequest   llm.Request
+	ToolSet       llm.ToolSet
 	Tools         []llm.Tool
 	ToolHandlers  llm.ToolRegistry
 	MaxIterations int
@@ -153,12 +154,9 @@ func (a *Agent) request(prompt string, tools []llm.Tool) llm.Request {
 }
 
 func (a *Agent) tools() ([]llm.Tool, llm.ToolRegistry) {
-	defs := append([]llm.Tool{}, a.cfg.Tools...)
-	handlers := llm.ToolRegistry{}
-	for name, handler := range a.cfg.ToolHandlers {
-		handlers[name] = handler
-	}
-	return defs, handlers
+	set := a.cfg.ToolSet.Clone()
+	set.Merge(llm.NewToolSet(a.cfg.Tools, a.cfg.ToolHandlers))
+	return set.Parts()
 }
 
 func (a *Agent) instructions(tools []llm.Tool) string {

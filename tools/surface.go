@@ -18,21 +18,20 @@ type SurfaceOptions struct {
 	Timeout     time.Duration
 }
 
-// StandardTools는 file/shell/web 표준 tool surface를 한 번에 조립해요.
+// StandardToolSet은 file/shell/web 표준 tool surface를 한 묶음으로 조립해요.
 // 권한이나 승인 단계는 여기 없고, 연결된 workspace와 HTTP 설정으로 바로 실행해요.
-func StandardTools(opts SurfaceOptions) ([]llm.Tool, llm.ToolRegistry) {
+func StandardToolSet(opts SurfaceOptions) llm.ToolSet {
 	defs, handlers := FileTools(opts.Workspace)
+	set := llm.NewToolSet(defs, handlers)
 	if opts.NoWeb {
-		return defs, handlers
+		return set
 	}
 	webDefs, webHandlers := WebTools(WebConfig{HTTPClient: opts.HTTPClient, UserAgent: opts.UserAgent, MaxBytes: opts.WebMaxBytes, Timeout: opts.Timeout})
-	defs = append(defs, webDefs...)
-	mergeToolHandlers(handlers, webHandlers)
-	return defs, handlers
+	set.Merge(llm.NewToolSet(webDefs, webHandlers))
+	return set
 }
 
-func mergeToolHandlers(dst llm.ToolRegistry, src llm.ToolRegistry) {
-	for name, handler := range src {
-		dst[name] = handler
-	}
+// StandardTools는 기존 caller가 정의/handler를 따로 받을 수 있게 유지하는 wrapper예요.
+func StandardTools(opts SurfaceOptions) ([]llm.Tool, llm.ToolRegistry) {
+	return StandardToolSet(opts).Parts()
 }

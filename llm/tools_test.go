@@ -36,6 +36,30 @@ func (p *scriptedProvider) Generate(ctx context.Context, req Request) (*Response
 
 var testingError string
 
+func TestToolSetCloneMergeAndPartsAreReusable(t *testing.T) {
+	first := NewToolSet([]Tool{{Kind: ToolFunction, Name: "same"}}, ToolRegistry{
+		"same": JSONToolHandler(func(ctx context.Context, in struct{}) (string, error) { return "first", nil }),
+	})
+	second := NewToolSet([]Tool{{Kind: ToolFunction, Name: "other"}}, ToolRegistry{
+		"same":  JSONToolHandler(func(ctx context.Context, in struct{}) (string, error) { return "second", nil }),
+		"other": JSONToolHandler(func(ctx context.Context, in struct{}) (string, error) { return "other", nil }),
+	})
+	first.Merge(second)
+	defs, handlers := first.Parts()
+	if len(defs) != 2 {
+		t.Fatalf("merged definitions=%#v", defs)
+	}
+	result, err := handlers.Execute(context.Background(), ToolCall{Name: "same", Arguments: []byte(`{}`)})
+	if err != nil || result.Output != "second" {
+		t.Fatalf("나중에 merge한 handler가 이겨야 해요: result=%#v err=%v", result, err)
+	}
+	handlers["same"] = nil
+	_, freshHandlers := first.Parts()
+	if freshHandlers["same"] == nil {
+		t.Fatal("Parts는 handler map을 방어 복사해야 해요")
+	}
+}
+
 func TestRunToolLoopPreservesProviderItemsAndAppendsToolOutput(t *testing.T) {
 	testingError = ""
 	p := &scriptedProvider{}
