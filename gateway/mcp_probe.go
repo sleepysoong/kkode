@@ -28,6 +28,37 @@ type MCPToolListResponse struct {
 	Tools  []MCPToolDTO `json:"tools"`
 }
 
+// MCPResourceDTO는 MCP resources/list 결과를 외부 API에 노출하는 항목이에요.
+type MCPResourceDTO struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mime_type,omitempty"`
+}
+
+type MCPResourceListResponse struct {
+	Server    ResourceDTO      `json:"server"`
+	Resources []MCPResourceDTO `json:"resources"`
+}
+
+// MCPPromptDTO는 MCP prompts/list 결과를 외부 API에 노출하는 항목이에요.
+type MCPPromptDTO struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	Arguments   []MCPPromptArgumentDTO `json:"arguments,omitempty"`
+}
+
+type MCPPromptArgumentDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+type MCPPromptListResponse struct {
+	Server  ResourceDTO    `json:"server"`
+	Prompts []MCPPromptDTO `json:"prompts"`
+}
+
 type MCPToolCallRequest struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
@@ -48,25 +79,64 @@ type mcpProbeConfig struct {
 }
 
 func (s *Server) listMCPServerTools(w http.ResponseWriter, r *http.Request, serverID string) {
-	store := s.resourceStore()
-	if store == nil {
-		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
-		return
-	}
-	resource, err := store.LoadResource(r.Context(), session.ResourceMCPServer, serverID)
-	if err != nil {
-		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
-		return
-	}
-	tools, err := probeMCPTools(r.Context(), resource)
-	if err != nil {
-		writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
-		return
-	}
-	writeJSON(w, MCPToolListResponse{Server: toResourceDTO(resource), Tools: tools})
+	s.listMCPServerToolsLike(w, r, serverID, "tools")
+}
+
+func (s *Server) listMCPServerResources(w http.ResponseWriter, r *http.Request, serverID string) {
+	s.listMCPServerToolsLike(w, r, serverID, "resources")
+}
+
+func (s *Server) listMCPServerPrompts(w http.ResponseWriter, r *http.Request, serverID string) {
+	s.listMCPServerToolsLike(w, r, serverID, "prompts")
+}
+
+func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, serverID string, kind string) {
+	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
+		switch kind {
+		case "tools":
+			tools, err := probeMCPTools(r.Context(), resource)
+			if err != nil {
+				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
+				return
+			}
+			writeJSON(w, MCPToolListResponse{Server: toResourceDTO(resource), Tools: tools})
+		case "resources":
+			resources, err := probeMCPResources(r.Context(), resource)
+			if err != nil {
+				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
+				return
+			}
+			writeJSON(w, MCPResourceListResponse{Server: toResourceDTO(resource), Resources: resources})
+		case "prompts":
+			prompts, err := probeMCPPrompts(r.Context(), resource)
+			if err != nil {
+				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
+				return
+			}
+			writeJSON(w, MCPPromptListResponse{Server: toResourceDTO(resource), Prompts: prompts})
+		}
+	})
 }
 
 func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serverID string, toolName string) {
+	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
+		var req MCPToolCallRequest
+		if r.Body != nil && r.ContentLength != 0 {
+			if err := decodeJSON(r, &req); err != nil {
+				writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+				return
+			}
+		}
+		result, err := callMCPTool(r.Context(), resource, toolName, req.Arguments)
+		if err != nil {
+			writeError(w, r, http.StatusBadGateway, "mcp_tool_call_failed", err.Error())
+			return
+		}
+		writeJSON(w, MCPToolCallResponse{Server: toResourceDTO(resource), Tool: toolName, Result: result})
+	})
+}
+
+func (s *Server) withMCPServer(w http.ResponseWriter, r *http.Request, serverID string, fn func(session.Resource)) {
 	store := s.resourceStore()
 	if store == nil {
 		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
@@ -77,19 +147,7 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
 		return
 	}
-	var req MCPToolCallRequest
-	if r.Body != nil && r.ContentLength != 0 {
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
-			return
-		}
-	}
-	result, err := callMCPTool(r.Context(), resource, toolName, req.Arguments)
-	if err != nil {
-		writeError(w, r, http.StatusBadGateway, "mcp_tool_call_failed", err.Error())
-		return
-	}
-	writeJSON(w, MCPToolCallResponse{Server: toResourceDTO(resource), Tool: toolName, Result: result})
+	fn(resource)
 }
 
 func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO, error) {
@@ -98,6 +156,22 @@ func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO
 		return nil, err
 	}
 	return parseMCPTools(resp)
+}
+
+func probeMCPResources(ctx context.Context, resource session.Resource) ([]MCPResourceDTO, error) {
+	resp, err := runStdioMCPRequest(ctx, resource, "resources/list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	return parseMCPResources(resp)
+}
+
+func probeMCPPrompts(ctx context.Context, resource session.Resource) ([]MCPPromptDTO, error) {
+	resp, err := runStdioMCPRequest(ctx, resource, "prompts/list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	return parseMCPPrompts(resp)
 }
 
 func callMCPTool(ctx context.Context, resource session.Resource, toolName string, arguments map[string]any) (map[string]any, error) {
@@ -262,6 +336,56 @@ func parseMCPTools(msg map[string]any) ([]MCPToolDTO, error) {
 	return out, nil
 }
 
+func parseMCPResources(msg map[string]any) ([]MCPResourceDTO, error) {
+	result, _ := msg["result"].(map[string]any)
+	items, _ := result["resources"].([]any)
+	out := make([]MCPResourceDTO, 0, len(items))
+	for _, item := range items {
+		raw, _ := item.(map[string]any)
+		if raw == nil {
+			continue
+		}
+		resource := MCPResourceDTO{URI: stringValue(raw["uri"]), Name: stringValue(raw["name"]), Description: stringValue(raw["description"]), MimeType: stringValue(raw["mimeType"])}
+		if resource.URI != "" {
+			out = append(out, resource)
+		}
+	}
+	return out, nil
+}
+
+func parseMCPPrompts(msg map[string]any) ([]MCPPromptDTO, error) {
+	result, _ := msg["result"].(map[string]any)
+	items, _ := result["prompts"].([]any)
+	out := make([]MCPPromptDTO, 0, len(items))
+	for _, item := range items {
+		raw, _ := item.(map[string]any)
+		if raw == nil {
+			continue
+		}
+		prompt := MCPPromptDTO{Name: stringValue(raw["name"]), Description: stringValue(raw["description"]), Arguments: parseMCPPromptArguments(raw["arguments"])}
+		if prompt.Name != "" {
+			out = append(out, prompt)
+		}
+	}
+	return out, nil
+}
+
+func parseMCPPromptArguments(value any) []MCPPromptArgumentDTO {
+	items, _ := value.([]any)
+	out := make([]MCPPromptArgumentDTO, 0, len(items))
+	for _, item := range items {
+		raw, _ := item.(map[string]any)
+		if raw == nil {
+			continue
+		}
+		arg := MCPPromptArgumentDTO{Name: stringValue(raw["name"]), Description: stringValue(raw["description"]), Required: boolValue(raw["required"])}
+		if arg.Name != "" {
+			out = append(out, arg)
+		}
+	}
+	return out
+}
+
 func numericID(value any) int {
 	switch v := value.(type) {
 	case float64:
@@ -278,6 +402,11 @@ func stringValue(value any) string {
 		return s
 	}
 	return ""
+}
+
+func boolValue(value any) bool {
+	v, _ := value.(bool)
+	return v
 }
 
 func withStderr(err error, stderr string) error {

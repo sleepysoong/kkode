@@ -7,7 +7,6 @@ import (
 
 	"github.com/sleepysoong/kkode/llm"
 	ktools "github.com/sleepysoong/kkode/tools"
-	"github.com/sleepysoong/kkode/workspace"
 )
 
 // ToolDTO는 gateway가 외부 adapter에 노출하는 표준 tool 정의예요.
@@ -55,7 +54,7 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []str
 }
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
-	defs, _ := standardToolSurface(nil, 0)
+	defs, _ := ktools.StandardTools(ktools.SurfaceOptions{})
 	out := make([]ToolDTO, 0, len(defs))
 	for _, tool := range defs {
 		out = append(out, toToolDTO(tool))
@@ -75,12 +74,12 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "project_root와 tool이 필요해요")
 		return
 	}
-	ws, err := workspace.New(req.ProjectRoot)
+	ws, _, err := newWorkspace(req.ProjectRoot)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
 		return
 	}
-	_, handlers := standardToolSurface(ws, req.WebMaxBytes)
+	_, handlers := ktools.StandardTools(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes})
 	args, err := json.Marshal(req.Arguments)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_arguments", err.Error())
@@ -92,16 +91,6 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: result.Output, Error: result.Error})
-}
-
-func standardToolSurface(ws *workspace.Workspace, webMaxBytes int64) ([]llm.Tool, llm.ToolRegistry) {
-	defs, handlers := ktools.FileTools(ws)
-	webDefs, webHandlers := ktools.WebTools(ktools.WebConfig{MaxBytes: webMaxBytes})
-	defs = append(defs, webDefs...)
-	for name, handler := range webHandlers {
-		handlers[name] = handler
-	}
-	return defs, handlers
 }
 
 func toToolDTO(tool llm.Tool) ToolDTO {

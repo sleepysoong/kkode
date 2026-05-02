@@ -215,14 +215,7 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 	if opts.Model == "" && provider != nil {
 		opts.Model = DefaultModel(provider.Name())
 	}
-	toolDefs, toolHandlers := ktools.FileTools(ws)
-	if !opts.NoWeb {
-		webDefs, webHandlers := ktools.WebTools(ktools.WebConfig{MaxBytes: opts.WebMaxBytes})
-		toolDefs = append(toolDefs, webDefs...)
-		for name, handler := range webHandlers {
-			toolHandlers[name] = handler
-		}
-	}
+	toolDefs, toolHandlers := ktools.StandardTools(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
 	return agent.New(agent.Config{
 		Provider:      provider,
 		Model:         opts.Model,

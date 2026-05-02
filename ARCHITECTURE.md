@@ -204,7 +204,7 @@ func NewRuntime(store session.Store, ag *agent.Agent, opts RuntimeOptions) *runt
 func DefaultCompactionPolicy() session.CompactionPolicy
 ```
 
-`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `BuildProviderWithOptions`는 같은 registry entry의 factory를 실행하므로 새 provider를 추가할 때 spec, alias, capability, 생성 로직을 한 곳에서 맞추면 돼요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `BuildProviderWithOptions`는 같은 registry entry의 factory를 실행하므로 새 provider를 추가할 때 spec, alias, capability, 생성 로직을 한 곳에서 맞추면 돼요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
 ## Prompt 템플릿 구현체
 
@@ -297,7 +297,7 @@ if err != nil {
 client := openai.New(openai.Config{APIKey: os.Getenv("OPENAI_API_KEY")})
 tr := transcript.New("session-1")
 
-defs, handlers := tools.FileTools(ws)
+defs, handlers := tools.StandardTools(tools.SurfaceOptions{Workspace: ws})
 
 ag, err := agent.New(agent.Config{
     Provider:     client,
@@ -416,6 +416,8 @@ GET  /api/v1/mcp/servers/{resource_id}
 PUT  /api/v1/mcp/servers/{resource_id}
 DELETE /api/v1/mcp/servers/{resource_id}
 GET  /api/v1/mcp/servers/{resource_id}/tools
+GET  /api/v1/mcp/servers/{resource_id}/resources
+GET  /api/v1/mcp/servers/{resource_id}/prompts
 POST /api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call
 GET  /api/v1/skills
 POST /api/v1/skills
@@ -443,7 +445,7 @@ POST /api/v1/runs/{run_id}/cancel
 POST /api/v1/runs/{run_id}/retry
 ```
 
-`GET /api/v1/openapi.yaml`은 gateway가 실행 중인 API 계약을 그대로 제공해서 SDK 생성과 adapter smoke test에 쓸 수 있게 해요. `GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. `GET /api/v1/models`는 provider별 모델 catalog, 기본 모델, capability, auth 상태를 평탄화해서 모델 선택 UI에 바로 쓰게 해요. `GET /api/v1/prompts` 계열은 system/session/todo prompt template 목록, 원문, 렌더링 preview를 제공해서 외부 패널이 prompt 설정 화면을 만들 수 있게 해요. `GET /api/v1/tools`와 `POST /api/v1/tools/call`은 표준 file/shell/web tool surface를 API로 직접 노출해요. `GET /api/v1/files`와 `GET/PUT /api/v1/files/content`는 웹 패널 파일 브라우저가 쓰기 쉬운 전용 wrapper예요. 이 endpoint도 권한 프롬프트 없이 project root 기준으로 즉시 실행해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio manifest는 `/api/v1/mcp/servers/{resource_id}/tools`로 `initialize`와 `tools/list` probe를 실행할 수 있고, `/api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call`로 `tools/call`을 직접 검증할 수 있어요. `GET /api/v1/skills/{resource_id}/preview`는 저장된 skill directory의 `SKILL.md` 또는 `README.md`를 읽어서 외부 패널 preview로 돌려줘요. `GET /api/v1/subagents/{resource_id}/preview`는 subagent prompt, tools, MCP server alias, skill 참조를 실행 전 확인하는 API예요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 workspace symbol index를 반환하고, `GET /api/v1/lsp/document-symbols`는 파일 하나의 outline을 반환해요. `GET /api/v1/lsp/definitions`와 `GET /api/v1/lsp/references`는 symbol 이름 기준 definition/reference 위치와 excerpt를 반환해서 외부 패널의 go-to-definition/reference view를 만들 수 있게 해요. `GET /api/v1/lsp/diagnostics`는 Go parser diagnostic을 반환하고, `GET /api/v1/lsp/hover`는 symbol signature와 doc comment를 반환해요. LSP scan은 `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리는 건너뛰며 `limit`에 도달하면 scan을 조기 중단해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달하고, `session.RunEventStore`는 같은 상태 변경을 `run_events` SQLite table에 저장해요. 외부 Discord/Slack/web adapter는 session turns API로 대화 히스토리를 렌더링하고, session checkpoint API로 복구용 snapshot payload를 저장하고, session todo API로 진행 상태를 직접 보정하거나, `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. session `/events`는 저장된 event replay이고, run `/events`는 durable replay와 live 상태 변경을 함께 제공해요.
+`GET /api/v1/openapi.yaml`은 gateway가 실행 중인 API 계약을 그대로 제공해서 SDK 생성과 adapter smoke test에 쓸 수 있게 해요. `GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. `GET /api/v1/models`는 provider별 모델 catalog, 기본 모델, capability, auth 상태를 평탄화해서 모델 선택 UI에 바로 쓰게 해요. `GET /api/v1/prompts` 계열은 system/session/todo prompt template 목록, 원문, 렌더링 preview를 제공해서 외부 패널이 prompt 설정 화면을 만들 수 있게 해요. `GET /api/v1/tools`와 `POST /api/v1/tools/call`은 표준 file/shell/web tool surface를 API로 직접 노출해요. `GET /api/v1/files`와 `GET/PUT /api/v1/files/content`는 웹 패널 파일 브라우저가 쓰기 쉬운 전용 wrapper예요. 이 endpoint도 권한 프롬프트 없이 project root 기준으로 즉시 실행해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio manifest는 `/api/v1/mcp/servers/{resource_id}/tools`, `/resources`, `/prompts`로 `initialize` 뒤 `tools/list`, `resources/list`, `prompts/list` probe를 실행할 수 있고, `/api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call`로 `tools/call`을 직접 검증할 수 있어요. `GET /api/v1/skills/{resource_id}/preview`는 저장된 skill directory의 `SKILL.md` 또는 `README.md`를 읽어서 외부 패널 preview로 돌려줘요. `GET /api/v1/subagents/{resource_id}/preview`는 subagent prompt, tools, MCP server alias, skill 참조를 실행 전 확인하는 API예요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 workspace symbol index를 반환하고, `GET /api/v1/lsp/document-symbols`는 파일 하나의 outline을 반환해요. `GET /api/v1/lsp/definitions`와 `GET /api/v1/lsp/references`는 symbol 이름 기준 definition/reference 위치와 excerpt를 반환해서 외부 패널의 go-to-definition/reference view를 만들 수 있게 해요. `GET /api/v1/lsp/diagnostics`는 Go parser diagnostic을 반환하고, `GET /api/v1/lsp/hover`는 symbol signature와 doc comment를 반환해요. LSP scan은 `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리는 건너뛰며 `limit`에 도달하면 scan을 조기 중단해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달하고, `session.RunEventStore`는 같은 상태 변경을 `run_events` SQLite table에 저장해요. 외부 Discord/Slack/web adapter는 session turns API로 대화 히스토리를 렌더링하고, session checkpoint API로 복구용 snapshot payload를 저장하고, session todo API로 진행 상태를 직접 보정하거나, `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. session `/events`는 저장된 event replay이고, run `/events`는 durable replay와 live 상태 변경을 함께 제공해요.
 
 ```bash
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
@@ -809,6 +811,12 @@ fmt.Println(a2a.Text)
 패키지는 `tools`예요. `workspace.Tools()`는 기존 `workspace_*` 이름을 유지하고, `tools.FileTools`는 실제 agent prompt에서 쓰기 쉬운 짧은 표준 이름을 제공해요.
 
 ```go
+type SurfaceOptions struct {
+    Workspace *workspace.Workspace
+    NoWeb bool
+    WebMaxBytes int64
+}
+func StandardTools(opts SurfaceOptions) ([]llm.Tool, llm.ToolRegistry)
 func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry)
 func WebTools(cfg WebConfig) ([]llm.Tool, llm.ToolRegistry)
 func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, timeout time.Duration) (*WebFetchResult, error)

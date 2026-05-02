@@ -69,6 +69,9 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("표준 file_read tool은 노출해야해요")
 	}
+	if _, ok := handlers["web_fetch"]; ok {
+		t.Fatal("NoWeb이면 web_fetch를 자동 노출하지 않아요")
+	}
 	if _, ok := handlers["workspace_read_file"]; ok {
 		t.Fatal("이전 workspace_* tool은 agent에 자동 노출하지 않아요")
 	}
@@ -76,6 +79,15 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 		if tool.Name == "workspace_read_file" {
 			t.Fatal("이전 workspace_* tool 정의가 request에 들어가면 안 돼요")
 		}
+	}
+
+	ag, err = NewAgent(fakeProvider{}, ws, AgentOptions{Model: "fake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, handlers = ag.Prepare("웹도 써요")
+	if _, ok := handlers["web_fetch"]; !ok {
+		t.Fatal("기본 agent surface에는 web_fetch도 붙어야 해요")
 	}
 }
 

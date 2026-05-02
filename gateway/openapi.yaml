@@ -577,6 +577,38 @@ paths:
           $ref: '#/components/responses/Error'
         '502':
           $ref: '#/components/responses/Error'
+  /api/v1/mcp/servers/{resource_id}/resources:
+    get:
+      summary: MCP stdio server를 probe해서 resources/list 결과를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: MCP resource 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResourceListResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
+  /api/v1/mcp/servers/{resource_id}/prompts:
+    get:
+      summary: MCP stdio server를 probe해서 prompts/list 결과를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+      responses:
+        '200':
+          description: MCP prompt 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPPromptListResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '502':
+          $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call:
     post:
       summary: MCP stdio server tool을 직접 호출해요.
@@ -1553,6 +1585,60 @@ components:
         input_schema:
           type: object
           additionalProperties: true
+    MCPResourceListResponse:
+      type: object
+      required: [server, resources]
+      properties:
+        server:
+          $ref: '#/components/schemas/Resource'
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPResource'
+    MCPResource:
+      type: object
+      required: [uri]
+      properties:
+        uri:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        mime_type:
+          type: string
+    MCPPromptListResponse:
+      type: object
+      required: [server, prompts]
+      properties:
+        server:
+          $ref: '#/components/schemas/Resource'
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPPrompt'
+    MCPPrompt:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        arguments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPPromptArgument'
+    MCPPromptArgument:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
     MCPToolCallRequest:
       type: object
       properties:

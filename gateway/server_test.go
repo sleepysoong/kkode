@@ -754,6 +754,75 @@ while True:
 	}
 }
 
+func TestGatewayProbesMCPServerResourcesAndPrompts(t *testing.T) {
+	root := t.TempDir()
+	serverPath := filepath.Join(root, "fake_mcp_resources.py")
+	writeTestFile(t, serverPath, `import json, sys
+
+def read_frame():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline().decode().strip()
+        if not line:
+            break
+        key, value = line.split(":", 1)
+        headers[key.lower()] = value.strip()
+    body = sys.stdin.buffer.read(int(headers["content-length"]))
+    return json.loads(body)
+
+def write_frame(payload):
+    data = json.dumps(payload).encode()
+    sys.stdout.buffer.write(b"Content-Length: %d\r\n\r\n" % len(data) + data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_frame()
+    method = msg.get("method")
+    if method == "initialize":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"protocolVersion":"2024-11-05","capabilities":{"resources":{},"prompts":{}}}})
+    elif method == "resources/list":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"resources":[{"uri":"file:///README.md","name":"README","description":"문서","mimeType":"text/markdown"}]}})
+        break
+    elif method == "prompts/list":
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"prompts":[{"name":"review","description":"리뷰","arguments":[{"name":"path","description":"대상","required":True}]}]}})
+        break
+`)
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceMCPServer, Name: "fake", Enabled: true, Config: []byte(`{"kind":"stdio","command":"python3","args":["` + serverPath + `"],"timeout":3}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/resources", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resources status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resources MCPResourceListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resources); err != nil {
+		t.Fatal(err)
+	}
+	if resources.Server.ID != resource.ID || len(resources.Resources) != 1 || resources.Resources[0].URI != "file:///README.md" || resources.Resources[0].MimeType != "text/markdown" {
+		t.Fatalf("MCP resources/list 결과가 이상해요: %+v", resources)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/prompts", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prompts status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var prompts MCPPromptListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &prompts); err != nil {
+		t.Fatal(err)
+	}
+	if prompts.Server.ID != resource.ID || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "review" || len(prompts.Prompts[0].Arguments) != 1 || !prompts.Prompts[0].Arguments[0].Required {
+		t.Fatalf("MCP prompts/list 결과가 이상해요: %+v", prompts)
+	}
+}
+
 func TestGatewayCallsMCPServerTool(t *testing.T) {
 	root := t.TempDir()
 	serverPath := filepath.Join(root, "fake_mcp_call.py")
