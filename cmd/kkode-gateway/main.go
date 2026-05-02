@@ -13,7 +13,7 @@ import (
 
 	"github.com/sleepysoong/kkode/app"
 	"github.com/sleepysoong/kkode/gateway"
-	agentruntime "github.com/sleepysoong/kkode/runtime"
+	kruntime "github.com/sleepysoong/kkode/runtime"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -58,12 +58,7 @@ func run(args []string) error {
 		APIKey:               *apiKey,
 		AllowLocalhostNoAuth: *allowLocalhostNoAuth,
 		RunStarter:           syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}),
-		Providers: []gateway.ProviderDTO{
-			{Name: "openai", AuthStatus: envAuthStatus("OPENAI_API_KEY")},
-			{Name: "omniroute", AuthStatus: envAuthStatus("OMNIROUTE_API_KEY")},
-			{Name: "copilot", AuthStatus: envAuthStatus("COPILOT_GITHUB_TOKEN")},
-			{Name: "codex", AuthStatus: "local"},
-		},
+		Providers:            providerDTOs(),
 	})
 	if err != nil {
 		return err
@@ -109,25 +104,9 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if err != nil {
 			return nil, err
 		}
-		rt := &agentruntime.Runtime{
-			Store:           store,
-			Agent:           ag,
-			ProjectRoot:     absRoot,
-			ProviderName:    providerHandle.Provider.Name(),
-			Model:           model,
-			AgentName:       firstNonEmpty(sess.AgentName, "kkode-gateway"),
-			Mode:            sess.Mode,
-			MaxHistoryTurns: 8,
-			EnableTodos:     true,
-			Compaction: session.CompactionPolicy{
-				Enabled:             true,
-				TriggerTokenRatio:   0.85,
-				PreserveFirstNTurns: 1,
-				PreserveLastNTurns:  4,
-			},
-		}
+		rt := app.NewRuntime(store, ag, app.RuntimeOptions{ProjectRoot: absRoot, ProviderName: providerHandle.Provider.Name(), Model: model, AgentName: firstNonEmpty(sess.AgentName, "kkode-gateway"), Mode: sess.Mode})
 		started := time.Now().UTC()
-		result, runErr := rt.Run(ctx, agentruntime.RunOptions{SessionID: req.SessionID, Prompt: req.Prompt})
+		result, runErr := rt.Run(ctx, kruntime.RunOptions{SessionID: req.SessionID, Prompt: req.Prompt})
 		run := &gateway.RunDTO{SessionID: req.SessionID, Prompt: req.Prompt, Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.ID = "run_" + strings.TrimPrefix(result.Turn.ID, "turn_")
@@ -160,18 +139,18 @@ func isLoopbackListenAddr(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func envAuthStatus(keys ...string) string {
-	for _, key := range keys {
-		if os.Getenv(key) != "" {
-			return "configured"
-		}
-	}
-	return "missing"
-}
-
 func firstNonEmpty(value, fallback string) string {
 	if strings.TrimSpace(value) != "" {
 		return value
 	}
 	return fallback
+}
+
+func providerDTOs() []gateway.ProviderDTO {
+	specs := app.ProviderSpecs()
+	out := make([]gateway.ProviderDTO, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, gateway.ProviderDTO{Name: spec.Name, Models: []string{spec.DefaultModel}, AuthStatus: app.ProviderAuthStatus(spec)})
+	}
+	return out
 }

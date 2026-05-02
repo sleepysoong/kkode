@@ -172,13 +172,13 @@ erDiagram
 
 ### 앱 조립: `app/`
 
-- `app.BuildProvider`, `app.NewWorkspace`, `app.NewAgent`가 CLI/gateway의 중복 조립 코드를 줄여요.
+- `app.ProviderSpecs`, `app.BuildProvider`, `app.NewWorkspace`, `app.NewAgent`, `app.NewRuntime`이 CLI/gateway의 중복 조립 코드를 줄여요.
 - agent 표면에는 표준 `file_*`, `shell_run`, `web_fetch` tool만 붙이고, 이전 `workspace_*` tool 자동 주입은 하지 않아요.
 
 ### Prompt 템플릿: `prompts/`
 
 - `agent-system.md`, `session-summary-context.md`, `session-compaction.md`, `todo-instructions.md`를 파일로 관리해요.
-- `prompts.Render`가 Go `text/template` 기반으로 system prompt, session 압축 요약, todo 지침을 렌더링해요.
+- `prompts.Render`가 Go `text/template` 기반으로 system prompt, session 압축 요약, todo 지침을 렌더링하고 template parse 결과를 캐시해요.
 - prompt 문구는 코드가 아니라 `prompts/*.md`를 수정해서 바꿀 수 있어요.
 
 ### Agent runtime: `agent/`
@@ -193,7 +193,7 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 비동기로 실행하고 결과 순서는 보존해요.
+- `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
 - `Auth`, `Model`, `ModelRegistry`, `Usage.EstimatedCost`를 제공해요.
@@ -427,8 +427,9 @@ registry := llm.ToolRegistry{
 }
 
 resp, err := llm.RunToolLoop(ctx, client, req, registry, llm.ToolLoopOptions{
-    MaxIterations:     8,
-    ParallelToolCalls: true,
+    MaxIterations:        8,
+    ParallelToolCalls:    true,
+    MaxParallelToolCalls: 4,
 })
 ```
 

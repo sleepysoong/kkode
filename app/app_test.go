@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/session"
+	"github.com/sleepysoong/kkode/workspace"
 )
 
 func TestCSVAndDefaultModel(t *testing.T) {
@@ -20,6 +22,15 @@ func TestCSVAndDefaultModel(t *testing.T) {
 	}
 	if DefaultModel("openai") != "gpt-5-mini" {
 		t.Fatal("openai 기본 모델이 바뀌면 안 돼요")
+	}
+	if DefaultModel("codex-cli") != DefaultModel("codex") {
+		t.Fatal("provider alias 기본 모델이 흔들리면 안 돼요")
+	}
+	if spec, ok := ResolveProviderSpec("github-copilot"); !ok || spec.Name != "copilot" {
+		t.Fatalf("provider alias resolve failed: %#v %v", spec, ok)
+	}
+	if ProviderAuthStatus(ProviderSpec{Name: "local", Local: true}) != "local" {
+		t.Fatal("local provider auth status가 바뀌면 안 돼요")
 	}
 }
 
@@ -50,6 +61,29 @@ func TestNewAgentRejectsNilWorkspace(t *testing.T) {
 	if _, err := NewAgent(fakeProvider{}, nil, AgentOptions{Model: "fake"}); err == nil {
 		t.Fatal("workspace 없이 agent를 조립하면 안 돼요")
 	}
+}
+
+func TestNewRuntimeAppliesReusableDefaults(t *testing.T) {
+	ag, err := NewAgent(fakeProvider{}, mustWorkspace(t), AgentOptions{Model: "fake", NoWeb: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := NewRuntime(nil, ag, RuntimeOptions{ProjectRoot: "/repo", ProviderName: "fake", Model: "fake"})
+	if rt.AgentName != "kkode-agent" || rt.Mode != session.AgentModeBuild || rt.MaxHistoryTurns != 8 {
+		t.Fatalf("runtime defaults=%#v", rt)
+	}
+	if !rt.EnableTodos || !rt.Compaction.Enabled || rt.Compaction.PreserveLastNTurns != 4 {
+		t.Fatalf("runtime policies=%#v", rt)
+	}
+}
+
+func mustWorkspace(t *testing.T) *workspace.Workspace {
+	t.Helper()
+	ws, _, err := NewWorkspace(WorkspaceOptions{Root: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ws
 }
 
 type fakeProvider struct{}

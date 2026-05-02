@@ -64,3 +64,15 @@ func TestRedactSecrets(t *testing.T) {
 		t.Fatal("secret was not redacted")
 	}
 }
+
+func TestRenderTranscriptPromptAndTextResponse(t *testing.T) {
+	got := RenderTranscriptPrompt(Request{Instructions: "rules", Messages: []Message{UserText("hi")}, InputItems: []Item{{Content: "tail"}}}, TranscriptPromptOptions{InstructionHeader: "Instructions:"})
+	want := "Instructions:\nrules\n\nUSER: hi\ntail"
+	if got != want {
+		t.Fatalf("prompt=%q", got)
+	}
+	resp := TextResponse("p", "m", "hello")
+	if resp.Provider != "p" || resp.Model != "m" || resp.Status != "completed" || resp.Text != "hello" || len(resp.Output) != 1 || resp.Output[0].Role != RoleAssistant {
+		t.Fatalf("resp=%#v", resp)
+	}
+}

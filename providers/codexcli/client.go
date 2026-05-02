@@ -61,7 +61,7 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 		return nil, err
 	}
 	text := strings.TrimSpace(string(data))
-	return &llm.Response{Provider: c.Name(), Model: req.Model, Status: "completed", Text: text, Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: text}}}, nil
+	return llm.TextResponse(c.Name(), req.Model, text), nil
 }
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
@@ -188,26 +188,7 @@ func parseCodexEvent(raw []byte, provider string) llm.StreamEvent {
 }
 
 func renderPrompt(req llm.Request) string {
-	var b strings.Builder
-	if req.Instructions != "" {
-		b.WriteString(req.Instructions)
-		b.WriteString("\n\n")
-	}
-	for _, m := range req.Messages {
-		if m.Content != "" {
-			b.WriteString(strings.ToUpper(string(m.Role)))
-			b.WriteString(": ")
-			b.WriteString(m.Content)
-			b.WriteString("\n")
-		}
-	}
-	for _, item := range req.InputItems {
-		if item.Content != "" {
-			b.WriteString(item.Content)
-			b.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(b.String())
+	return llm.RenderTranscriptPrompt(req, llm.TranscriptPromptOptions{})
 }
 
 func firstNonEmpty(v, fallback string) string {

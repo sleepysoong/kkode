@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -91,9 +92,59 @@ func TestRunToolLoopCanExecuteToolCallsInParallel(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopLimitsParallelToolCalls(t *testing.T) {
+	p := &manyToolProvider{count: 20}
+	var active atomic.Int32
+	var maxSeen atomic.Int32
+	reg := ToolRegistry{
+		"work": JSONToolHandler(func(ctx context.Context, in struct{}) (string, error) {
+			now := active.Add(1)
+			for {
+				previous := maxSeen.Load()
+				if now <= previous || maxSeen.CompareAndSwap(previous, now) {
+					break
+				}
+			}
+			time.Sleep(5 * time.Millisecond)
+			active.Add(-1)
+			return "ok", nil
+		}),
+	}
+	if _, err := RunToolLoop(context.Background(), p, Request{Model: "test", Messages: []Message{UserText("go")}}, reg, ToolLoopOptions{MaxIterations: 2, ParallelToolCalls: true, MaxParallelToolCalls: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if maxSeen.Load() > 3 {
+		t.Fatalf("parallel limit exceeded: %d", maxSeen.Load())
+	}
+}
+
 type parallelProvider struct {
 	calls      int
 	sawOutputs string
+}
+
+type manyToolProvider struct {
+	count int
+	calls int
+}
+
+func (p *manyToolProvider) Name() string { return "many" }
+func (p *manyToolProvider) Capabilities() Capabilities {
+	return Capabilities{Tools: true, ParallelToolCalls: true}
+}
+func (p *manyToolProvider) Generate(ctx context.Context, req Request) (*Response, error) {
+	p.calls++
+	if p.calls > 1 {
+		return TextResponse(p.Name(), req.Model, "done"), nil
+	}
+	calls := make([]ToolCall, 0, p.count)
+	output := make([]Item, 0, p.count)
+	for i := 0; i < p.count; i++ {
+		call := ToolCall{CallID: fmt.Sprintf("call_%d", i), Name: "work", Arguments: json.RawMessage(`{}`)}
+		calls = append(calls, call)
+		output = append(output, Item{Type: ItemFunctionCall, ToolCall: &calls[len(calls)-1]})
+	}
+	return &Response{ID: "many_1", Output: output, ToolCalls: calls}, nil
 }
 
 func (p *parallelProvider) Name() string { return "parallel" }

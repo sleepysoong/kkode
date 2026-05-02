@@ -14,7 +14,7 @@ import (
 	"github.com/sleepysoong/kkode/agent"
 	"github.com/sleepysoong/kkode/app"
 	"github.com/sleepysoong/kkode/llm"
-	agentruntime "github.com/sleepysoong/kkode/runtime"
+	kruntime "github.com/sleepysoong/kkode/runtime"
 	"github.com/sleepysoong/kkode/session"
 	"github.com/sleepysoong/kkode/transcript"
 )
@@ -142,24 +142,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			return openErr
 		}
 		defer store.Close()
-		rt := &agentruntime.Runtime{
-			Store:           store,
-			Agent:           ag,
-			ProjectRoot:     absRoot,
-			ProviderName:    provider.Name(),
-			Model:           *model,
-			AgentName:       "kkode-agent",
-			Mode:            session.AgentModeBuild,
-			MaxHistoryTurns: 8,
-			EnableTodos:     true,
-			Compaction: session.CompactionPolicy{
-				Enabled:             true,
-				TriggerTokenRatio:   0.85,
-				PreserveFirstNTurns: 1,
-				PreserveLastNTurns:  4,
-			},
-		}
-		runResult, runErr := rt.Run(ctx, agentruntime.RunOptions{SessionID: *sessionID, ForkFrom: *forkSessionID, ForkAt: *forkAtTurnID, Prompt: prompt})
+		rt := app.NewRuntime(store, ag, app.RuntimeOptions{ProjectRoot: absRoot, ProviderName: provider.Name(), Model: *model, AgentName: "kkode-agent"})
+		runResult, runErr := rt.Run(ctx, kruntime.RunOptions{SessionID: *sessionID, ForkFrom: *forkSessionID, ForkAt: *forkAtTurnID, Prompt: prompt})
 		err = runErr
 		if runResult != nil {
 			result = runResult.Agent

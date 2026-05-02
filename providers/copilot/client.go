@@ -57,18 +57,16 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 	}
 	var finalText strings.Builder
 	session, err := client.CreateSession(ctx, &ghcopilot.SessionConfig{
-		ClientName:       firstNonEmpty(c.cfg.ClientName, "kkode"),
-		Model:            req.Model,
-		ReasoningEffort:  reasoningEffort(req.Reasoning),
-		WorkingDirectory: c.cfg.WorkingDirectory,
-		Tools:            c.cfg.Tools,
-		MCPServers:       c.cfg.MCPServers,
-		CustomAgents:     c.cfg.CustomAgents,
-		SkillDirectories: c.cfg.SkillDirectories,
-		DisabledSkills:   c.cfg.DisabledSkills,
-		OnPermissionRequest: func(request ghcopilot.PermissionRequest, invocation ghcopilot.PermissionInvocation) (ghcopilot.PermissionRequestResult, error) {
-			return ghcopilot.PermissionRequestResult{Kind: ghcopilot.PermissionRequestResultKindApproved}, nil
-		},
+		ClientName:          firstNonEmpty(c.cfg.ClientName, "kkode"),
+		Model:               req.Model,
+		ReasoningEffort:     reasoningEffort(req.Reasoning),
+		WorkingDirectory:    c.cfg.WorkingDirectory,
+		Tools:               c.cfg.Tools,
+		MCPServers:          c.cfg.MCPServers,
+		CustomAgents:        c.cfg.CustomAgents,
+		SkillDirectories:    c.cfg.SkillDirectories,
+		DisabledSkills:      c.cfg.DisabledSkills,
+		OnPermissionRequest: approvePermissionHandler(),
 		OnEvent: func(event ghcopilot.SessionEvent) {
 			if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
 				finalText.WriteString(d.Content)
@@ -92,17 +90,7 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 			finalText.WriteString(d.Content)
 		}
 	}
-	return &llm.Response{
-		Provider: c.Name(),
-		Model:    req.Model,
-		Status:   "completed",
-		Text:     finalText.String(),
-		Output: []llm.Item{{
-			Type:    llm.ItemMessage,
-			Role:    llm.RoleAssistant,
-			Content: finalText.String(),
-		}},
-	}, nil
+	return llm.TextResponse(c.Name(), req.Model, finalText.String()), nil
 }
 
 func (c *Client) ensureClient(ctx context.Context) (*ghcopilot.Client, error) {
@@ -163,28 +151,7 @@ func ToCopilotTool(tool llm.Tool, handler llm.ToolHandler) ghcopilot.Tool {
 }
 
 func renderPrompt(req llm.Request) string {
-	var b strings.Builder
-	if req.Instructions != "" {
-		b.WriteString("Instructions:\n")
-		b.WriteString(req.Instructions)
-		b.WriteString("\n\n")
-	}
-	for _, msg := range req.Messages {
-		if msg.Content == "" {
-			continue
-		}
-		b.WriteString(strings.ToUpper(string(msg.Role)))
-		b.WriteString(": ")
-		b.WriteString(msg.Content)
-		b.WriteString("\n")
-	}
-	for _, item := range req.InputItems {
-		if item.Content != "" {
-			b.WriteString(item.Content)
-			b.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(b.String())
+	return llm.RenderTranscriptPrompt(req, llm.TranscriptPromptOptions{InstructionHeader: "Instructions:"})
 }
 
 func reasoningEffort(r *llm.ReasoningConfig) string {
@@ -247,7 +214,7 @@ func (s *Session) Send(ctx context.Context, req llm.Request) (*llm.Response, err
 			finalText.WriteString(d.Content)
 		}
 	}
-	return &llm.Response{Provider: s.client.Name(), Model: firstNonEmpty(req.Model, s.model), Status: "completed", Text: finalText.String(), Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: finalText.String()}}}, nil
+	return llm.TextResponse(s.client.Name(), firstNonEmpty(req.Model, s.model), finalText.String()), nil
 }
 
 func (s *Session) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {

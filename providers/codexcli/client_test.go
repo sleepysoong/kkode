@@ -17,7 +17,7 @@ func TestParseCodexEvent(t *testing.T) {
 	}
 }
 
-func TestRenderPrompt(t *testing.T) {
+func TestRenderPromptUsesSharedTranscriptRenderer(t *testing.T) {
 	got := renderPrompt(llm.Request{Instructions: "rules", Messages: []llm.Message{llm.UserText("hi")}})
 	if got != "rules\n\nUSER: hi" {
 		t.Fatalf("prompt=%q", got)

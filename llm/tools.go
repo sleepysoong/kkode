@@ -47,8 +47,9 @@ func JSONToolHandler[T any](fn func(context.Context, T) (string, error)) ToolHan
 }
 
 type ToolLoopOptions struct {
-	MaxIterations     int
-	ParallelToolCalls bool
+	MaxIterations        int
+	ParallelToolCalls    bool
+	MaxParallelToolCalls int
 }
 
 // RunToolLoop는 Responses-style tool loop를 실행해요.
@@ -69,7 +70,7 @@ func RunToolLoop(ctx context.Context, p Provider, req Request, tools ToolRegistr
 			return resp, nil
 		}
 		current.InputItems = append(current.InputItems, resp.Output...)
-		results := executeToolCalls(ctx, resp.ToolCalls, tools, opts.ParallelToolCalls)
+		results := executeToolCalls(ctx, resp.ToolCalls, tools, opts.ParallelToolCalls, opts.MaxParallelToolCalls)
 		for _, result := range results {
 			current.InputItems = append(current.InputItems, Item{Type: itemTypeForResult(result), ToolResult: &result})
 		}
@@ -79,7 +80,7 @@ func RunToolLoop(ctx context.Context, p Provider, req Request, tools ToolRegistr
 	return nil, fmt.Errorf("tool loop exceeded %d iterations", max)
 }
 
-func executeToolCalls(ctx context.Context, calls []ToolCall, tools ToolRegistry, parallel bool) []ToolResult {
+func executeToolCalls(ctx context.Context, calls []ToolCall, tools ToolRegistry, parallel bool, maxParallel int) []ToolResult {
 	results := make([]ToolResult, len(calls))
 	if !parallel || len(calls) < 2 {
 		for i, call := range calls {
@@ -87,12 +88,26 @@ func executeToolCalls(ctx context.Context, calls []ToolCall, tools ToolRegistry,
 		}
 		return results
 	}
+	if maxParallel <= 0 {
+		maxParallel = 4
+	}
+	if maxParallel > len(calls) {
+		maxParallel = len(calls)
+	}
+	sem := make(chan struct{}, maxParallel)
 	var wg sync.WaitGroup
 	wg.Add(len(calls))
 	for i, call := range calls {
 		i, call := i, call
 		go func() {
 			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				results[i] = ToolResult{CallID: call.CallID, Name: call.Name, Error: ctx.Err().Error(), Custom: call.Custom}
+				return
+			}
 			results[i] = executeToolCall(ctx, tools, call)
 		}()
 	}

@@ -12,6 +12,8 @@ import (
 	"github.com/sleepysoong/kkode/providers/copilot"
 	"github.com/sleepysoong/kkode/providers/omniroute"
 	"github.com/sleepysoong/kkode/providers/openai"
+	kruntime "github.com/sleepysoong/kkode/runtime"
+	"github.com/sleepysoong/kkode/session"
 	ktools "github.com/sleepysoong/kkode/tools"
 	"github.com/sleepysoong/kkode/transcript"
 	"github.com/sleepysoong/kkode/workspace"
@@ -21,6 +23,15 @@ import (
 type ProviderHandle struct {
 	Provider llm.Provider
 	Close    func() error
+}
+
+// ProviderSpec은 provider 이름, alias, 기본 모델, 인증 힌트를 한 곳에서 관리해요.
+type ProviderSpec struct {
+	Name         string
+	Aliases      []string
+	DefaultModel string
+	AuthEnv      []string
+	Local        bool
 }
 
 // WorkspaceOptions는 workspace 경계를 정하는 옵션이에요.
@@ -41,9 +52,27 @@ type AgentOptions struct {
 	Observer      agent.Observer
 }
 
+// RuntimeOptions는 CLI/gateway가 같은 session runtime 기본값을 쓰도록 모아둔 옵션이에요.
+type RuntimeOptions struct {
+	ProjectRoot        string
+	ProviderName       string
+	Model              string
+	AgentName          string
+	Mode               session.AgentMode
+	MaxHistoryTurns    int
+	EnableTodos        bool
+	Compaction         session.CompactionPolicy
+	DisableCompaction  bool
+	DisableTodoHelpers bool
+}
+
 // BuildProvider는 환경변수 기반 provider 생성을 한 곳에서 처리해요.
 func BuildProvider(name, root string) (ProviderHandle, error) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
+	spec, ok := ResolveProviderSpec(name)
+	if !ok {
+		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
+	}
+	switch spec.Name {
 	case "openai", "openai-compatible":
 		return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")})}, nil
 	case "omniroute":
@@ -52,20 +81,54 @@ func BuildProvider(name, root string) (ProviderHandle, error) {
 		client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN")))})
 		return ProviderHandle{Provider: client, Close: client.Close}, nil
 	case "codex", "codexcli", "codex-cli":
-		return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: EnvDefault("CODEX_SANDBOX", "danger-full-access"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
+		return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
 	default:
-		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
+		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", spec.Name)
 	}
 }
 
 // DefaultModel은 provider별 기본 모델을 정해요.
 func DefaultModel(provider string) string {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "codex", "codexcli", "codex-cli":
-		return "gpt-5.3-codex"
-	default:
-		return "gpt-5-mini"
+	if spec, ok := ResolveProviderSpec(provider); ok {
+		return spec.DefaultModel
 	}
+	return "gpt-5-mini"
+}
+
+func ProviderSpecs() []ProviderSpec {
+	return []ProviderSpec{
+		{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"OPENAI_API_KEY"}},
+		{Name: "omniroute", DefaultModel: "gpt-5-mini", AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}},
+		{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}},
+		{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Local: true},
+	}
+}
+
+func ResolveProviderSpec(name string) (ProviderSpec, bool) {
+	needle := strings.ToLower(strings.TrimSpace(name))
+	for _, spec := range ProviderSpecs() {
+		if needle == spec.Name {
+			return spec, true
+		}
+		for _, alias := range spec.Aliases {
+			if needle == alias {
+				return spec, true
+			}
+		}
+	}
+	return ProviderSpec{}, false
+}
+
+func ProviderAuthStatus(spec ProviderSpec) string {
+	if spec.Local {
+		return "local"
+	}
+	for _, key := range spec.AuthEnv {
+		if os.Getenv(key) != "" {
+			return "configured"
+		}
+	}
+	return "missing"
 }
 
 // NewWorkspace는 root를 절대 경로로 정규화하고 즉시 실행형 workspace를 만들어요.
@@ -113,6 +176,46 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 		Guardrails:    opts.Guardrails,
 		Observer:      opts.Observer,
 	})
+}
+
+// NewRuntime은 CLI와 gateway가 공유하는 session runtime 기본값을 적용해요.
+func NewRuntime(store session.Store, ag *agent.Agent, opts RuntimeOptions) *kruntime.Runtime {
+	if opts.AgentName == "" {
+		opts.AgentName = "kkode-agent"
+	}
+	if opts.Mode == "" {
+		opts.Mode = session.AgentModeBuild
+	}
+	if opts.MaxHistoryTurns <= 0 {
+		opts.MaxHistoryTurns = 8
+	}
+	if !opts.DisableTodoHelpers {
+		opts.EnableTodos = true
+	}
+	if !opts.DisableCompaction && !opts.Compaction.Enabled {
+		opts.Compaction = DefaultCompactionPolicy()
+	}
+	return &kruntime.Runtime{
+		Store:           store,
+		Agent:           ag,
+		ProjectRoot:     opts.ProjectRoot,
+		ProviderName:    opts.ProviderName,
+		Model:           opts.Model,
+		AgentName:       opts.AgentName,
+		Mode:            opts.Mode,
+		MaxHistoryTurns: opts.MaxHistoryTurns,
+		Compaction:      opts.Compaction,
+		EnableTodos:     opts.EnableTodos,
+	}
+}
+
+func DefaultCompactionPolicy() session.CompactionPolicy {
+	return session.CompactionPolicy{
+		Enabled:             true,
+		TriggerTokenRatio:   0.85,
+		PreserveFirstNTurns: 1,
+		PreserveLastNTurns:  4,
+	}
 }
 
 // CSV는 쉼표로 구분한 환경변수/flag 값을 빈 항목 없이 잘라요.

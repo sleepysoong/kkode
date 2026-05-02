@@ -223,3 +223,13 @@ type Usage struct {
 
 func Bool(v bool) *bool          { return &v }
 func Float64(v float64) *float64 { return &v }
+
+func TextResponse(provider, model, text string) *Response {
+	return &Response{
+		Provider: provider,
+		Model:    model,
+		Status:   "completed",
+		Text:     text,
+		Output:   []Item{{Type: ItemMessage, Role: RoleAssistant, Content: text}},
+	}
+}

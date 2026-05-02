@@ -192,13 +192,18 @@ type Tool struct {
 패키지는 `app`이에요. CLI와 gateway가 provider 생성, workspace 정책, 표준 tool 조립을 중복 구현하지 않도록 모아둔 얇은 조립 계층이에요. 핵심 domain 타입은 여전히 `llm`, `agent`, `runtime`, `session`이 소유해요.
 
 ```go
+func ProviderSpecs() []ProviderSpec
+func ResolveProviderSpec(name string) (ProviderSpec, bool)
+func ProviderAuthStatus(spec ProviderSpec) string
 func BuildProvider(name, root string) (ProviderHandle, error)
 func DefaultModel(provider string) string
 func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error)
 func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions) (*agent.Agent, error)
+func NewRuntime(store session.Store, ag *agent.Agent, opts RuntimeOptions) *runtime.Runtime
+func DefaultCompactionPolicy() session.CompactionPolicy
 ```
 
-`NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+`ProviderSpecs`는 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.FileTools`와 선택적 `tools.WebTools`만 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
 ## Prompt 템플릿 구현체
 
@@ -532,7 +537,7 @@ func RunToolLoop(
 1. provider를 호출해요.
 2. `Response.ToolCalls`가 없으면 최종 응답을 반환해요.
 3. provider가 돌려준 `Response.Output` item을 다음 request에 보존해요.
-4. local tool을 실행해요. `ToolLoopOptions.ParallelToolCalls`가 true면 여러 tool call을 비동기로 실행하고 결과 순서는 보존해요.
+4. local tool을 실행해요. `ToolLoopOptions.ParallelToolCalls`가 true면 여러 tool call을 `MaxParallelToolCalls` 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 5. `function_call_output` 또는 `custom_tool_call_output` item을 추가해요.
 6. 최대 반복 횟수까지 다시 호출해요.
 
@@ -552,8 +557,9 @@ registry := llm.ToolRegistry{
 }
 
 resp, err := llm.RunToolLoop(ctx, provider, req, registry, llm.ToolLoopOptions{
-    MaxIterations:     8,
-    ParallelToolCalls: true,
+    MaxIterations:        8,
+    ParallelToolCalls:    true,
+    MaxParallelToolCalls: 4,
 })
 ```
 

@@ -29,7 +29,7 @@ func TestToCopilotToolExecutesLLMHandler(t *testing.T) {
 	}
 }
 
-func TestRenderPrompt(t *testing.T) {
+func TestRenderPromptUsesSharedTranscriptRenderer(t *testing.T) {
 	got := renderPrompt(llm.Request{Instructions: "be terse", Messages: []llm.Message{llm.UserText("hello")}})
 	want := "Instructions:\nbe terse\n\nUSER: hello"
 	if got != want {
