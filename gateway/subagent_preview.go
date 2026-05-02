@@ -30,22 +30,14 @@ type subagentPreviewConfig struct {
 }
 
 func (s *Server) previewSubagent(w http.ResponseWriter, r *http.Request, subagentID string) {
-	store := s.resourceStore()
-	if store == nil {
-		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
-		return
-	}
-	resource, err := store.LoadResource(r.Context(), session.ResourceSubagent, subagentID)
-	if err != nil {
-		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
-		return
-	}
-	preview, err := subagentPreviewFromResource(resource)
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "subagent_preview_failed", err.Error())
-		return
-	}
-	writeJSON(w, preview)
+	s.withResource(w, r, session.ResourceSubagent, subagentID, func(resource session.Resource) {
+		preview, err := subagentPreviewFromResource(resource)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "subagent_preview_failed", err.Error())
+			return
+		}
+		writeJSON(w, preview)
+	})
 }
 
 func subagentPreviewFromResource(resource session.Resource) (SubagentPreviewResponse, error) {

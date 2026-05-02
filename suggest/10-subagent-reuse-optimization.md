@@ -22,8 +22,8 @@
    - `session.RunSnapshotStore.SaveRunWithEvent`를 추가하고 SQLite 구현체에서 run snapshot과 `run_events` insert를 같은 transaction으로 처리해요.
    - `gateway.AsyncRunManager.persist`는 이 interface가 있으면 SaveRun+AppendRunEvent 분리 경로 대신 원자 저장을 우선 사용해요.
 
-3. Resource 계열 handler의 `LoadResource`/not found/store missing 반복을 helper로 묶어야 해요.
-   - MCP/skill/subagent preview API가 같은 저장소 로딩 패턴을 더 안전하게 재사용할 수 있어요.
+3. Resource 계열 handler의 `LoadResource`/not found/store missing 반복을 helper로 묶었어요.
+   - `gateway.Server.withResource`가 MCP/skill/subagent preview와 단건 조회의 store missing, not found 응답을 같은 방식으로 처리해요.
 
 4. LSP도 files/git과 같은 project root 검증 helper를 쓰게 해야 해요.
    - path 검증과 오류 응답이 gateway 전반에서 더 일관돼요.

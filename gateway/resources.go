@@ -102,12 +102,9 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 	id := rest[0]
 	switch r.Method {
 	case http.MethodGet:
-		resource, err := store.LoadResource(r.Context(), route.Kind, id)
-		if err != nil {
-			writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
-			return
-		}
-		writeJSON(w, toResourceDTO(resource))
+		s.withResource(w, r, route.Kind, id, func(resource session.Resource) {
+			writeJSON(w, toResourceDTO(resource))
+		})
 	case http.MethodPut:
 		s.saveResource(w, r, store, route, id)
 	case http.MethodDelete:
@@ -119,6 +116,20 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 	default:
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 resource method예요")
 	}
+}
+
+func (s *Server) withResource(w http.ResponseWriter, r *http.Request, kind session.ResourceKind, id string, fn func(session.Resource)) {
+	store := s.resourceStore()
+	if store == nil {
+		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
+		return
+	}
+	resource, err := store.LoadResource(r.Context(), kind, id)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
+		return
+	}
+	fn(resource)
 }
 
 func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute) {

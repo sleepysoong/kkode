@@ -25,22 +25,14 @@ type skillPreviewConfig struct {
 }
 
 func (s *Server) previewSkill(w http.ResponseWriter, r *http.Request, skillID string) {
-	store := s.resourceStore()
-	if store == nil {
-		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
-		return
-	}
-	resource, err := store.LoadResource(r.Context(), session.ResourceSkill, skillID)
-	if err != nil {
-		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
-		return
-	}
-	preview, err := readSkillPreview(resource, queryInt(r, "max_bytes", 65536))
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "skill_preview_failed", err.Error())
-		return
-	}
-	writeJSON(w, preview)
+	s.withResource(w, r, session.ResourceSkill, skillID, func(resource session.Resource) {
+		preview, err := readSkillPreview(resource, queryInt(r, "max_bytes", 65536))
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "skill_preview_failed", err.Error())
+			return
+		}
+		writeJSON(w, preview)
+	})
 }
 
 func readSkillPreview(resource session.Resource, maxBytes int) (SkillPreviewResponse, error) {

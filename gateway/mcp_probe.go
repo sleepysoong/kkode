@@ -200,17 +200,7 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 }
 
 func (s *Server) withMCPServer(w http.ResponseWriter, r *http.Request, serverID string, fn func(session.Resource)) {
-	store := s.resourceStore()
-	if store == nil {
-		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
-		return
-	}
-	resource, err := store.LoadResource(r.Context(), session.ResourceMCPServer, serverID)
-	if err != nil {
-		writeError(w, r, http.StatusNotFound, "resource_not_found", err.Error())
-		return
-	}
-	fn(resource)
+	s.withResource(w, r, session.ResourceMCPServer, serverID, fn)
 }
 
 func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO, error) {
