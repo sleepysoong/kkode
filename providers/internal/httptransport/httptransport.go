@@ -10,6 +10,65 @@ import (
 	"time"
 )
 
+// RetryConfig는 provider HTTP 호출의 공통 retry/backoff 정책이에요.
+type RetryConfig struct {
+	MaxRetries int
+	MinBackoff time.Duration
+	MaxBackoff time.Duration
+}
+
+// NormalizeRetry는 0값 config를 provider 기본 retry 정책으로 채워요.
+func NormalizeRetry(retry RetryConfig) RetryConfig {
+	if retry.MaxRetries == 0 {
+		retry.MaxRetries = 2
+	}
+	if retry.MinBackoff == 0 {
+		retry.MinBackoff = 250 * time.Millisecond
+	}
+	if retry.MaxBackoff == 0 {
+		retry.MaxBackoff = 2 * time.Second
+	}
+	return retry
+}
+
+// DoWithRetry는 retry 가능한 HTTP status와 transport 오류를 같은 backoff 정책으로 재시도해요.
+func DoWithRetry(client *http.Client, req *http.Request, payload []byte, retry RetryConfig) (*http.Response, error) {
+	retry = NormalizeRetry(retry)
+	attempts := retry.MaxRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			backoff := retry.MinBackoff << (i - 1)
+			if backoff > retry.MaxBackoff {
+				backoff = retry.MaxBackoff
+			}
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(backoff):
+			}
+		}
+		clone := req.Clone(req.Context())
+		clone.Body = io.NopCloser(bytes.NewReader(payload))
+		res, err := DefaultClient(client).Do(clone)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+			lastErr = fmt.Errorf("retryable status: %s", res.Status)
+			_, _ = io.Copy(io.Discard, res.Body)
+			_ = res.Body.Close()
+			continue
+		}
+		return res, nil
+	}
+	return nil, lastErr
+}
+
 // DefaultClient는 provider들이 공유하는 장시간 LLM 호출용 HTTP client 기본값을 돌려줘요.
 func DefaultClient(client *http.Client) *http.Client {
 	if client != nil {

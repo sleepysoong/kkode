@@ -29,6 +29,6 @@
    - `handleLSP`와 scan helper가 `newWorkspace` 기반 root 정규화를 써서 파일이거나 없는 root를 일관된 `invalid_workspace` 응답으로 막아요.
 
 5. OpenAI-compatible provider transport 공통화를 시작했어요.
-   - `providers/internal/httptransport`가 JSON request 생성, bearer auth, custom header 복사, response body 오류 처리를 공유해요.
+   - `providers/internal/httptransport`가 JSON request 생성, bearer auth, custom header 복사, response body 오류 처리, retry/backoff를 공유해요.
    - OpenAI Responses client와 OmniRoute management/A2A helper가 같은 transport 규칙을 재사용해요.
-   - 다음 단계는 retry/backoff 정책과 streaming SSE parser까지 compatible provider 공통 경계로 더 분리하는 일이에요.
+   - 다음 단계는 streaming SSE parser와 compatible error normalization을 공통 경계로 더 분리하는 일이에요.

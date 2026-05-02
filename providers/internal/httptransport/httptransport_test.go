@@ -38,3 +38,29 @@ func TestDoJSONRawReturnsErrorBody(t *testing.T) {
 		t.Fatalf("error body가 필요해요: %v", err)
 	}
 }
+
+func TestDoWithRetryRetriesServerErrors(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "try again", http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer server.Close()
+	req, payload, err := NewJSONRequest(context.Background(), http.MethodPost, server.URL, "", nil, map[string]any{"model": "gpt"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := DoWithRetry(server.Client(), req, payload, RetryConfig{MaxRetries: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if attempts != 2 || res.StatusCode != http.StatusOK {
+		t.Fatalf("retry 결과가 이상해요: attempts=%d status=%d", attempts, res.StatusCode)
+	}
+}

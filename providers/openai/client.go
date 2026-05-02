@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/internal/httptransport"
@@ -28,11 +26,7 @@ type Config struct {
 	ProviderName string
 }
 
-type RetryConfig struct {
-	MaxRetries int
-	MinBackoff time.Duration
-	MaxBackoff time.Duration
-}
+type RetryConfig = httptransport.RetryConfig
 
 type Client struct {
 	baseURL      string
@@ -49,16 +43,7 @@ func New(cfg Config) *Client {
 		base = defaultBaseURL
 	}
 	hc := httptransport.DefaultClient(cfg.HTTPClient)
-	retry := cfg.Retry
-	if retry.MaxRetries == 0 {
-		retry.MaxRetries = 2
-	}
-	if retry.MinBackoff == 0 {
-		retry.MinBackoff = 250 * time.Millisecond
-	}
-	if retry.MaxBackoff == 0 {
-		retry.MaxBackoff = 2 * time.Second
-	}
+	retry := httptransport.NormalizeRetry(cfg.Retry)
 	providerName := strings.TrimSpace(cfg.ProviderName)
 	if providerName == "" {
 		providerName = "openai-compatible"
@@ -362,37 +347,5 @@ func buildTextFormat(tf llm.TextFormat) map[string]any {
 }
 
 func (c *Client) do(req *http.Request, payload []byte) (*http.Response, error) {
-	attempts := c.retry.MaxRetries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
-	var lastErr error
-	for i := 0; i < attempts; i++ {
-		if i > 0 {
-			backoff := c.retry.MinBackoff << (i - 1)
-			if backoff > c.retry.MaxBackoff {
-				backoff = c.retry.MaxBackoff
-			}
-			select {
-			case <-req.Context().Done():
-				return nil, req.Context().Err()
-			case <-time.After(backoff):
-			}
-		}
-		clone := req.Clone(req.Context())
-		clone.Body = io.NopCloser(bytes.NewReader(payload))
-		res, err := c.httpClient.Do(clone)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
-			lastErr = fmt.Errorf("retryable status: %s", res.Status)
-			_, _ = io.Copy(io.Discard, res.Body)
-			_ = res.Body.Close()
-			continue
-		}
-		return res, nil
-	}
-	return nil, lastErr
+	return httptransport.DoWithRetry(c.httpClient, req, payload, c.retry)
 }

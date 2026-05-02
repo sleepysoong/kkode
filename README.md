@@ -212,7 +212,7 @@ erDiagram
 - `providers/openai`
   - OpenAI-compatible `/v1/responses` provider예요.
   - SSE streaming, retry/backoff, built-in tool helper, response parsing을 제공해요.
-  - `providers/internal/httptransport`의 JSON request/header helper를 써서 파생 provider와 HTTP 처리 방식을 공유해요.
+  - `providers/internal/httptransport`의 JSON request/header/retry helper를 써서 파생 provider와 HTTP 처리 방식을 공유해요.
 - `providers/copilot`
   - GitHub Copilot SDK session adapter예요.
   - session, streaming event 변환, custom tool, MCP/custom agent/skill mapping을 제공해요.
