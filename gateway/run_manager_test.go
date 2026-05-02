@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,6 +122,52 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	}
 	if got.Status != "completed" || got.TurnID != "turn_1" {
 		t.Fatalf("restart 후 run 조회가 이상해요: %+v", got)
+	}
+}
+
+func TestAsyncRunManagerRecoversStaleRuns(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := store.SaveRun(ctx, session.Run{ID: "run_stale", SessionID: sess.ID, Status: "running", Prompt: "go", EventsURL: "/api/v1/sessions/" + sess.ID + "/events"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done, err := store.SaveRun(ctx, session.Run{ID: "run_done", SessionID: sess.ID, Status: "completed", Prompt: "done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := NewAsyncRunManagerWithStore(nil, store)
+	if err := manager.RecoverStaleRuns(ctx); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := store.LoadRun(ctx, stale.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Status != "failed" || recovered.EndedAt.IsZero() || !strings.Contains(recovered.Error, "gateway restarted") {
+		t.Fatalf("stale run 복구가 이상해요: %+v", recovered)
+	}
+	unchanged, err := store.LoadRun(ctx, done.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Status != "completed" {
+		t.Fatalf("terminal run은 건드리면 안 돼요: %+v", unchanged)
+	}
+	replay, err := manager.Events(ctx, stale.ID, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replay) == 0 || replay[len(replay)-1].Type != "run.failed" {
+		t.Fatalf("stale recovery event가 필요해요: %+v", replay)
 	}
 }
 

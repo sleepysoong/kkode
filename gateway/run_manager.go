@@ -75,6 +75,39 @@ func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan R
 	return m.eventBus.Subscribe(ctx, runID)
 }
 
+// RecoverStaleRuns는 gateway 재시작으로 소유자가 사라진 queued/running/cancelling run을 failed로 닫아요.
+// 외부 패널이 영원히 도는 run을 보지 않도록 서버 시작 시 한 번 호출하면 돼요.
+func (m *AsyncRunManager) RecoverStaleRuns(ctx context.Context) error {
+	if m == nil || m.runStore == nil {
+		return nil
+	}
+	statuses := []string{"queued", "running", "cancelling"}
+	for _, status := range statuses {
+		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{Status: status, Limit: 1000})
+		if err != nil {
+			return err
+		}
+		for _, run := range runs {
+			if isTerminalRunStatus(run.Status) {
+				continue
+			}
+			run.Status = "failed"
+			run.EndedAt = m.timestamp()
+			run.Error = "gateway restarted before this run completed"
+			saved, err := m.runStore.SaveRun(ctx, run)
+			if err != nil {
+				return err
+			}
+			dto := runDTOFromSession(saved)
+			if err := m.recordEvent(ctx, dto); err != nil {
+				return err
+			}
+			m.publish(*dto)
+		}
+	}
+	return nil
+}
+
 // Start는 run을 접수한 뒤 goroutine에서 실제 agent 실행을 진행해요.
 func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 	if m == nil || m.starter == nil {
