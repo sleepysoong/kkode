@@ -706,6 +706,64 @@ paths:
                 $ref: '#/components/schemas/LSPSymbolListResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/lsp/definitions:
+    get:
+      summary: Go symbol definition 위치를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: symbol
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: definition 위치 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LSPLocationListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/lsp/references:
+    get:
+      summary: Go symbol reference 위치를 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: symbol
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+      responses:
+        '200':
+          description: reference 위치 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LSPReferenceListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/runs:
     get:
       summary: background run 목록을 반환해요.
@@ -1276,6 +1334,39 @@ components:
         column:
           type: integer
         container:
+          type: string
+    LSPLocationListResponse:
+      type: object
+      required: [locations]
+      properties:
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LSPSymbol'
+    LSPReferenceListResponse:
+      type: object
+      required: [references]
+      properties:
+        references:
+          type: array
+          items:
+            $ref: '#/components/schemas/LSPReference'
+    LSPReference:
+      type: object
+      required: [name, kind, file, line, column]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [identifier, selector]
+        file:
+          type: string
+        line:
+          type: integer
+        column:
+          type: integer
+        excerpt:
           type: string
     SubagentPreviewResponse:
       type: object

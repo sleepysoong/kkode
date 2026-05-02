@@ -351,6 +351,76 @@ func (r *Runner) Run() {}
 	}
 }
 
+func TestGatewayLSPDefinitionsAndReferences(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.go"), `package demo
+
+type Runner struct{}
+
+func NewRunner() Runner { return Runner{} }
+
+func (r *Runner) Run() {}
+
+func main() {
+	r := NewRunner()
+	r.Run()
+}
+`)
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/definitions?project_root="+root+"&symbol=Runner", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var defs LSPLocationListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &defs); err != nil {
+		t.Fatal(err)
+	}
+	if len(defs.Locations) != 1 || defs.Locations[0].Name != "Runner" || defs.Locations[0].Kind != "type" {
+		t.Fatalf("definition 결과가 이상해요: %+v", defs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/definitions?project_root="+root+"&symbol=Runner.Run", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	defs = LSPLocationListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &defs); err != nil {
+		t.Fatal(err)
+	}
+	if len(defs.Locations) != 1 || defs.Locations[0].Name != "Run" || defs.Locations[0].Container != "Runner" {
+		t.Fatalf("method definition 결과가 이상해요: %+v", defs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/references?project_root="+root+"&symbol=Runner&limit=20", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var refs LSPReferenceListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &refs); err != nil {
+		t.Fatal(err)
+	}
+	if len(refs.References) < 3 {
+		t.Fatalf("reference 결과가 너무 적어요: %+v", refs)
+	}
+	var sawCtor bool
+	for _, ref := range refs.References {
+		if strings.Contains(ref.Excerpt, "NewRunner") {
+			sawCtor = true
+		}
+	}
+	if !sawCtor {
+		t.Fatalf("reference excerpt가 이상해요: %+v", refs.References)
+	}
+}
+
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
