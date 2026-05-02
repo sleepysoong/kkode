@@ -42,6 +42,7 @@ kkode/
 │   ├── usage.go                      # usage cost helper예요
 │   └── validate.go                   # request validation이에요
 ├── providers/
+│   ├── internal/httptransport/       # provider 공통 JSON HTTP transport helper예요
 │   ├── openai/                       # OpenAI-compatible Responses provider예요
 │   ├── copilot/                      # GitHub Copilot SDK adapter예요
 │   ├── codexcli/                     # Codex CLI subprocess adapter예요
@@ -665,7 +666,7 @@ func BuildResponsesRequest(req llm.Request) (map[string]any, error)
 func ParseResponsesResponse(data []byte, providerName string) (*llm.Response, error)
 ```
 
-`Generate`와 `Stream`은 같은 request builder와 retry 경로를 공유해요. `ProviderName`을 지정하면 OmniRoute 같은 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
+`Generate`와 `Stream`은 같은 request builder와 retry 경로를 공유해요. JSON request 생성, bearer auth, custom header 복사는 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
 
 built-in tool helper도 제공해요.
 
@@ -766,7 +767,7 @@ resp, err := client.Generate(ctx, llm.Request{
 
 ### OmniRoute provider
 
-패키지는 `providers/omniroute`예요. OmniRoute는 model vendor가 아니라 routing gateway예요. 그래서 generation은 OpenAI-compatible `/v1/responses`를 사용하고, management 기능은 별도 helper로 분리해요.
+패키지는 `providers/omniroute`예요. OmniRoute는 model vendor가 아니라 routing gateway예요. 그래서 generation은 OpenAI-compatible `/v1/responses`를 사용하고, management 기능은 별도 helper로 분리해요. generation과 management 호출 모두 `providers/internal/httptransport`의 header/auth/body 처리 규칙을 공유해요.
 
 주요 시그니처는 다음과 같아요.
 

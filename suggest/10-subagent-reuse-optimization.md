@@ -28,5 +28,7 @@
 4. LSP도 files/git과 같은 project root 검증 helper를 쓰게 했어요.
    - `handleLSP`와 scan helper가 `newWorkspace` 기반 root 정규화를 써서 파일이거나 없는 root를 일관된 `invalid_workspace` 응답으로 막아요.
 
-5. OpenAI-compatible provider transport를 더 공통화해야 해요.
-   - OpenAI, OmniRoute, 앞으로 붙을 compatible gateway가 request build/parse/retry/stream 코드를 더 많이 공유할 수 있어요.
+5. OpenAI-compatible provider transport 공통화를 시작했어요.
+   - `providers/internal/httptransport`가 JSON request 생성, bearer auth, custom header 복사, response body 오류 처리를 공유해요.
+   - OpenAI Responses client와 OmniRoute management/A2A helper가 같은 transport 규칙을 재사용해요.
+   - 다음 단계는 retry/backoff 정책과 streaming SSE parser까지 compatible provider 공통 경계로 더 분리하는 일이에요.

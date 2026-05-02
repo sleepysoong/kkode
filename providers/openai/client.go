@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/internal/httptransport"
 )
 
 const defaultBaseURL = "https://api.openai.com/v1"
@@ -47,10 +48,7 @@ func New(cfg Config) *Client {
 	if base == "" {
 		base = defaultBaseURL
 	}
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 120 * time.Second}
-	}
+	hc := httptransport.DefaultClient(cfg.HTTPClient)
 	retry := cfg.Retry
 	if retry.MaxRetries == 0 {
 		retry.MaxRetries = 2
@@ -65,7 +63,7 @@ func New(cfg Config) *Client {
 	if providerName == "" {
 		providerName = "openai-compatible"
 	}
-	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: cfg.Headers, retry: retry, providerName: providerName}
+	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: httptransport.CloneHeaders(cfg.Headers), retry: retry, providerName: providerName}
 }
 
 func (c *Client) Name() string { return c.providerName }
@@ -116,29 +114,15 @@ func (c *Client) newResponsesRequest(ctx context.Context, req llm.Request, strea
 	if stream {
 		body["stream"] = true
 	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, nil, err
-	}
 	u, err := url.JoinPath(c.baseURL, "responses")
 	if err != nil {
 		return nil, nil, err
 	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
-	if err != nil {
-		return nil, nil, err
-	}
-	hreq.Header.Set("Content-Type", "application/json")
+	accept := ""
 	if stream {
-		hreq.Header.Set("Accept", "text/event-stream")
+		accept = "text/event-stream"
 	}
-	if c.apiKey != "" {
-		hreq.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-	for k, v := range c.headers {
-		hreq.Header.Set(k, v)
-	}
-	return hreq, payload, nil
+	return httptransport.NewJSONRequest(ctx, http.MethodPost, u, c.apiKey, c.headers, body, accept)
 }
 
 func BuildResponsesRequest(req llm.Request) (map[string]any, error) {

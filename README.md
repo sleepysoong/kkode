@@ -212,6 +212,7 @@ erDiagram
 - `providers/openai`
   - OpenAI-compatible `/v1/responses` provider예요.
   - SSE streaming, retry/backoff, built-in tool helper, response parsing을 제공해요.
+  - `providers/internal/httptransport`의 JSON request/header helper를 써서 파생 provider와 HTTP 처리 방식을 공유해요.
 - `providers/copilot`
   - GitHub Copilot SDK session adapter예요.
   - session, streaming event 변환, custom tool, MCP/custom agent/skill mapping을 제공해요.
@@ -221,6 +222,7 @@ erDiagram
 - `providers/omniroute`
   - OmniRoute gateway adapter예요.
   - `/v1/responses` 또는 OpenAPI 기준 `/api/v1/responses`를 사용할 수 있어요.
+  - generation은 `providers/openai`를 감싸고, management/A2A 호출은 같은 내부 HTTP transport helper를 써요.
   - model list, health, thinking budget, fallback chain, cache/rate/session, translator, A2A helper를 제공해요.
 
 ### Gateway API: `gateway/`

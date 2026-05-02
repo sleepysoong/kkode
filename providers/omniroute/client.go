@@ -1,17 +1,15 @@
 package omniroute
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/internal/httptransport"
 	"github.com/sleepysoong/kkode/providers/openai"
 )
 
@@ -57,14 +55,8 @@ func New(cfg Config) *Client {
 		cfg.AdminBaseURL = deriveAdminBaseURL(cfg.BaseURL)
 	}
 	cfg.AdminBaseURL = strings.TrimRight(cfg.AdminBaseURL, "/")
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 120 * time.Second}
-	}
-	headers := map[string]string{}
-	for k, v := range cfg.Headers {
-		headers[k] = v
-	}
+	hc := httptransport.DefaultClient(cfg.HTTPClient)
+	headers := httptransport.CloneHeaders(cfg.Headers)
 	if cfg.SessionID != "" {
 		headers["X-Session-Id"] = cfg.SessionID
 	}
@@ -221,40 +213,7 @@ func (c *Client) doJSON(ctx context.Context, method, url string, body any, out a
 }
 
 func (c *Client) doRaw(ctx context.Context, method, endpoint string, body any) ([]byte, error) {
-	var rdr io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		rdr = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, endpoint, rdr)
-	if err != nil {
-		return nil, err
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
-	}
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
-	res, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("omniroute %s returned %s: %s", endpoint, res.Status, string(data))
-	}
-	return data, nil
+	return httptransport.DoJSONRaw(ctx, c.httpClient, method, endpoint, c.cfg.APIKey, c.headers, body, "omniroute "+endpoint)
 }
 
 func deriveAdminBaseURL(base string) string {
