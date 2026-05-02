@@ -191,6 +191,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TodoListResponse'
+    put:
+      summary: session todo 목록 전체를 교체해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoListResponse'
+      responses:
+        '200':
+          description: 갱신된 todo 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodoListResponse'
+    post:
+      summary: todo 하나를 추가하거나 같은 id를 갱신해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Todo'
+      responses:
+        '201':
+          description: 갱신된 todo 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodoListResponse'
+  /api/v1/sessions/{session_id}/todos/{todo_id}:
+    delete:
+      summary: todo 하나를 삭제해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: path
+          name: todo_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 삭제됐어요.
+        '404':
+          $ref: '#/components/responses/Error'
 
   /api/v1/mcp/servers:
     get:

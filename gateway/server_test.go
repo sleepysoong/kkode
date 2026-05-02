@@ -613,3 +613,55 @@ func hasTool(tools []ToolDTO, name string) bool {
 	}
 	return false
 }
+
+func TestGatewayMutatesSessionTodos(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/sessions/"+sess.ID+"/todos", bytes.NewBufferString(`{"todos":[{"id":"todo_1","content":"구현해요","status":"in_progress","priority":"high"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed TodoListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Todos) != 1 || listed.Todos[0].ID != "todo_1" || listed.Todos[0].Status != "in_progress" {
+		t.Fatalf("todo replace 결과가 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/todos", bytes.NewBufferString(`{"id":"todo_1","content":"검증해요","status":"completed"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Todos) != 1 || listed.Todos[0].Content != "검증해요" || listed.Todos[0].Status != "completed" {
+		t.Fatalf("todo upsert 결과가 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/sessions/"+sess.ID+"/todos/todo_1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	loaded, err := store.LoadSession(context.Background(), sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Todos) != 0 {
+		t.Fatalf("todo가 삭제되지 않았어요: %+v", loaded.Todos)
+	}
+}

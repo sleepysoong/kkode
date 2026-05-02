@@ -194,7 +194,7 @@ erDiagram
 - `session.SQLiteStore`와 `runtime.Runtime`이 session resume/fork, turn/event/todo 저장을 담당해요.
 - OpenAI-compatible Responses tool loop를 기본으로 쓰고, provider별 adapter는 `llm.Provider`만 구현하면 붙일 수 있어요.
 - `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, session ID를 넘겨 바로 실행할 수 있어요.
-- `gateway.Server`와 `cmd/kkode-gateway`가 session/run/event/todo를 HTTP API로 노출해서 웹 패널이나 Discord adapter가 같은 runtime state를 재사용할 수 있게 해요.
+- `gateway.Server`와 `cmd/kkode-gateway`가 session/run/event/todo를 HTTP API로 노출해서 웹 패널이나 Discord adapter가 같은 runtime state를 재사용할 수 있게 해요. Todo는 조회뿐 아니라 replace/upsert/delete도 API로 조정할 수 있어요.
 
 ### Core: `llm/`
 
@@ -357,6 +357,9 @@ curl -X POST http://127.0.0.1:41234/api/v1/mcp/servers/mcp_.../tools/echo/call \
 curl -X POST http://127.0.0.1:41234/api/v1/tools/call \
   -H 'Content-Type: application/json' \
   -d '{"project_root":"/home/user/kkode","tool":"file_read","arguments":{"path":"README.md","max_bytes":4096}}'
+curl -X POST http://127.0.0.1:41234/api/v1/sessions/sess_.../todos \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"웹 패널에서 상태를 확인해요","status":"in_progress"}'
 curl http://127.0.0.1:41234/api/v1/sessions/sess_.../events
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
 ```

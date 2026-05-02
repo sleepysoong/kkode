@@ -189,8 +189,8 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.getSessionEvents(w, r, sessionID)
 		return
 	}
-	if len(parts) == 3 && parts[2] == "todos" && r.Method == http.MethodGet {
-		s.getSessionTodos(w, r, sessionID)
+	if len(parts) >= 3 && parts[2] == "todos" {
+		s.handleSessionTodos(w, r, sessionID, parts[3:])
 		return
 	}
 	if len(parts) == 3 && parts[2] == "fork" && r.Method == http.MethodPost {
@@ -311,19 +311,6 @@ func (s *Server) writeSSEEvents(w http.ResponseWriter, r *http.Request, events [
 			flusher.Flush()
 		}
 	}
-}
-
-func (s *Server) getSessionTodos(w http.ResponseWriter, r *http.Request, sessionID string) {
-	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
-	if err != nil {
-		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
-		return
-	}
-	out := make([]TodoDTO, 0, len(sess.Todos))
-	for _, todo := range sess.Todos {
-		out = append(out, toTodoDTO(todo))
-	}
-	writeJSON(w, TodoListResponse{Todos: out})
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []string) {
