@@ -174,6 +174,33 @@ func TestStreamParsesSSE(t *testing.T) {
 	}
 }
 
+func TestStreamRetriesRetryableStatusAndUsesProviderName(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			http.Error(w, "try again", http.StatusTooManyRequests)
+			return
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("stream accept header가 필요해요: %q", r.Header.Get("Accept"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"))
+	}))
+	defer server.Close()
+	client := New(Config{BaseURL: server.URL + "/v1", Retry: RetryConfig{MaxRetries: 1}, ProviderName: "derived"})
+	stream, err := client.Stream(context.Background(), llm.Request{Model: "gpt", Messages: []llm.Message{llm.UserText("hi")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	ev, err := stream.Recv()
+	if err != nil || ev.Type != llm.StreamEventTextDelta || ev.Provider != "derived" || calls != 2 {
+		t.Fatalf("ev=%#v calls=%d err=%v", ev, calls, err)
+	}
+}
+
 func TestClientRetriesRetryableStatus(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

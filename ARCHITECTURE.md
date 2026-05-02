@@ -643,12 +643,19 @@ resp, err := llm.RunToolLoop(ctx, provider, req, registry, llm.ToolLoopOptions{
 주요 생성자와 메서드는 다음과 같아요.
 
 ```go
+type Config struct {
+    BaseURL string
+    APIKey string
+    ProviderName string // 파생 provider telemetry label이에요.
+}
 func New(cfg Config) *Client
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error)
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error)
 func BuildResponsesRequest(req llm.Request) (map[string]any, error)
 func ParseResponsesResponse(data []byte, providerName string) (*llm.Response, error)
 ```
+
+`Generate`와 `Stream`은 같은 request builder와 retry 경로를 공유해요. `ProviderName`을 지정하면 OmniRoute 같은 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
 
 built-in tool helper도 제공해요.
 

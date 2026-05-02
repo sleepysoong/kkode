@@ -33,6 +33,27 @@ func TestGenerateUsesResponsesEndpointAndOmniRouteHeaders(t *testing.T) {
 	}
 }
 
+func TestStreamLabelsEventsAsOmniRoute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n"))
+	}))
+	defer server.Close()
+	client := New(Config{BaseURL: server.URL + "/v1"})
+	stream, err := client.Stream(context.Background(), llm.Request{Model: "auto", Messages: []llm.Message{llm.UserText("hi")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	ev, err := stream.Recv()
+	if err != nil || ev.Provider != "omniroute" || ev.Delta != "hi" {
+		t.Fatalf("ev=%#v err=%v", ev, err)
+	}
+}
+
 func TestListModelsHealthAndA2A(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

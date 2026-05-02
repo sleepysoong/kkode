@@ -2,45 +2,21 @@ package openai
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
 )
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
-	body, err := BuildResponsesRequest(req)
+	hreq, payload, err := c.newResponsesRequest(ctx, req, true)
 	if err != nil {
 		return nil, err
 	}
-	body["stream"] = true
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	u, err := url.JoinPath(c.baseURL, "responses")
-	if err != nil {
-		return nil, err
-	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Accept", "text/event-stream")
-	if c.apiKey != "" {
-		hreq.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-	for k, v := range c.headers {
-		hreq.Header.Set(k, v)
-	}
-	res, err := c.httpClient.Do(hreq)
+	res, err := c.do(hreq, payload)
 	if err != nil {
 		return nil, err
 	}

@@ -82,7 +82,7 @@ func New(cfg Config) *Client {
 	}
 	return &Client{
 		cfg:          cfg,
-		openai:       openai.New(openai.Config{BaseURL: cfg.BaseURL, APIKey: cfg.APIKey, HTTPClient: hc, Headers: headers, Retry: cfg.Retry}),
+		openai:       openai.New(openai.Config{BaseURL: cfg.BaseURL, APIKey: cfg.APIKey, HTTPClient: hc, Headers: headers, Retry: cfg.Retry, ProviderName: "omniroute"}),
 		httpClient:   hc,
 		headers:      headers,
 		baseURL:      cfg.BaseURL,

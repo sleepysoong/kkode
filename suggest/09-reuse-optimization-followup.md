@@ -35,9 +35,9 @@
 
 `session.TodoTools`는 현재 `LoadSession -> SaveSession`으로 todo를 저장해요. 병렬 tool call 환경에서는 lost update 위험이 있으므로 `TodoStore` 또는 `SaveTodos`를 통해 todo만 transaction으로 갱신해야 해요.
 
-### 5. OpenAI-compatible request builder를 공통화해야 해요
+### 5. OpenAI-compatible request builder 공통화는 반영했어요
 
-`providers/openai.Generate`와 `Stream`은 request marshal, `/responses` URL, headers/auth 설정이 비슷해요. `newResponsesHTTPRequest(ctx, req, stream)` 같은 helper를 만들고 OmniRoute도 provider label override까지 재사용하면 OpenAI-compatible provider를 더 쉽게 늘릴 수 있어요.
+`providers/openai.Generate`와 `Stream`은 이제 같은 request builder와 retry 경로를 공유해요. `openai.Config.ProviderName`도 추가해서 OmniRoute 같은 파생 provider가 response와 stream event label을 자기 이름으로 고정할 수 있어요. 다음 단계에서는 OpenAI-compatible chat/embeddings/images까지 surface를 넓힐지 결정하면 돼요.
 
 ### 6. Prompt 렌더링 cache를 `llm.Template`까지 넓히면 좋아요
 

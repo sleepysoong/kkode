@@ -23,6 +23,8 @@ type Config struct {
 	HTTPClient *http.Client
 	Headers    map[string]string
 	Retry      RetryConfig
+	// ProviderName은 OpenAI-compatible 파생 provider가 telemetry label을 고정할 때 써요.
+	ProviderName string
 }
 
 type RetryConfig struct {
@@ -32,11 +34,12 @@ type RetryConfig struct {
 }
 
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
-	headers    map[string]string
-	retry      RetryConfig
+	baseURL      string
+	apiKey       string
+	httpClient   *http.Client
+	headers      map[string]string
+	retry        RetryConfig
+	providerName string
 }
 
 func New(cfg Config) *Client {
@@ -58,10 +61,14 @@ func New(cfg Config) *Client {
 	if retry.MaxBackoff == 0 {
 		retry.MaxBackoff = 2 * time.Second
 	}
-	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: cfg.Headers, retry: retry}
+	providerName := strings.TrimSpace(cfg.ProviderName)
+	if providerName == "" {
+		providerName = "openai-compatible"
+	}
+	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: cfg.Headers, retry: retry, providerName: providerName}
 }
 
-func (c *Client) Name() string { return "openai-compatible" }
+func (c *Client) Name() string { return c.providerName }
 
 func (c *Client) Capabilities() llm.Capabilities {
 	return llm.Capabilities{
@@ -79,28 +86,9 @@ func (c *Client) Capabilities() llm.Capabilities {
 }
 
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
-	body, err := BuildResponsesRequest(req)
+	hreq, payload, err := c.newResponsesRequest(ctx, req, false)
 	if err != nil {
 		return nil, err
-	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	u, err := url.JoinPath(c.baseURL, "responses")
-	if err != nil {
-		return nil, err
-	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	hreq.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		hreq.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-	for k, v := range c.headers {
-		hreq.Header.Set(k, v)
 	}
 	res, err := c.do(hreq, payload)
 	if err != nil {
@@ -115,6 +103,39 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 		return nil, fmt.Errorf("openai-compatible responses API returned %s: %s", res.Status, string(data))
 	}
 	return ParseResponsesResponse(data, c.Name())
+}
+
+func (c *Client) newResponsesRequest(ctx context.Context, req llm.Request, stream bool) (*http.Request, []byte, error) {
+	body, err := BuildResponsesRequest(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	if stream {
+		body["stream"] = true
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, err
+	}
+	u, err := url.JoinPath(c.baseURL, "responses")
+	if err != nil {
+		return nil, nil, err
+	}
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
+	if err != nil {
+		return nil, nil, err
+	}
+	hreq.Header.Set("Content-Type", "application/json")
+	if stream {
+		hreq.Header.Set("Accept", "text/event-stream")
+	}
+	if c.apiKey != "" {
+		hreq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	for k, v := range c.headers {
+		hreq.Header.Set(k, v)
+	}
+	return hreq, payload, nil
 }
 
 func BuildResponsesRequest(req llm.Request) (map[string]any, error) {

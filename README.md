@@ -413,6 +413,8 @@ OPENAI_API_KEY=... OPENAI_TEST_MODEL=gpt-5-mini go test ./providers/openai -run 
 ```go
 client := openai.New(openai.Config{
     APIKey: os.Getenv("OPENAI_API_KEY"),
+    // OmniRoute 같은 파생 provider는 ProviderName으로 stream/response label을 고정할 수 있어요.
+    // ProviderName: "my-openai-compatible-gateway",
 })
 
 resp, err := client.Generate(ctx, llm.Request{
