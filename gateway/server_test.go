@@ -1154,3 +1154,46 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 		t.Fatalf("file write가 이상해요: %q", data)
 	}
 }
+
+func TestGatewaySessionTranscriptAPI(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "web", session.AgentModeBuild)
+	turn := session.NewTurn("토큰은 token=abc1234567890secretvalue 예요", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("토큰은 token=abc1234567890secretvalue 예요")}})
+	turn.Response = llm.TextResponse("openai", "gpt-5-mini", "응답에도 token=abc1234567890secretvalue 가 있어요")
+	turn.EndedAt = turn.StartedAt.Add(time.Second)
+	sess.AppendTurn(turn)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got TranscriptResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Session.ID != sess.ID || len(got.Turns) != 1 || !got.Redacted || !strings.Contains(got.Markdown, "[REDACTED]") {
+		t.Fatalf("transcript 응답이 이상해요: %+v", got)
+	}
+	if strings.Contains(got.Markdown, "abc1234567890secretvalue") || strings.Contains(got.Turns[0].Prompt, "abc1234567890secretvalue") {
+		t.Fatalf("transcript는 기본적으로 secret을 가려야 해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript?redact=false", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Redacted || !strings.Contains(got.Markdown, "abc1234567890secretvalue") {
+		t.Fatalf("redact=false transcript가 이상해요: %+v", got)
+	}
+}

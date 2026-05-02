@@ -224,6 +224,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.getSessionEvents(w, r, sessionID)
 		return
 	}
+	if len(parts) == 3 && parts[2] == "transcript" {
+		s.getSessionTranscript(w, r, sessionID)
+		return
+	}
 	if len(parts) >= 3 && parts[2] == "turns" {
 		s.handleSessionTurns(w, r, sessionID, parts[3:])
 		return

@@ -298,6 +298,26 @@ paths:
                 $ref: '#/components/schemas/Turn'
         '404':
           $ref: '#/components/responses/Error'
+  /api/v1/sessions/{session_id}/transcript:
+    get:
+      summary: session transcript를 markdown 포함 JSON으로 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: query
+          name: redact
+          schema:
+            type: boolean
+            default: true
+          description: false면 secret redaction 없이 원문 transcript를 반환해요.
+      responses:
+        '200':
+          description: session transcript예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptResponse'
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/events:
     get:
       summary: session event를 JSON 또는 SSE로 replay해요.
@@ -1456,6 +1476,20 @@ components:
           type: integer
         reasoning_tokens:
           type: integer
+    TranscriptResponse:
+      type: object
+      required: [session, turns, markdown, redacted]
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/Turn'
+        markdown:
+          type: string
+        redacted:
+          type: boolean
     EventListResponse:
       type: object
       required: [events]
