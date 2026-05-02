@@ -32,6 +32,7 @@ type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 type AsyncRunManager struct {
 	starter  RunStarter
 	runStore session.RunStore
+	eventBus *RunEventBus
 	now      func() time.Time
 
 	mu   sync.RWMutex
@@ -49,7 +50,21 @@ func NewAsyncRunManager(starter RunStarter) *AsyncRunManager {
 }
 
 func NewAsyncRunManagerWithStore(starter RunStarter, store session.RunStore) *AsyncRunManager {
-	return &AsyncRunManager{starter: starter, runStore: store, now: func() time.Time { return time.Now().UTC() }, runs: map[string]*managedRun{}}
+	return NewAsyncRunManagerWithStoreAndBus(starter, store, NewRunEventBus())
+}
+
+func NewAsyncRunManagerWithStoreAndBus(starter RunStarter, store session.RunStore, bus *RunEventBus) *AsyncRunManager {
+	if bus == nil {
+		bus = NewRunEventBus()
+	}
+	return &AsyncRunManager{starter: starter, runStore: store, eventBus: bus, now: func() time.Time { return time.Now().UTC() }, runs: map[string]*managedRun{}}
+}
+
+func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan RunDTO, func()) {
+	if m == nil || m.eventBus == nil {
+		return NewRunEventBus().Subscribe(ctx, runID)
+	}
+	return m.eventBus.Subscribe(ctx, runID)
 }
 
 // Start는 run을 접수한 뒤 goroutine에서 실제 agent 실행을 진행해요.
@@ -78,6 +93,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		m.mu.Unlock()
 		return nil, err
 	}
+	m.publish(accepted)
 	go m.execute(runCtx, cancel, req.withRunID(runID))
 	return cloneRun(&accepted), nil
 }
@@ -182,6 +198,7 @@ func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, er
 	run := *cloneRun(&managed.run)
 	m.mu.Unlock()
 	_ = m.persist(ctx, &run)
+	m.publish(run)
 	if cancel != nil {
 		cancel()
 	}
@@ -252,6 +269,13 @@ func (m *AsyncRunManager) update(runID string, fn func(*RunDTO)) {
 	run := *cloneRun(&managed.run)
 	m.mu.Unlock()
 	_ = m.persist(context.Background(), &run)
+	m.publish(run)
+}
+
+func (m *AsyncRunManager) publish(run RunDTO) {
+	if m != nil && m.eventBus != nil {
+		m.eventBus.Publish(run)
+	}
 }
 
 func (m *AsyncRunManager) persist(ctx context.Context, run *RunDTO) error {

@@ -141,3 +141,20 @@ func waitForPersistedRunStatus(t *testing.T, store session.RunStore, runID strin
 	t.Fatalf("persisted run 상태가 %s가 되지 않았어요: %+v", status, run)
 	return session.Run{}
 }
+
+func TestRunEventBusPublishesRunUpdates(t *testing.T) {
+	bus := NewRunEventBus()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, unsubscribe := bus.Subscribe(ctx, "run_1")
+	defer unsubscribe()
+	bus.Publish(RunDTO{ID: "run_1", Status: "running"})
+	select {
+	case run := <-ch:
+		if run.Status != "running" {
+			t.Fatalf("run event가 이상해요: %+v", run)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("run event를 받지 못했어요")
+	}
+}

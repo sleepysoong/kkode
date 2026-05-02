@@ -457,6 +457,29 @@ paths:
           $ref: '#/components/responses/Error'
         '501':
           $ref: '#/components/responses/Error'
+
+  /api/v1/runs/{run_id}/events:
+    get:
+      summary: run 상태 변경을 JSON 또는 SSE로 받아요.
+      parameters:
+        - $ref: '#/components/parameters/RunID'
+        - in: query
+          name: stream
+          schema:
+            type: boolean
+          description: true면 run 상태 변경을 text/event-stream으로 받아요.
+      responses:
+        '200':
+          description: run event snapshot 또는 live stream이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunEventListResponse'
+            text/event-stream:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}/cancel:
     post:
       summary: background run을 취소해요.
@@ -796,6 +819,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Run'
+    RunEventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunEvent'
+    RunEvent:
+      type: object
+      required: [seq, type, run]
+      properties:
+        seq:
+          type: integer
+        type:
+          type: string
+        run:
+          $ref: '#/components/schemas/Run'
     Run:
       type: object
       required: [id, session_id, status]

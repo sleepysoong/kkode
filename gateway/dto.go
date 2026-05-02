@@ -108,6 +108,17 @@ type RunListResponse struct {
 	Runs []RunDTO `json:"runs"`
 }
 
+// RunEventDTO는 run 상태 변경을 SSE/JSON replay로 표현해요.
+type RunEventDTO struct {
+	Seq  int    `json:"seq"`
+	Type string `json:"type"`
+	Run  RunDTO `json:"run"`
+}
+
+type RunEventListResponse struct {
+	Events []RunEventDTO `json:"events"`
+}
+
 // ProviderDTO는 gateway가 알고 있는 provider capability를 설명해요.
 type ProviderDTO struct {
 	Name         string         `json:"name"`

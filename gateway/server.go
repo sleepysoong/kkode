@@ -30,6 +30,7 @@ type Config struct {
 	RunGetter            RunGetter
 	RunLister            RunLister
 	RunCanceler          RunCanceler
+	RunSubscriber        RunEventSubscriber
 	Now                  func() time.Time
 }
 
@@ -348,6 +349,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		s.cancelRun(w, r, runID)
 		return
 	}
+	if len(parts) == 3 && parts[2] == "events" && r.Method == http.MethodGet {
+		s.getRunEvents(w, r, runID)
+		return
+	}
 	writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
 }
 
@@ -414,6 +419,81 @@ func (s *Server) cancelRun(w http.ResponseWriter, r *http.Request, runID string)
 		return
 	}
 	writeJSON(w, run)
+}
+
+func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID string) {
+	if s.cfg.RunGetter == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_getter_missing", "이 gateway에는 RunGetter가 연결되지 않았어요")
+		return
+	}
+	run, err := s.cfg.RunGetter(r.Context(), runID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
+		return
+	}
+	if !wantsSSE(r) {
+		writeJSON(w, RunEventListResponse{Events: []RunEventDTO{{Seq: 1, Type: runEventType(run.Status), Run: *run}}})
+		return
+	}
+	s.writeRunSSE(w, r, *run)
+}
+
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, initial RunDTO) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, _ := w.(http.Flusher)
+	seq := 1
+	writeRunSSEEvent(w, flusher, seq, initial)
+	if isTerminalRunStatus(initial.Status) || s.cfg.RunSubscriber == nil {
+		return
+	}
+	ch, unsubscribe := s.cfg.RunSubscriber(r.Context(), initial.ID)
+	defer unsubscribe()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case run, ok := <-ch:
+			if !ok {
+				return
+			}
+			seq++
+			writeRunSSEEvent(w, flusher, seq, run)
+			if isTerminalRunStatus(run.Status) {
+				return
+			}
+		}
+	}
+}
+
+func writeRunSSEEvent(w http.ResponseWriter, flusher http.Flusher, seq int, run RunDTO) {
+	data, err := json.Marshal(RunEventDTO{Seq: seq, Type: runEventType(run.Status), Run: run})
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "id: %d\n", seq)
+	fmt.Fprintf(w, "event: %s\n", runEventType(run.Status))
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	if flusher != nil {
+		flusher.Flush()
+	}
+}
+
+func runEventType(status string) string {
+	if status == "" {
+		return "run.updated"
+	}
+	return "run." + status
+}
+
+func isTerminalRunStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
 }
 
 func decodeJSON(r *http.Request, out any) error {

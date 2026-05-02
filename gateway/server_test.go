@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sleepysoong/kkode/session"
 )
@@ -354,5 +355,46 @@ func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGatewayStreamsRunEvents(t *testing.T) {
+	store := openTestStore(t)
+	bus := NewRunEventBus()
+	run := RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"}
+	srv, err := New(Config{
+		Store: store,
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			copy := run
+			return &copy, nil
+		},
+		RunSubscriber: bus.Subscribe,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_stream/events?stream=true", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(rec, req)
+		close(done)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	bus.Publish(RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "completed"})
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("run SSE가 종료되지 않았어요")
+	}
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("unexpected response: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: run.running") || !strings.Contains(body, "event: run.completed") {
+		t.Fatalf("run SSE body가 이상해요: %s", body)
 	}
 }

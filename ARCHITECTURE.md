@@ -399,10 +399,11 @@ GET  /api/v1/lsp/symbols
 GET  /api/v1/runs
 POST /api/v1/runs
 GET  /api/v1/runs/{run_id}
+GET  /api/v1/runs/{run_id}/events
 POST /api/v1/runs/{run_id}/cancel
 ```
 
-`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 symbol index를 반환해서 웹 패널이 함수/타입/메서드 탐색 UI를 만들 수 있게 해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. `/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
+`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 symbol index를 반환해서 웹 패널이 함수/타입/메서드 탐색 UI를 만들 수 있게 해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. `/events`는 기본 JSON replay를 반환하고, `stream=true` 또는 `Accept: text/event-stream`이면 SSE 형식으로 반환해요. 아직 live pub/sub는 아니고 저장된 event replay예요. 다음 단계에서 `EventBus`를 붙이면 같은 endpoint를 live stream으로 확장할 수 있어요.
 
 ```bash
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
