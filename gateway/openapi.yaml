@@ -518,6 +518,29 @@ paths:
                 $ref: '#/components/schemas/LSPSymbolListResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/lsp/document-symbols:
+    get:
+      summary: Go 파일 하나의 document symbol outline을 반환해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 파일 단위 symbol 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LSPSymbolListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/runs:
     get:
       summary: background run 목록을 반환해요.

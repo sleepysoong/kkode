@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -53,5 +54,47 @@ func writeFile(t *testing.T, path string, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestScanGoDocumentSymbols(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "pkg", "outline.go"), `package pkg
+
+type Runner struct{}
+func (Runner) Run() {}
+func Build() {}
+`)
+	symbols, err := scanGoDocumentSymbols(root, "pkg/outline.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(symbols) != 3 || symbols[0].Name != "Runner" || symbols[1].Kind != "method" || symbols[1].Container != "Runner" {
+		t.Fatalf("document symbols가 이상해요: %+v", symbols)
+	}
+	if _, err := scanGoDocumentSymbols(root, "../outside.go"); err == nil {
+		t.Fatal("project_root 밖 path는 거부해야 해요")
+	}
+}
+
+func TestHandleLSPDocumentSymbols(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "main.go"), `package main
+func Main() {}
+`)
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/document-symbols?project_root="+root+"&path=main.go", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got LSPSymbolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Symbols) != 1 || got.Symbols[0].Name != "Main" {
+		t.Fatalf("document symbol 응답이 이상해요: %+v", got)
 	}
 }
