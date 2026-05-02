@@ -18,6 +18,25 @@ import (
 	"github.com/sleepysoong/kkode/session"
 )
 
+func TestGatewayAPIIndex(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var index APIIndexResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &index); err != nil {
+		t.Fatal(err)
+	}
+	if index.Version != "test" || index.Links["openapi"] != "/api/v1/openapi.yaml" || index.Links["sessions"] != "/api/v1/sessions" {
+		t.Fatalf("API index 응답이 이상해요: %+v", index)
+	}
+}
+
 func TestGatewayStatsEndpoint(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)

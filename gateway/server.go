@@ -68,7 +68,9 @@ func (s *Server) buildHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/readyz", s.handleReady)
-	mux.Handle("/api/v1/", s.withAPIAuth(http.HandlerFunc(s.handleAPI)))
+	apiHandler := s.withAPIAuth(http.HandlerFunc(s.handleAPI))
+	mux.Handle("/api/v1", apiHandler)
+	mux.Handle("/api/v1/", apiHandler)
 	return s.recoverMiddleware(mux)
 }
 
@@ -104,7 +106,7 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path = strings.Trim(path, "/")
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
+		s.handleAPIIndex(w, r, parts)
 		return
 	}
 	switch parts[0] {
@@ -143,6 +145,14 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}
+}
+
+func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) != 0 || r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 API index 요청이에요")
+		return
+	}
+	writeJSON(w, APIIndexResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Links: APIIndexLinks()})
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []string) {

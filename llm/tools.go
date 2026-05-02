@@ -9,6 +9,9 @@ import (
 
 type ToolHandler func(ctx context.Context, call ToolCall) (ToolResult, error)
 
+// ToolMiddleware는 tool 실행 전후 공통 동작을 agent/gateway/provider 표면에서 재사용하게 해요.
+type ToolMiddleware func(name string, next ToolHandler) ToolHandler
+
 type ToolRegistry map[string]ToolHandler
 
 // ToolSet은 model에 노출할 tool 정의와 실제 실행 handler를 한 묶음으로 들고 다녀요.
@@ -52,6 +55,23 @@ func (s *ToolSet) Merge(other ToolSet) {
 func (s ToolSet) Parts() ([]Tool, ToolRegistry) {
 	cloned := s.Clone()
 	return cloned.Definitions, cloned.Handlers
+}
+
+// WithMiddleware는 registry를 복사한 뒤 각 handler에 middleware chain을 감싸요.
+// 먼저 넘긴 middleware가 가장 바깥에서 실행돼서 tracing/timeout/metric 순서를 읽기 쉽게 유지해요.
+func (r ToolRegistry) WithMiddleware(middlewares ...ToolMiddleware) ToolRegistry {
+	out := ToolRegistry{}
+	for name, handler := range r {
+		wrapped := handler
+		for i := len(middlewares) - 1; i >= 0; i-- {
+			if middlewares[i] == nil {
+				continue
+			}
+			wrapped = middlewares[i](name, wrapped)
+		}
+		out[name] = wrapped
+	}
+	return out
 }
 
 func (r ToolRegistry) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {

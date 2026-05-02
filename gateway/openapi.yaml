@@ -24,6 +24,16 @@ paths:
       responses:
         '200':
           description: 준비됐어요.
+  /api/v1:
+    get:
+      summary: API discovery index를 반환해요.
+      responses:
+        '200':
+          description: 주요 API link 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIIndexResponse'
   /api/v1/openapi.yaml:
     get:
       summary: 현재 OpenAPI YAML 스펙을 반환해요.
@@ -1316,6 +1326,18 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    APIIndexResponse:
+      type: object
+      required: [version, links]
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        links:
+          type: object
+          additionalProperties:
+            type: string
     VersionResponse:
       type: object
       properties:

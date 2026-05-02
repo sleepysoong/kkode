@@ -60,6 +60,48 @@ func TestToolSetCloneMergeAndPartsAreReusable(t *testing.T) {
 	}
 }
 
+func TestToolRegistryWithMiddlewareClonesAndOrders(t *testing.T) {
+	events := []string{}
+	base := ToolRegistry{
+		"echo": func(ctx context.Context, call ToolCall) (ToolResult, error) {
+			events = append(events, "handler")
+			return ToolResult{Output: "ok"}, nil
+		},
+	}
+	wrapped := base.WithMiddleware(
+		func(name string, next ToolHandler) ToolHandler {
+			return func(ctx context.Context, call ToolCall) (ToolResult, error) {
+				events = append(events, name+":outer.before")
+				result, err := next(ctx, call)
+				events = append(events, name+":outer.after")
+				return result, err
+			}
+		},
+		func(name string, next ToolHandler) ToolHandler {
+			return func(ctx context.Context, call ToolCall) (ToolResult, error) {
+				events = append(events, name+":inner.before")
+				result, err := next(ctx, call)
+				events = append(events, name+":inner.after")
+				return result, err
+			}
+		},
+	)
+	base["echo"] = func(ctx context.Context, call ToolCall) (ToolResult, error) {
+		return ToolResult{Output: "mutated"}, nil
+	}
+	result, err := wrapped.Execute(context.Background(), ToolCall{CallID: "call_1", Name: "echo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CallID != "call_1" || result.Name != "echo" || result.Output != "ok" {
+		t.Fatalf("middleware result가 이상해요: %#v", result)
+	}
+	want := []string{"echo:outer.before", "echo:inner.before", "handler", "echo:inner.after", "echo:outer.after"}
+	if fmt.Sprint(events) != fmt.Sprint(want) {
+		t.Fatalf("middleware 순서가 이상해요: got=%v want=%v", events, want)
+	}
+}
+
 func TestRunToolLoopPreservesProviderItemsAndAppendsToolOutput(t *testing.T) {
 	testingError = ""
 	p := &scriptedProvider{}

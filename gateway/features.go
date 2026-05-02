@@ -3,7 +3,7 @@ package gateway
 // DefaultFeatureCatalog는 웹 패널/Discord/Slack adapter가 사용할 수 있는 gateway 기능 표면을 알려줘요.
 func DefaultFeatureCatalog() []FeatureDTO {
 	return []FeatureDTO{
-		{Name: "openapi", Status: "implemented", Description: "외부 adapter와 SDK generator가 현재 gateway OpenAPI 계약을 직접 내려받을 수 있어요.", Endpoints: []string{"GET /api/v1/openapi.yaml"}},
+		{Name: "openapi", Status: "implemented", Description: "외부 adapter와 SDK generator가 현재 gateway OpenAPI 계약을 직접 내려받을 수 있어요.", Endpoints: []string{"GET /api/v1", "GET /api/v1/openapi.yaml"}},
 		{Name: "sessions", Status: "implemented", Description: "session 생성, 목록, 상세, turn/transcript 조회, compact, fork를 제공해요.", Endpoints: []string{"GET /api/v1/sessions", "POST /api/v1/sessions", "GET /api/v1/sessions/{session_id}", "GET /api/v1/sessions/{session_id}/turns", "GET /api/v1/sessions/{session_id}/turns/{turn_id}", "GET /api/v1/sessions/{session_id}/transcript", "POST /api/v1/sessions/{session_id}/compact", "POST /api/v1/sessions/{session_id}/fork"}},
 		{Name: "session_events", Status: "implemented", Description: "session event JSON replay와 SSE replay를 제공해요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/events"}},
 		{Name: "todos", Status: "implemented", Description: "agent todo 상태를 외부 status UI에서 읽고 수정할 수 있어요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/todos", "PUT /api/v1/sessions/{session_id}/todos", "POST /api/v1/sessions/{session_id}/todos", "DELETE /api/v1/sessions/{session_id}/todos/{todo_id}"}},
@@ -19,5 +19,27 @@ func DefaultFeatureCatalog() []FeatureDTO {
 		{Name: "tools", Status: "implemented", Description: "file/shell/web 표준 tool 목록과 직접 실행 API를 제공해요. 권한 프롬프트 없이 바로 실행해요.", Endpoints: []string{"GET /api/v1/tools", "POST /api/v1/tools/call"}},
 		{Name: "files", Status: "implemented", Description: "웹 패널용 파일 목록, 읽기, 쓰기 API를 제공해요. 권한 프롬프트 없이 바로 실행해요.", Endpoints: []string{"GET /api/v1/files", "GET /api/v1/files/content", "PUT /api/v1/files/content"}},
 		{Name: "git", Status: "implemented", Description: "웹 패널이 변경사항을 렌더링할 수 있게 git status, diff, log를 제공해요.", Endpoints: []string{"GET /api/v1/git/status", "GET /api/v1/git/diff", "GET /api/v1/git/log"}},
+	}
+}
+
+// APIIndexLinks는 adapter bootstrap에 필요한 대표 endpoint link를 한 곳에서 관리해요.
+func APIIndexLinks() map[string]string {
+	return map[string]string{
+		"openapi":      "/api/v1/openapi.yaml",
+		"version":      "/api/v1/version",
+		"capabilities": "/api/v1/capabilities",
+		"providers":    "/api/v1/providers",
+		"models":       "/api/v1/models",
+		"stats":        "/api/v1/stats",
+		"sessions":     "/api/v1/sessions",
+		"runs":         "/api/v1/runs",
+		"tools":        "/api/v1/tools",
+		"files":        "/api/v1/files",
+		"git":          "/api/v1/git/status",
+		"mcp_servers":  "/api/v1/mcp/servers",
+		"skills":       "/api/v1/skills",
+		"subagents":    "/api/v1/subagents",
+		"lsp_symbols":  "/api/v1/lsp/symbols",
+		"prompts":      "/api/v1/prompts",
 	}
 }

@@ -175,11 +175,8 @@ func (a *Agent) instructions(tools []llm.Tool) string {
 }
 
 func (a *Agent) traceTools(reg llm.ToolRegistry) llm.ToolRegistry {
-	out := llm.ToolRegistry{}
-	for name, handler := range reg {
-		name := name
-		handler := handler
-		out[name] = func(ctx context.Context, call llm.ToolCall) (llm.ToolResult, error) {
+	return reg.WithMiddleware(func(name string, handler llm.ToolHandler) llm.ToolHandler {
+		return func(ctx context.Context, call llm.ToolCall) (llm.ToolResult, error) {
 			a.emit(ctx, TraceEvent{Type: "tool.started", Tool: name})
 			res, err := handler(ctx, call)
 			if err != nil {
@@ -189,8 +186,7 @@ func (a *Agent) traceTools(reg llm.ToolRegistry) llm.ToolRegistry {
 			a.emit(ctx, TraceEvent{Type: "tool.completed", Tool: name, Message: llm.RedactSecrets(res.Output)})
 			return res, nil
 		}
-	}
-	return out
+	})
 }
 
 func (a *Agent) emit(ctx context.Context, event TraceEvent) {

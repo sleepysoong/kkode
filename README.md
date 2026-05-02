@@ -200,10 +200,11 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
+- `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `ToolMiddleware`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
 - `Auth`, `Model`, `ModelRegistry`, `Usage.EstimatedCost`를 제공해요.
+- `ToolRegistry.WithMiddleware`로 tracing, timeout, metric, redaction 같은 tool 실행 전후 처리를 agent와 gateway가 같은 방식으로 감쌀 수 있어요.
 - `Router`, `Template`, `RedactSecrets`도 포함해요.
 
 ### Providers
@@ -225,14 +226,14 @@ erDiagram
 ### Gateway API: `gateway/`
 
 - `gateway.Server`는 `net/http` 기반 API server예요. 외부 의존성 없이 `/api/v1` REST surface를 만들어요.
-- `GET /healthz`, `GET /readyz`, `GET /api/v1/openapi.yaml`, `GET /api/v1/version`, `GET /api/v1/capabilities`, `GET /api/v1/providers`, `GET /api/v1/models`, `GET /api/v1/stats`를 제공해요.
+- `GET /healthz`, `GET /readyz`, `GET /api/v1`, `GET /api/v1/openapi.yaml`, `GET /api/v1/version`, `GET /api/v1/capabilities`, `GET /api/v1/providers`, `GET /api/v1/models`, `GET /api/v1/stats`를 제공해요.
 - `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, `GET /api/v1/sessions/{id}/turns`, `GET /api/v1/sessions/{id}/turns/{turn_id}`, `GET /api/v1/sessions/{id}/transcript`, `POST /api/v1/sessions/{id}/compact`, `POST /api/v1/sessions/{id}/fork`를 제공해요.
 - `GET /api/v1/sessions/{id}/turns`는 대화 turn 목록과 response text/usage를 반환하고, `GET /api/v1/sessions/{id}/transcript`는 외부 패널/Discord 메시지가 바로 렌더링할 수 있는 markdown transcript를 반환하고, `POST /api/v1/sessions/{id}/compact`는 오래된 turn을 session summary로 압축해요. `GET /api/v1/sessions/{id}/events`는 `after_seq`와 `limit` 기반 JSON replay와 `stream=true` SSE replay를 지원해요. SQLite store에서는 `TimelineStore`가 turn/event 범위만 직접 읽어서 긴 세션도 전체 JSON을 매번 로드하지 않고, `TurnEventStore`가 새 turn/event와 session metadata를 한 transaction으로 append/update해서 run 저장 시 전체 session 재작성을 피하게 해요.
 - `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
 - `POST /api/v1/runs`는 `gateway.AsyncRunManager`로 즉시 접수하고 background에서 실제 agent run을 실행해요. run 상태는 SQLite에도 저장돼서 gateway 재시작 뒤에도 조회할 수 있어요. gateway 시작 시 소유자가 사라진 `queued/running/cancelling` run은 `failed`로 닫아서 외부 패널이 영원히 도는 작업을 보지 않게 해요. run 레코드는 provider/model/MCP/skills/subagents 선택도 보존해서 retry와 패널 표시가 같은 실행 맥락을 유지해요. `GET /api/v1/runs/{id}/events?stream=true`로 run 상태 변경을 live SSE로 받을 수 있어요.
 - `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `GET /api/v1/runs/{id}/events`, `POST /api/v1/runs/{id}/cancel`, `POST /api/v1/runs/{id}/retry`로 외부 adapter가 run 상태를 조회하고 취소/재시도할 수 있어요. Run 상태 변경 event는 SQLite에 저장돼서 gateway 재시작 뒤에도 `after_seq` 기준으로 replay할 수 있어요.
 - `GET/POST /api/v1/sessions/{id}/checkpoints`, `GET /api/v1/sessions/{id}/checkpoints/{checkpoint_id}`는 외부 adapter가 복구용 snapshot payload를 저장하고 다시 읽게 해요.
-- `GET /api/v1/openapi.yaml`은 외부 adapter와 SDK generator가 현재 API 계약을 내려받게 해요. `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/models/prompts/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요. `GET /api/v1/stats`는 dashboard가 sessions/turns/events/runs/resources 카운트를 한 번에 그리게 해요.
+- `GET /api/v1`은 외부 adapter가 OpenAPI/capabilities/session/run 같은 대표 link를 한 번에 발견하게 해요. `GET /api/v1/openapi.yaml`은 외부 adapter와 SDK generator가 현재 API 계약을 내려받게 해요. `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/models/prompts/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요. `GET /api/v1/stats`는 dashboard가 sessions/turns/events/runs/resources 카운트를 한 번에 그리게 해요.
 - `GET /api/v1/models`는 provider별 모델 catalog, 기본 모델, capability, auth 상태를 반환해서 외부 adapter가 모델 선택 UI를 만들게 해요.
 - `GET /api/v1/prompts`, `GET /api/v1/prompts/{name}`, `POST /api/v1/prompts/{name}/render`는 system/session/todo prompt template을 외부 패널에서 확인하고 preview할 수 있게 해요.
 - `GET/POST/PUT/DELETE /api/v1/mcp/servers`, `/api/v1/skills`, `/api/v1/subagents`는 외부 adapter가 실행 자산 manifest를 SQLite에 저장하고 재사용하게 해요. `POST /api/v1/runs`의 `mcp_servers`, `skills`, `subagents` ID 목록으로 선택한 manifest를 provider 설정에 반영해요. `GET /api/v1/skills/{id}/preview`는 SKILL.md/README.md 내용을 웹 패널에서 보여줄 수 있게 하고, `GET /api/v1/subagents/{id}/preview`는 prompt/tools/skills/MCP 연결을 실행 전 확인하게 해요. `GET /api/v1/mcp/servers/{id}/tools`, `/resources`, `/prompts`는 stdio MCP server를 probe해서 `tools/list`, `resources/list`, `prompts/list` 결과를 확인해요. `/resources/read`와 `/prompts/{prompt}/get`은 MCP resource/prompt 내용을 직접 가져오고, `POST /api/v1/mcp/servers/{id}/tools/{tool}/call`은 디버그/웹 패널에서 저장된 stdio MCP tool을 직접 호출해요.
@@ -337,6 +338,7 @@ curl -X POST http://127.0.0.1:41234/api/v1/sessions \
 모델 선택 UI는 model catalog API를 먼저 읽으면 돼요.
 
 ```bash
+curl 'http://127.0.0.1:41234/api/v1'
 curl 'http://127.0.0.1:41234/api/v1/openapi.yaml'
 curl 'http://127.0.0.1:41234/api/v1/models?provider=openai'
 curl 'http://127.0.0.1:41234/api/v1/prompts'

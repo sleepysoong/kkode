@@ -15,6 +15,13 @@ type VersionResponse struct {
 	Providers []string `json:"providers,omitempty"`
 }
 
+// APIIndexResponse는 adapter가 gateway root에서 주요 discovery link를 찾을 때 쓰는 응답이에요.
+type APIIndexResponse struct {
+	Version string            `json:"version"`
+	Commit  string            `json:"commit,omitempty"`
+	Links   map[string]string `json:"links"`
+}
+
 // SessionCreateRequest는 웹 패널이나 Discord adapter가 새 agent session을 만들 때 쓰는 요청이에요.
 type SessionCreateRequest struct {
 	ProjectRoot string            `json:"project_root"`

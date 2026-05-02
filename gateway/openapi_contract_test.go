@@ -32,6 +32,7 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		schema string
 		dto    any
 	}{
+		{schema: "APIIndexResponse", dto: APIIndexResponse{}},
 		{schema: "SessionCreateRequest", dto: SessionCreateRequest{}},
 		{schema: "RunStartRequest", dto: RunStartRequest{}},
 		{schema: "Run", dto: RunDTO{}},
