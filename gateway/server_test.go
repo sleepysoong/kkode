@@ -398,3 +398,36 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 		t.Fatalf("run SSE body가 이상해요: %s", body)
 	}
 }
+
+func TestGatewayRetriesRun(t *testing.T) {
+	store := openTestStore(t)
+	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Metadata: map[string]string{"source": "discord"}}
+	var retryReq RunStartRequest
+	srv, err := New(Config{
+		Store: store,
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			copy := original
+			return &copy, nil
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			retryReq = req
+			return &RunDTO{ID: "run_new", SessionID: req.SessionID, Status: "queued", Prompt: req.Prompt, Metadata: req.Metadata}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/run_old/retry", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var retried RunDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &retried); err != nil {
+		t.Fatal(err)
+	}
+	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" {
+		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
+	}
+}

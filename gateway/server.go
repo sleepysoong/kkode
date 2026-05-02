@@ -353,6 +353,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		s.getRunEvents(w, r, runID)
 		return
 	}
+	if len(parts) == 3 && parts[2] == "retry" && r.Method == http.MethodPost {
+		s.retryRun(w, r, runID)
+		return
+	}
 	writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
 }
 
@@ -419,6 +423,29 @@ func (s *Server) cancelRun(w http.ResponseWriter, r *http.Request, runID string)
 		return
 	}
 	writeJSON(w, run)
+}
+
+func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) {
+	if s.cfg.RunGetter == nil || s.cfg.RunStarter == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_retry_missing", "이 gateway에는 run retry 경계가 연결되지 않았어요")
+		return
+	}
+	original, err := s.cfg.RunGetter(r.Context(), runID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
+		return
+	}
+	metadata := cloneMap(original.Metadata)
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	metadata["retried_from"] = original.ID
+	retry, err := s.cfg.RunStarter(r.Context(), RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Metadata: metadata})
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "retry_run_failed", err.Error())
+		return
+	}
+	writeJSONStatus(w, http.StatusAccepted, retry)
 }
 
 func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID string) {

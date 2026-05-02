@@ -480,6 +480,23 @@ paths:
                 type: string
         '404':
           $ref: '#/components/responses/Error'
+
+  /api/v1/runs/{run_id}/retry:
+    post:
+      summary: 기존 run의 prompt와 session으로 새 background run을 시작해요.
+      parameters:
+        - $ref: '#/components/parameters/RunID'
+      responses:
+        '202':
+          description: retry run이 접수됐어요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '404':
+          $ref: '#/components/responses/Error'
+        '501':
+          $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}/cancel:
     post:
       summary: background run을 취소해요.
