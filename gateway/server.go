@@ -194,6 +194,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.handleSessionTodos(w, r, sessionID, parts[3:])
 		return
 	}
+	if len(parts) >= 3 && parts[2] == "checkpoints" {
+		s.handleSessionCheckpoints(w, r, sessionID, parts[3:])
+		return
+	}
 	if len(parts) == 3 && parts[2] == "fork" && r.Method == http.MethodPost {
 		s.forkSession(w, r, sessionID)
 		return

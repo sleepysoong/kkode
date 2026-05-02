@@ -88,6 +88,11 @@ type SessionQuery struct {
 	Limit       int
 }
 
+type CheckpointQuery struct {
+	SessionID string
+	Limit     int
+}
+
 type SessionSummary struct {
 	ID           string    `json:"id"`
 	ProjectRoot  string    `json:"project_root"`
@@ -108,6 +113,12 @@ type Store interface {
 	AppendEvent(ctx context.Context, ev Event) error
 	SaveCheckpoint(ctx context.Context, cp Checkpoint) error
 	Close() error
+}
+
+type CheckpointStore interface {
+	SaveCheckpoint(ctx context.Context, cp Checkpoint) error
+	LoadCheckpoint(ctx context.Context, sessionID string, checkpointID string) (Checkpoint, error)
+	ListCheckpoints(ctx context.Context, q CheckpointQuery) ([]Checkpoint, error)
 }
 
 func NewSession(projectRoot, providerName, model, agentName string, mode AgentMode) *Session {

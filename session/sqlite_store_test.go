@@ -216,3 +216,34 @@ func TestRunEventStorePersistsReplay(t *testing.T) {
 		t.Fatalf("run event replay가 이상해요: %+v", replay)
 	}
 }
+
+func TestCheckpointStoreListsAndLoads(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := NewSession("/repo", "openai", "gpt", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	cp := Checkpoint{ID: "cp_1", SessionID: sess.ID, TurnID: "turn_1", Payload: []byte(`{"summary":"ok"}`)}
+	if err := store.SaveCheckpoint(ctx, cp); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.LoadCheckpoint(ctx, sess.ID, cp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ID != cp.ID || string(loaded.Payload) != `{"summary":"ok"}` {
+		t.Fatalf("checkpoint load가 이상해요: %+v", loaded)
+	}
+	items, err := store.ListCheckpoints(ctx, CheckpointQuery{SessionID: sess.ID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != cp.ID {
+		t.Fatalf("checkpoint list가 이상해요: %+v", items)
+	}
+}

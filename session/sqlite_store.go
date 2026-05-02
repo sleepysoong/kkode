@@ -345,15 +345,57 @@ func (s *SQLiteStore) AppendEvent(ctx context.Context, ev Event) error {
 }
 
 func (s *SQLiteStore) SaveCheckpoint(ctx context.Context, cp Checkpoint) error {
-	if cp.ID == "" {
-		cp.ID = NewID("cp")
-	}
-	if cp.CreatedAt.IsZero() {
-		cp.CreatedAt = time.Now().UTC()
-	}
+	normalizeCheckpoint(&cp)
 	_, err := s.db.ExecContext(ctx, `INSERT INTO checkpoints (id, session_id, turn_id, created_at, payload_json) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json`, cp.ID, cp.SessionID, cp.TurnID, formatTime(cp.CreatedAt), nullableBytes(cp.Payload))
+		ON CONFLICT(id) DO UPDATE SET turn_id=excluded.turn_id, created_at=excluded.created_at, payload_json=excluded.payload_json`, cp.ID, cp.SessionID, cp.TurnID, formatTime(cp.CreatedAt), nullableBytes(cp.Payload))
 	return err
+}
+
+func (s *SQLiteStore) LoadCheckpoint(ctx context.Context, sessionID string, checkpointID string) (Checkpoint, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, session_id, turn_id, created_at, payload_json FROM checkpoints WHERE session_id = ? AND id = ?`, sessionID, checkpointID)
+	return scanCheckpoint(row)
+}
+
+func (s *SQLiteStore) ListCheckpoints(ctx context.Context, q CheckpointQuery) ([]Checkpoint, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, session_id, turn_id, created_at, payload_json FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC LIMIT ?`, q.SessionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Checkpoint
+	for rows.Next() {
+		cp, err := scanCheckpoint(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cp)
+	}
+	return out, rows.Err()
+}
+
+type checkpointScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanCheckpoint(scanner checkpointScanner) (Checkpoint, error) {
+	var cp Checkpoint
+	var created string
+	var payload []byte
+	if err := scanner.Scan(&cp.ID, &cp.SessionID, &cp.TurnID, &created, &payload); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Checkpoint{}, fmt.Errorf("checkpoint not found")
+		}
+		return Checkpoint{}, err
+	}
+	cp.CreatedAt = parseTime(created)
+	if len(payload) > 0 {
+		cp.Payload = append([]byte(nil), payload...)
+	}
+	return cp, nil
 }
 
 func (s *SQLiteStore) SaveTodos(ctx context.Context, sessionID string, todos []Todo) error {
@@ -820,6 +862,18 @@ func normalizeSession(sess *Session) {
 	}
 	if sess.UpdatedAt.IsZero() {
 		sess.UpdatedAt = now
+	}
+}
+
+func normalizeCheckpoint(cp *Checkpoint) {
+	if cp.ID == "" {
+		cp.ID = NewID("cp")
+	}
+	if cp.CreatedAt.IsZero() {
+		cp.CreatedAt = time.Now().UTC()
+	}
+	if len(cp.Payload) == 0 {
+		cp.Payload = json.RawMessage(`{}`)
 	}
 }
 

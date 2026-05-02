@@ -179,6 +179,61 @@ paths:
             text/event-stream:
               schema:
                 type: string
+  /api/v1/sessions/{session_id}/checkpoints:
+    get:
+      summary: session checkpoint 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: checkpoint 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckpointListResponse'
+    post:
+      summary: session checkpoint를 저장해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Checkpoint'
+      responses:
+        '201':
+          description: 저장된 checkpoint예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checkpoint'
+  /api/v1/sessions/{session_id}/checkpoints/{checkpoint_id}:
+    get:
+      summary: session checkpoint 상세를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: path
+          name: checkpoint_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: checkpoint 상세예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checkpoint'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/v1/sessions/{session_id}/todos:
     get:
       summary: session todo 목록을 반환해요.
@@ -958,6 +1013,28 @@ components:
           nullable: true
         error:
           type: string
+    CheckpointListResponse:
+      type: object
+      required: [checkpoints]
+      properties:
+        checkpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Checkpoint'
+    Checkpoint:
+      type: object
+      properties:
+        id:
+          type: string
+        session_id:
+          type: string
+        turn_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        payload:
+          nullable: true
     TodoListResponse:
       type: object
       required: [todos]
