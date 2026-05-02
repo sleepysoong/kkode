@@ -219,3 +219,33 @@ func TestGatewayListsGetsAndCancelsRuns(t *testing.T) {
 		t.Fatalf("cancel 응답이 이상해요: %+v", cancelled)
 	}
 }
+
+func TestGatewayCapabilitiesDiscovery(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Version: "test", Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var caps CapabilityResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
+		t.Fatal(err)
+	}
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 {
+		t.Fatalf("capability discovery가 이상해요: %+v", caps)
+	}
+	var sawBackground bool
+	for _, feature := range caps.Features {
+		if feature.Name == "background_runs" && feature.Status == "implemented" {
+			sawBackground = true
+		}
+	}
+	if !sawBackground {
+		t.Fatalf("background run feature를 discovery해야 해요: %+v", caps.Features)
+	}
+}

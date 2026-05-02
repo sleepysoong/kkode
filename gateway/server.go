@@ -24,6 +24,7 @@ type Config struct {
 	APIKey               string
 	AllowLocalhostNoAuth bool
 	Providers            []ProviderDTO
+	Features             []FeatureDTO
 	RunStarter           RunStarter
 	RunGetter            RunGetter
 	RunLister            RunLister
@@ -108,6 +109,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleVersion(w, r, parts)
 	case "providers":
 		s.handleProviders(w, r, parts)
+	case "capabilities":
+		s.handleCapabilities(w, r, parts)
 	case "sessions":
 		s.handleSessions(w, r, parts)
 	case "runs":
@@ -135,6 +138,18 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 		return
 	}
 	writeJSON(w, ProviderListResponse{Providers: s.cfg.Providers})
+}
+
+func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) != 1 || r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 capabilities 요청이에요")
+		return
+	}
+	features := append([]FeatureDTO{}, s.cfg.Features...)
+	if len(features) == 0 {
+		features = DefaultFeatureCatalog()
+	}
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers})
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []string) {

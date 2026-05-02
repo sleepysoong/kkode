@@ -117,6 +117,22 @@ type ProviderListResponse struct {
 	Providers []ProviderDTO `json:"providers"`
 }
 
+// FeatureDTO는 외부 adapter가 kkode gateway 기능 상태와 endpoint를 발견할 때 쓰는 항목이에요.
+type FeatureDTO struct {
+	Name        string   `json:"name"`
+	Status      string   `json:"status"`
+	Description string   `json:"description,omitempty"`
+	Endpoints   []string `json:"endpoints,omitempty"`
+}
+
+// CapabilityResponse는 gateway feature discovery 응답이에요.
+type CapabilityResponse struct {
+	Version   string        `json:"version"`
+	Commit    string        `json:"commit,omitempty"`
+	Features  []FeatureDTO  `json:"features"`
+	Providers []ProviderDTO `json:"providers"`
+}
+
 func toSessionDTO(sess *session.Session) SessionDTO {
 	if sess == nil {
 		return SessionDTO{}

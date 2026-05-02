@@ -32,6 +32,7 @@ type ProviderSpec struct {
 	DefaultModel string
 	AuthEnv      []string
 	Local        bool
+	Capabilities map[string]any
 }
 
 // WorkspaceOptions는 workspace 경계를 정하는 옵션이에요.
@@ -97,10 +98,10 @@ func DefaultModel(provider string) string {
 
 func ProviderSpecs() []ProviderSpec {
 	return []ProviderSpec{
-		{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"OPENAI_API_KEY"}},
-		{Name: "omniroute", DefaultModel: "gpt-5-mini", AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}},
-		{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}},
-		{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Local: true},
+		{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "reasoning_summaries": true, "structured_output": true, "streaming": true, "tool_choice": true, "parallel_tool_calls": true}},
+		{Name: "omniroute", DefaultModel: "gpt-5-mini", AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "a2a": true, "routing": true}},
+		{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "streaming": true, "parallel_tool_calls": true, "mcp": true, "skills": true, "custom_agents": true}},
+		{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Local: true, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "skills": true}},
 	}
 }
 

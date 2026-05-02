@@ -28,6 +28,8 @@ func TestCSVAndDefaultModel(t *testing.T) {
 	}
 	if spec, ok := ResolveProviderSpec("github-copilot"); !ok || spec.Name != "copilot" {
 		t.Fatalf("provider alias resolve failed: %#v %v", spec, ok)
+	} else if spec.Capabilities["skills"] != true || spec.Capabilities["custom_agents"] != true {
+		t.Fatalf("copilot provider capability가 gateway discovery에 필요해요: %#v", spec.Capabilities)
 	}
 	if ProviderAuthStatus(ProviderSpec{Name: "local", Local: true}) != "local" {
 		t.Fatal("local provider auth status가 바뀌면 안 돼요")

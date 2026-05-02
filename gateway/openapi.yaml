@@ -34,6 +34,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionResponse'
+  /api/v1/capabilities:
+    get:
+      summary: gateway 기능과 provider capability를 반환해요.
+      responses:
+        '200':
+          description: gateway capability discovery 응답이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityResponse'
   /api/v1/providers:
     get:
       summary: gateway가 알고 있는 provider 목록을 반환해요.
@@ -263,6 +273,36 @@ components:
         commit:
           type: string
         providers:
+          type: array
+          items:
+            type: string
+    CapabilityResponse:
+      type: object
+      required: [version, features, providers]
+      properties:
+        version:
+          type: string
+        commit:
+          type: string
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feature'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Provider'
+    Feature:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        description:
+          type: string
+        endpoints:
           type: array
           items:
             type: string

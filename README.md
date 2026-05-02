@@ -225,12 +225,13 @@ erDiagram
 ### Gateway API: `gateway/`
 
 - `gateway.Server`는 `net/http` 기반 API server예요. 외부 의존성 없이 `/api/v1` REST surface를 만들어요.
-- `GET /healthz`, `GET /readyz`, `GET /api/v1/version`, `GET /api/v1/providers`를 제공해요.
+- `GET /healthz`, `GET /readyz`, `GET /api/v1/version`, `GET /api/v1/capabilities`, `GET /api/v1/providers`를 제공해요.
 - `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`, `POST /api/v1/sessions/{id}/fork`를 제공해요.
 - `GET /api/v1/sessions/{id}/events`는 JSON replay와 `stream=true` SSE replay를 지원해요.
 - `GET /api/v1/sessions/{id}/todos`로 웹 패널/Discord status에 필요한 todo를 읽어요.
 - `POST /api/v1/runs`는 `gateway.AsyncRunManager`로 즉시 접수하고 background에서 실제 agent run을 실행해요.
 - `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `POST /api/v1/runs/{id}/cancel`로 외부 adapter가 run 상태를 조회하고 취소할 수 있어요.
+- `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support

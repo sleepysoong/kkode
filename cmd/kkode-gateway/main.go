@@ -157,7 +157,7 @@ func providerDTOs() []gateway.ProviderDTO {
 	specs := app.ProviderSpecs()
 	out := make([]gateway.ProviderDTO, 0, len(specs))
 	for _, spec := range specs {
-		out = append(out, gateway.ProviderDTO{Name: spec.Name, Models: []string{spec.DefaultModel}, AuthStatus: app.ProviderAuthStatus(spec)})
+		out = append(out, gateway.ProviderDTO{Name: spec.Name, Models: []string{spec.DefaultModel}, Capabilities: spec.Capabilities, AuthStatus: app.ProviderAuthStatus(spec)})
 	}
 	return out
 }
