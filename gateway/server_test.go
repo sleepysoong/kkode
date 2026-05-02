@@ -714,7 +714,7 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 		srv.ServeHTTP(rec, req)
 		close(done)
 	}()
-	time.Sleep(50 * time.Millisecond)
+	waitForRunSubscription(t, bus, "run_stream")
 	bus.Publish(RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "completed"})
 	select {
 	case <-done:
@@ -731,9 +731,24 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 	}
 }
 
+func waitForRunSubscription(t *testing.T, bus *RunEventBus, runID string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		bus.mu.Lock()
+		count := len(bus.subscribers[runID])
+		bus.mu.Unlock()
+		if count > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("run SSE 구독이 준비되지 않았어요")
+}
+
 func TestGatewayRetriesRun(t *testing.T) {
 	store := openTestStore(t)
-	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Metadata: map[string]string{"source": "discord"}}
+	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, Metadata: map[string]string{"source": "discord"}}
 	var retryReq RunStartRequest
 	srv, err := New(Config{
 		Store: store,
@@ -761,6 +776,9 @@ func TestGatewayRetriesRun(t *testing.T) {
 	}
 	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" {
 		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
+	}
+	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" {
+		t.Fatalf("retry가 실행 옵션을 보존해야 해요: %+v", retryReq)
 	}
 }
 

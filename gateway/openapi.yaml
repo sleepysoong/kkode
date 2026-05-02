@@ -2253,6 +2253,22 @@ components:
           enum: [queued, running, cancelling, completed, failed, cancelled]
         prompt:
           type: string
+        provider:
+          type: string
+        model:
+          type: string
+        mcp_servers:
+          type: array
+          items:
+            type: string
+        skills:
+          type: array
+          items:
+            type: string
+        subagents:
+          type: array
+          items:
+            type: string
         events_url:
           type: string
         started_at:

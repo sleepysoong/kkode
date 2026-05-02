@@ -34,6 +34,7 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 	}{
 		{schema: "SessionCreateRequest", dto: SessionCreateRequest{}},
 		{schema: "RunStartRequest", dto: RunStartRequest{}},
+		{schema: "Run", dto: RunDTO{}},
 		{schema: "ToolCallRequest", dto: ToolCallRequest{}},
 		{schema: "FileWriteRequest", dto: FileWriteRequest{}},
 		{schema: "Resource", dto: ResourceDTO{}},

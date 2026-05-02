@@ -118,7 +118,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		runID = session.NewID("run")
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
-	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Status: "queued", EventsURL: "/api/v1/sessions/" + req.SessionID + "/events", StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
+	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "queued", EventsURL: "/api/v1/sessions/" + req.SessionID + "/events", StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
 	m.mu.Lock()
 	if _, exists := m.runs[runID]; exists {
 		m.mu.Unlock()
@@ -278,6 +278,21 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		if run.SessionID == "" {
 			run.SessionID = req.SessionID
 		}
+		if run.Provider == "" {
+			run.Provider = req.Provider
+		}
+		if run.Model == "" {
+			run.Model = req.Model
+		}
+		if len(run.MCPServers) == 0 {
+			run.MCPServers = cloneStringSlice(req.MCPServers)
+		}
+		if len(run.Skills) == 0 {
+			run.Skills = cloneStringSlice(req.Skills)
+		}
+		if len(run.Subagents) == 0 {
+			run.Subagents = cloneStringSlice(req.Subagents)
+		}
 		if run.EventsURL == "" {
 			run.EventsURL = "/api/v1/sessions/" + run.SessionID + "/events"
 		}
@@ -365,11 +380,11 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 }
 
 func sessionRunFromDTO(run RunDTO) session.Run {
-	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func runDTOFromSession(run session.Run) *RunDTO {
-	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func (m *AsyncRunManager) timestamp() time.Time {
@@ -391,6 +406,15 @@ func cloneRun(run *RunDTO) *RunDTO {
 	out := *run
 	out.Metadata = cloneMap(run.Metadata)
 	return &out
+}
+
+func cloneStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
 }
 
 func cloneMap(in map[string]string) map[string]string {

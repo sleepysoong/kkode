@@ -97,6 +97,11 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);`,
+		`ALTER TABLE runs ADD COLUMN provider TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE runs ADD COLUMN model TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE runs ADD COLUMN mcp_servers_json BLOB NOT NULL DEFAULT '[]';`,
+		`ALTER TABLE runs ADD COLUMN skills_json BLOB NOT NULL DEFAULT '[]';`,
+		`ALTER TABLE runs ADD COLUMN subagents_json BLOB NOT NULL DEFAULT '[]';`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_session_updated ON runs(session_id, updated_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_status_updated ON runs(status, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS run_events (
@@ -141,6 +146,9 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			if strings.HasPrefix(stmt, "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
 			return err
 		}
 	}
@@ -709,25 +717,42 @@ func (s *SQLiteStore) SaveRun(ctx context.Context, run Run) (Run, error) {
 	if err != nil {
 		return run, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	mcpServers, err := json.Marshal(run.MCPServers)
+	if err != nil {
+		return run, err
+	}
+	skills, err := json.Marshal(run.Skills)
+	if err != nil {
+		return run, err
+	}
+	subagents, err := json.Marshal(run.Subagents)
+	if err != nil {
+		return run, err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			session_id=excluded.session_id,
 			turn_id=excluded.turn_id,
 			status=excluded.status,
 			prompt=excluded.prompt,
+			provider=excluded.provider,
+			model=excluded.model,
+			mcp_servers_json=excluded.mcp_servers_json,
+			skills_json=excluded.skills_json,
+			subagents_json=excluded.subagents_json,
 			events_url=excluded.events_url,
 			started_at=excluded.started_at,
 			ended_at=excluded.ended_at,
 			error=excluded.error,
 			metadata_json=excluded.metadata_json,
 			updated_at=excluded.updated_at`,
-		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, mcpServers, skills, subagents, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
 	return run, err
 }
 
 func (s *SQLiteStore) LoadRun(ctx context.Context, id string) (Run, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
 	return scanRun(row)
 }
 
@@ -736,7 +761,7 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	query := `SELECT id, session_id, turn_id, status, prompt, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs`
+	query := `SELECT id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs`
 	args := []any{}
 	where := []string{}
 	if q.SessionID != "" {
@@ -862,8 +887,8 @@ type runScanner interface {
 func scanRun(scanner runScanner) (Run, error) {
 	var run Run
 	var started, ended, created, updated string
-	var metadata []byte
-	if err := scanner.Scan(&run.ID, &run.SessionID, &run.TurnID, &run.Status, &run.Prompt, &run.EventsURL, &started, &ended, &run.Error, &metadata, &created, &updated); err != nil {
+	var metadata, mcpServers, skills, subagents []byte
+	if err := scanner.Scan(&run.ID, &run.SessionID, &run.TurnID, &run.Status, &run.Prompt, &run.Provider, &run.Model, &mcpServers, &skills, &subagents, &run.EventsURL, &started, &ended, &run.Error, &metadata, &created, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Run{}, fmt.Errorf("run not found")
 		}
@@ -875,6 +900,21 @@ func scanRun(scanner runScanner) (Run, error) {
 	run.UpdatedAt = parseTime(updated)
 	if len(metadata) > 0 {
 		if err := json.Unmarshal(metadata, &run.Metadata); err != nil {
+			return Run{}, err
+		}
+	}
+	if len(mcpServers) > 0 {
+		if err := json.Unmarshal(mcpServers, &run.MCPServers); err != nil {
+			return Run{}, err
+		}
+	}
+	if len(skills) > 0 {
+		if err := json.Unmarshal(skills, &run.Skills); err != nil {
+			return Run{}, err
+		}
+	}
+	if len(subagents) > 0 {
+		if err := json.Unmarshal(subagents, &run.Subagents); err != nil {
 			return Run{}, err
 		}
 	}

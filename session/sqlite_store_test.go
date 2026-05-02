@@ -231,7 +231,7 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	saved, err := store.SaveRun(ctx, Run{ID: "run_1", SessionID: sess.ID, Status: "queued", Prompt: "go", EventsURL: "/api/v1/sessions/" + sess.ID + "/events", Metadata: map[string]string{"source": "test"}})
+	saved, err := store.SaveRun(ctx, Run{ID: "run_1", SessionID: sess.ID, Status: "queued", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, EventsURL: "/api/v1/sessions/" + sess.ID + "/events", Metadata: map[string]string{"source": "test"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Status != "completed" || loaded.TurnID != "turn_1" || loaded.Metadata["source"] != "test" {
+	if loaded.Status != "completed" || loaded.TurnID != "turn_1" || loaded.Metadata["source"] != "test" || loaded.Provider != "copilot" || loaded.Model != "gpt-5-mini" || len(loaded.MCPServers) != 1 || loaded.MCPServers[0] != "mcp_1" || len(loaded.Skills) != 1 || loaded.Skills[0] != "skill_1" || len(loaded.Subagents) != 1 || loaded.Subagents[0] != "agent_1" {
 		t.Fatalf("loaded run이 이상해요: %+v", loaded)
 	}
 	listed, err := store.ListRuns(ctx, RunQuery{SessionID: sess.ID, Limit: 10})

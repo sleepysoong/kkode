@@ -127,7 +127,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if runID == "" {
 			runID = session.NewID("run")
 		}
-		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
 			run.EventsURL = "/api/v1/sessions/" + result.Session.ID + "/events"
@@ -156,6 +156,15 @@ func isLoopbackListenAddr(addr string) bool {
 	}
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	return ip != nil && ip.IsLoopback()
+}
+
+func cloneStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
 }
 
 func firstNonEmpty(value, fallback string) string {
