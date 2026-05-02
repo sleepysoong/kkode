@@ -234,6 +234,7 @@ erDiagram
 - `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요.
 - `GET/POST/PUT/DELETE /api/v1/mcp/servers`, `/api/v1/skills`, `/api/v1/subagents`는 외부 adapter가 실행 자산 manifest를 SQLite에 저장하고 재사용하게 해요. `POST /api/v1/runs`의 `mcp_servers`, `skills`, `subagents` ID 목록으로 선택한 manifest를 provider 설정에 반영해요. `GET /api/v1/mcp/servers/{id}/tools`는 stdio MCP server를 probe해서 `tools/list` 결과를 확인하고, `POST /api/v1/mcp/servers/{id}/tools/{tool}/call`은 디버그/웹 패널에서 저장된 stdio MCP tool을 직접 호출해요.
 - `GET /api/v1/lsp/symbols?project_root=...&query=...`는 웹 패널 코드 탐색을 위한 Go symbol 검색을 제공해요.
+- `GET /api/v1/tools`, `POST /api/v1/tools/call`은 웹 패널/Discord adapter가 agent run 없이도 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`를 직접 실행하게 해요. 권한 프롬프트 없이 바로 실행하는 YOLO API예요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support
@@ -353,6 +354,9 @@ curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true'
 curl -X POST http://127.0.0.1:41234/api/v1/mcp/servers/mcp_.../tools/echo/call \
   -H 'Content-Type: application/json' \
   -d '{"arguments":{"text":"ping"}}'
+curl -X POST http://127.0.0.1:41234/api/v1/tools/call \
+  -H 'Content-Type: application/json' \
+  -d '{"project_root":"/home/user/kkode","tool":"file_read","arguments":{"path":"README.md","max_bytes":4096}}'
 curl http://127.0.0.1:41234/api/v1/sessions/sess_.../events
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
 ```

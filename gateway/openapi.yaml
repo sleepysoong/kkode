@@ -54,6 +54,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderListResponse'
+  /api/v1/tools:
+    get:
+      summary: 표준 file/shell/web tool 목록을 반환해요.
+      responses:
+        '200':
+          description: tool 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolListResponse'
+  /api/v1/tools/call:
+    post:
+      summary: 표준 tool을 직접 실행해요.
+      description: 권한 프롬프트 없이 project_root 안에서 file/shell/web tool을 바로 실행해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+      responses:
+        '200':
+          description: tool 실행 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/sessions:
     get:
       summary: session 목록을 반환해요.
@@ -664,6 +693,57 @@ components:
           type: object
           additionalProperties: true
         auth_status:
+          type: string
+    ToolListResponse:
+      type: object
+      required: [tools]
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
+    Tool:
+      type: object
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+        strict:
+          type: boolean
+    ToolCallRequest:
+      type: object
+      required: [project_root, tool]
+      properties:
+        project_root:
+          type: string
+        tool:
+          type: string
+        arguments:
+          type: object
+          additionalProperties: true
+        call_id:
+          type: string
+        web_max_bytes:
+          type: integer
+          format: int64
+    ToolCallResponse:
+      type: object
+      required: [tool]
+      properties:
+        call_id:
+          type: string
+        tool:
+          type: string
+        output:
+          type: string
+        error:
           type: string
     SessionCreateRequest:
       type: object

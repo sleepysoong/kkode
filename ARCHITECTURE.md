@@ -386,6 +386,8 @@ GET  /readyz
 GET  /api/v1/version
 GET  /api/v1/capabilities
 GET  /api/v1/providers
+GET  /api/v1/tools
+POST /api/v1/tools/call
 POST /api/v1/sessions
 GET  /api/v1/sessions
 GET  /api/v1/sessions/{session_id}
@@ -418,7 +420,7 @@ POST /api/v1/runs/{run_id}/cancel
 POST /api/v1/runs/{run_id}/retry
 ```
 
-`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio manifest는 `/api/v1/mcp/servers/{resource_id}/tools`로 `initialize`와 `tools/list` probe를 실행할 수 있고, `/api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call`로 `tools/call`을 직접 검증할 수 있어요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 symbol index를 반환하고, `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리는 건너뛰며 `limit`에 도달하면 scan을 조기 중단해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. session `/events`는 저장된 event replay이고, run `/events`는 현재 snapshot과 live 상태 변경을 함께 제공해요.
+`GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태를 discovery할 수 있게 해요. `GET /api/v1/tools`와 `POST /api/v1/tools/call`은 표준 file/shell/web tool surface를 API로 직접 노출해요. 이 endpoint도 권한 프롬프트 없이 project root 기준으로 즉시 실행해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio manifest는 `/api/v1/mcp/servers/{resource_id}/tools`로 `initialize`와 `tools/list` probe를 실행할 수 있고, `/api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call`로 `tools/call`을 직접 검증할 수 있어요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `cmd/kkode-gateway`가 이를 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. `GET /api/v1/lsp/symbols`는 Go parser 기반 symbol index를 반환하고, `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리는 건너뛰며 `limit`에 도달하면 scan을 조기 중단해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs`는 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 goroutine에서 실제 `RunStarter`를 실행해요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경을 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달해요. 외부 Discord/Slack/web adapter는 `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `events_url`이 가리키는 session event replay를 읽으면 돼요. session `/events`는 저장된 event replay이고, run `/events`는 현재 snapshot과 live 상태 변경을 함께 제공해요.
 
 ```bash
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'

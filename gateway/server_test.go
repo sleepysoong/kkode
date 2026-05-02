@@ -537,3 +537,79 @@ while True:
 		t.Fatalf("MCP tools/call 결과가 이상해요: %+v", got)
 	}
 }
+
+func TestGatewayListsAndCallsStandardTools(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tools", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed ToolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
+		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
+	}
+
+	root := t.TempDir()
+	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":"call_1"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var called ToolCallResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.CallID != "call_1" || called.Tool != "file_write" || called.Error != "" {
+		t.Fatalf("tool call 응답이 이상해요: %+v", called)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "notes", "todo.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("file_write가 실행되지 않았어요: %q", data)
+	}
+}
+
+func TestGatewayCallsWebFetchTool(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("pong"))
+	}))
+	defer upstream.Close()
+	root := t.TempDir()
+	body := `{"project_root":"` + root + `","tool":"web_fetch","arguments":{"url":"` + upstream.URL + `","max_bytes":4}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var called ToolCallResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.Tool != "web_fetch" || !strings.Contains(called.Output, "pong") {
+		t.Fatalf("web_fetch 결과가 이상해요: %+v", called)
+	}
+}
+
+func hasTool(tools []ToolDTO, name string) bool {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
+}
