@@ -61,6 +61,7 @@ func (r *Runtime) Run(ctx context.Context, opts RunOptions) (*RunResult, error) 
 		tools.Merge(session.TodoToolSet(r.Store, sess.ID))
 		req.Tools, handlers = tools.Parts()
 	}
+	baseEventCount := len(sess.Events)
 	turn := session.NewTurn(opts.Prompt, req)
 	r.appendRuntimeEvent(sess, turn.ID, "turn.started", "", nil, "")
 	started := time.Now().UTC()
@@ -88,10 +89,25 @@ func (r *Runtime) Run(ctx context.Context, opts RunOptions) (*RunResult, error) 
 			sess.Todos = latest.Todos
 		}
 	}
-	if err := r.Store.SaveSession(ctx, sess); err != nil {
+	if err := r.saveSessionAfterRun(ctx, sess, turn, baseEventCount); err != nil {
 		return nil, err
 	}
 	return &RunResult{Session: sess, Turn: turn, Agent: result}, runErr
+}
+
+func (r *Runtime) saveSessionAfterRun(ctx context.Context, sess *session.Session, turn session.Turn, baseEventCount int) error {
+	if incremental, ok := r.Store.(session.IncrementalStore); ok {
+		if err := incremental.AppendTurn(ctx, sess.ID, turn); err != nil {
+			return err
+		}
+		for _, ev := range sess.Events[baseEventCount:] {
+			if err := r.Store.AppendEvent(ctx, ev); err != nil {
+				return err
+			}
+		}
+		return incremental.SaveSessionState(ctx, sess)
+	}
+	return r.Store.SaveSession(ctx, sess)
 }
 
 func (r *Runtime) Resume(ctx context.Context, sessionID string) (*session.Session, error) {

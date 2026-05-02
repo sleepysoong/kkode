@@ -105,6 +105,49 @@ func TestRuntimeTraceEventsSaved(t *testing.T) {
 	}
 }
 
+func TestRuntimeUsesIncrementalStoreForRunPersistence(t *testing.T) {
+	ctx := context.Background()
+	sqlite, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlite.Close()
+	store := &countingStore{SQLiteStore: sqlite}
+	provider := &historyProvider{}
+	ag, err := agent.New(agent.Config{Provider: provider, Model: "fake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{Store: store, Agent: ag, ProjectRoot: "/repo", ProviderName: provider.Name(), Model: "fake"}
+	first, err := rt.Run(ctx, RunOptions{Prompt: "첫 요청"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Run(ctx, RunOptions{SessionID: first.Session.ID, Prompt: "둘째 요청"}); err != nil {
+		t.Fatal(err)
+	}
+	if store.saveSessionCalls != 0 {
+		t.Fatalf("incremental store에서는 SaveSession 전체 재작성을 쓰면 안 돼요: %d", store.saveSessionCalls)
+	}
+	loaded, err := sqlite.LoadSession(ctx, first.Session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Turns) != 2 || len(loaded.Events) < 4 || loaded.LastResponseID == "" {
+		t.Fatalf("incremental 저장 결과가 이상해요: turns=%d events=%d last=%q", len(loaded.Turns), len(loaded.Events), loaded.LastResponseID)
+	}
+}
+
+type countingStore struct {
+	*session.SQLiteStore
+	saveSessionCalls int
+}
+
+func (s *countingStore) SaveSession(ctx context.Context, sess *session.Session) error {
+	s.saveSessionCalls++
+	return s.SQLiteStore.SaveSession(ctx, sess)
+}
+
 type toolProvider struct{ calls int }
 
 func (p *toolProvider) Name() string                   { return "tool" }

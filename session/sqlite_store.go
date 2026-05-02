@@ -249,6 +249,90 @@ func (s *SQLiteStore) SaveSession(ctx context.Context, sess *Session) error {
 	return tx.Commit()
 }
 
+func (s *SQLiteStore) SaveSessionState(ctx context.Context, sess *Session) error {
+	if sess == nil {
+		return errors.New("session is nil")
+	}
+	normalizeSession(sess)
+	lastItems, err := json.Marshal(sess.LastInputItems)
+	if err != nil {
+		return err
+	}
+	metadata, err := json.Marshal(sess.Metadata)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	sess.UpdatedAt = now
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET
+		project_root = ?,
+		provider_name = ?,
+		model = ?,
+		agent_name = ?,
+		mode = ?,
+		summary = ?,
+		last_response_id = ?,
+		last_input_items_json = ?,
+		metadata_json = ?,
+		updated_at = ?
+		WHERE id = ?`,
+		sess.ProjectRoot, sess.ProviderName, sess.Model, sess.AgentName, string(sess.Mode), sess.Summary, sess.LastResponseID, lastItems, metadata, formatTime(now), sess.ID)
+	if err != nil {
+		return err
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		return fmt.Errorf("session not found: %s", sess.ID)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) AppendTurn(ctx context.Context, sessionID string, turn Turn) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return errors.New("session id is required")
+	}
+	if turn.ID == "" {
+		turn.ID = NewID("turn")
+	}
+	if turn.StartedAt.IsZero() {
+		turn.StartedAt = time.Now().UTC()
+	}
+	if turn.EndedAt.IsZero() {
+		turn.EndedAt = turn.StartedAt
+	}
+	req, err := json.Marshal(turn.Request)
+	if err != nil {
+		return err
+	}
+	var resp []byte
+	if turn.Response != nil {
+		resp, err = json.Marshal(turn.Response)
+		if err != nil {
+			return err
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var ordinal int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM turns WHERE session_id = ?`, sessionID).Scan(&ordinal); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO turns (id, session_id, ordinal, prompt, request_json, response_json, started_at, ended_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		turn.ID, sessionID, ordinal, turn.Prompt, req, nullableBytes(resp), formatTime(turn.StartedAt), formatTime(turn.EndedAt), turn.Error)
+	if err != nil {
+		return err
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		return fmt.Errorf("turn append failed: %s", turn.ID)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), sessionID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id, project_root, provider_name, model, agent_name, mode, summary, last_response_id, last_input_items_json, metadata_json, created_at, updated_at FROM sessions WHERE id = ?`, id)
 	var sess Session

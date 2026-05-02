@@ -126,6 +126,12 @@ type TimelineStore interface {
 	LoadTurn(ctx context.Context, sessionID string, turnID string) (TurnRecord, error)
 }
 
+// IncrementalStore는 새 turn/event와 session metadata만 저장해 긴 session write amplification을 줄여요.
+type IncrementalStore interface {
+	AppendTurn(ctx context.Context, sessionID string, turn Turn) error
+	SaveSessionState(ctx context.Context, sess *Session) error
+}
+
 type SessionSummary struct {
 	ID           string    `json:"id"`
 	ProjectRoot  string    `json:"project_root"`
