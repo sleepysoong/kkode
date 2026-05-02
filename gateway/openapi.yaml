@@ -715,6 +715,21 @@ components:
           type: object
           additionalProperties:
             type: string
+        mcp_servers:
+          type: array
+          description: run에 연결할 MCP server resource id 목록이에요.
+          items:
+            type: string
+        skills:
+          type: array
+          description: run에 연결할 skill resource id 목록이에요.
+          items:
+            type: string
+        subagents:
+          type: array
+          description: run에 연결할 subagent resource id 목록이에요.
+          items:
+            type: string
     LSPSymbolListResponse:
       type: object
       required: [symbols]

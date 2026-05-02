@@ -326,3 +326,25 @@ func copilotEventToStream(event ghcopilot.SessionEvent, provider, model string) 
 	}
 	return ev
 }
+
+func MCPServerConfigs(servers map[string]llm.MCPServer) map[string]ghcopilot.MCPServerConfig {
+	if len(servers) == 0 {
+		return nil
+	}
+	out := make(map[string]ghcopilot.MCPServerConfig, len(servers))
+	for name, server := range servers {
+		out[name] = ToCopilotMCPServer(server)
+	}
+	return out
+}
+
+func AgentConfigs(agents []llm.Agent) []ghcopilot.CustomAgentConfig {
+	if len(agents) == 0 {
+		return nil
+	}
+	out := make([]ghcopilot.CustomAgentConfig, 0, len(agents))
+	for _, agent := range agents {
+		out = append(out, ToCopilotAgent(agent))
+	}
+	return out
+}

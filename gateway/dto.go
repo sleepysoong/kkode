@@ -78,12 +78,15 @@ type TodoListResponse struct {
 
 // RunStartRequest는 gateway RunStarter가 실제 agent 실행에 넘기는 요청이에요.
 type RunStartRequest struct {
-	SessionID string            `json:"session_id"`
-	Prompt    string            `json:"prompt"`
-	Provider  string            `json:"provider,omitempty"`
-	Model     string            `json:"model,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
-	RunID     string            `json:"-"`
+	SessionID  string            `json:"session_id"`
+	Prompt     string            `json:"prompt"`
+	Provider   string            `json:"provider,omitempty"`
+	Model      string            `json:"model,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	MCPServers []string          `json:"mcp_servers,omitempty"`
+	Skills     []string          `json:"skills,omitempty"`
+	Subagents  []string          `json:"subagents,omitempty"`
+	RunID      string            `json:"-"`
 }
 
 // RunDTO는 gateway에서 관리하는 실행 단위예요. gateway RunStarter가 실행을 접수하거나 완료했을 때 생성해요.

@@ -67,8 +67,20 @@ type RuntimeOptions struct {
 	DisableTodoHelpers bool
 }
 
+// ProviderOptions는 저장된 MCP/skill/subagent manifest를 provider 생성에 반영하는 옵션이에요.
+type ProviderOptions struct {
+	MCPServers       map[string]llm.MCPServer
+	SkillDirectories []string
+	CustomAgents     []llm.Agent
+}
+
 // BuildProvider는 환경변수 기반 provider 생성을 한 곳에서 처리해요.
 func BuildProvider(name, root string) (ProviderHandle, error) {
+	return BuildProviderWithOptions(name, root, ProviderOptions{})
+}
+
+// BuildProviderWithOptions는 gateway resource manifest를 provider별 설정으로 반영해요.
+func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error) {
 	spec, ok := ResolveProviderSpec(name)
 	if !ok {
 		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
@@ -79,7 +91,7 @@ func BuildProvider(name, root string) (ProviderHandle, error) {
 	case "omniroute":
 		return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")})}, nil
 	case "copilot", "github-copilot":
-		client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN")))})
+		client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
 		return ProviderHandle{Provider: client, Close: client.Close}, nil
 	case "codex", "codexcli", "codex-cli":
 		return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil

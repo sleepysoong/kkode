@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/sleepysoong/kkode/gateway"
+	"github.com/sleepysoong/kkode/session"
 )
 
 func TestRemoteBindRequiresAPIKey(t *testing.T) {
@@ -24,5 +28,33 @@ func TestLoopbackListenAddr(t *testing.T) {
 		if got := isLoopbackListenAddr(addr); got != want {
 			t.Fatalf("isLoopbackListenAddr(%q) = %v, want %v", addr, got, want)
 		}
+	}
+}
+
+func TestLoadProviderOptionsFromResources(t *testing.T) {
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	mcp, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "filesystem", Enabled: true, Config: []byte(`{"kind":"stdio","command":"mcp-fs","args":["."],"tools":["read"]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "review", Enabled: true, Config: []byte(`{"path":"/tmp/skills/review"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subagent, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSubagent, Name: "planner", Enabled: true, Config: []byte(`{"prompt":"계획해요","tools":["file_read"],"skills":["review"]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts, err := loadProviderOptions(ctx, store, gateway.RunStartRequest{MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}, Subagents: []string{subagent.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != "/tmp/skills/review" || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" {
+		t.Fatalf("provider options가 이상해요: %+v", opts)
 	}
 }
