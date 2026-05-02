@@ -367,6 +367,35 @@ paths:
           description: 삭제됐어요.
         '404':
           $ref: '#/components/responses/Error'
+
+  /api/v1/lsp/symbols:
+    get:
+      summary: Go source symbol을 LSP-style로 검색해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 1000
+      responses:
+        '200':
+          description: symbol 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LSPSymbolListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/runs:
     get:
       summary: background run 목록을 반환해요.
@@ -686,6 +715,31 @@ components:
           type: object
           additionalProperties:
             type: string
+    LSPSymbolListResponse:
+      type: object
+      required: [symbols]
+      properties:
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/LSPSymbol'
+    LSPSymbol:
+      type: object
+      required: [name, kind, file, line, column]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [function, method, type, var, const]
+        file:
+          type: string
+        line:
+          type: integer
+        column:
+          type: integer
+        container:
+          type: string
     ResourceListResponse:
       type: object
       required: [resources]

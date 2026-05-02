@@ -122,6 +122,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSkills(w, r, parts)
 	case "subagents":
 		s.handleSubagents(w, r, parts)
+	case "lsp":
+		s.handleLSP(w, r, parts)
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}

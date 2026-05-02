@@ -233,6 +233,7 @@ erDiagram
 - `GET /api/v1/runs`, `GET /api/v1/runs/{id}`, `POST /api/v1/runs/{id}/cancel`로 외부 adapter가 run 상태를 조회하고 취소할 수 있어요.
 - `GET /api/v1/capabilities`는 sessions/events/todos/background_runs/MCP/skills/subagents/LSP의 현재 지원 상태를 외부 adapter가 발견할 수 있게 해요.
 - `GET/POST/PUT/DELETE /api/v1/mcp/servers`, `/api/v1/skills`, `/api/v1/subagents`는 외부 adapter가 실행 자산 manifest를 SQLite에 저장하고 재사용하게 해요.
+- `GET /api/v1/lsp/symbols?project_root=...&query=...`는 웹 패널 코드 탐색을 위한 Go symbol 검색을 제공해요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support

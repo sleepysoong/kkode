@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -310,5 +311,48 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGatewayLSPSymbolSearch(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.go"), `package demo
+
+type Runner struct{}
+
+func NewRunner() Runner { return Runner{} }
+
+func (r *Runner) Run() {}
+`)
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var symbols LSPSymbolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &symbols); err != nil {
+		t.Fatal(err)
+	}
+	var sawType, sawMethod bool
+	for _, symbol := range symbols.Symbols {
+		if symbol.Name == "Runner" && symbol.Kind == "type" {
+			sawType = true
+		}
+		if symbol.Name == "Run" && symbol.Kind == "method" && symbol.Container == "Runner" {
+			sawMethod = true
+		}
+	}
+	if !sawType || !sawMethod {
+		t.Fatalf("LSP symbol 검색이 이상해요: %+v", symbols.Symbols)
+	}
+}
+
+func writeTestFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

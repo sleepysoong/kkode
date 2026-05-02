@@ -10,6 +10,6 @@ func DefaultFeatureCatalog() []FeatureDTO {
 		{Name: "mcp", Status: "implemented", Description: "MCP server manifest를 API와 SQLite에 저장하고 provider 연결 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/mcp/servers", "POST /api/v1/mcp/servers", "GET /api/v1/mcp/servers/{resource_id}", "PUT /api/v1/mcp/servers/{resource_id}", "DELETE /api/v1/mcp/servers/{resource_id}"}},
 		{Name: "skills", Status: "implemented", Description: "Skill manifest를 API와 SQLite에 저장하고 provider skill directory/prompt 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/skills", "POST /api/v1/skills", "GET /api/v1/skills/{resource_id}", "PUT /api/v1/skills/{resource_id}", "DELETE /api/v1/skills/{resource_id}"}},
 		{Name: "subagents", Status: "implemented", Description: "Subagent manifest를 API와 SQLite에 저장하고 custom agent 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/subagents", "POST /api/v1/subagents", "GET /api/v1/subagents/{resource_id}", "PUT /api/v1/subagents/{resource_id}", "DELETE /api/v1/subagents/{resource_id}"}},
-		{Name: "lsp", Status: "planned", Description: "LSP index/query API는 아직 runtime에 직접 연결되지 않았어요."},
+		{Name: "lsp", Status: "implemented", Description: "Go source symbol index를 LSP-style API로 조회할 수 있어요.", Endpoints: []string{"GET /api/v1/lsp/symbols"}},
 	}
 }
