@@ -421,6 +421,26 @@ paths:
           description: 삭제됐어요.
         '404':
           $ref: '#/components/responses/Error'
+  /api/v1/skills/{resource_id}/preview:
+    get:
+      summary: skill manifest의 SKILL.md 또는 README.md preview를 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - in: query
+          name: max_bytes
+          schema:
+            type: integer
+            default: 65536
+      responses:
+        '200':
+          description: skill preview예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillPreviewResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/v1/subagents:
     get:
       summary: subagent manifest 목록을 반환해요.
@@ -1041,6 +1061,20 @@ components:
           type: integer
         container:
           type: string
+    SkillPreviewResponse:
+      type: object
+      required: [skill, truncated]
+      properties:
+        skill:
+          $ref: '#/components/schemas/Resource'
+        directory:
+          type: string
+        file:
+          type: string
+        markdown:
+          type: string
+        truncated:
+          type: boolean
     ResourceListResponse:
       type: object
       required: [resources]

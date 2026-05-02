@@ -353,6 +353,9 @@ func (r *Runner) Run() {}
 
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -663,5 +666,30 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 	}
 	if len(loaded.Todos) != 0 {
 		t.Fatalf("todo가 삭제되지 않았어요: %+v", loaded.Todos)
+	}
+}
+
+func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
+	root := t.TempDir()
+	skillDir := filepath.Join(root, "review")
+	writeTestFile(t, filepath.Join(skillDir, "SKILL.md"), "# 리뷰 스킬\n\n코드를 리뷰해요.\n")
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceSkill, Name: "review", Enabled: true, Config: []byte(`{"path":"` + skillDir + `"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes=8", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var preview SkillPreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.Skill.ID != resource.ID || preview.File == "" || !preview.Truncated || !strings.Contains(preview.Markdown, "리뷰") {
+		t.Fatalf("skill preview가 이상해요: %+v", preview)
 	}
 }

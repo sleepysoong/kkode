@@ -42,6 +42,10 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, parts []strin
 }
 
 func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) == 3 && parts[2] == "preview" && r.Method == http.MethodGet {
+		s.previewSkill(w, r, parts[1])
+		return
+	}
 	s.handleResources(w, r, parts[1:], resourceRoute{Kind: session.ResourceSkill, Name: "skill"})
 }
 
