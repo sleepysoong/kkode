@@ -288,3 +288,27 @@ func (s *trackingTodoStore) SaveTodos(ctx context.Context, sessionID string, tod
 	s.sess.Touch()
 	return nil
 }
+
+func TestAppendEventPersistsOrderedSessionEvents(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	for _, typ := range []string{"turn.started", "tool.completed", "turn.completed"} {
+		if err := store.AppendEvent(ctx, Event{SessionID: sess.ID, TurnID: "turn_1", Type: typ}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loaded, err := store.LoadSession(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Events) != 3 || loaded.Events[0].Type != "turn.started" || loaded.Events[2].Type != "turn.completed" {
+		t.Fatalf("event ordinal replay가 이상해요: %+v", loaded.Events)
+	}
+	if !loaded.UpdatedAt.After(sess.UpdatedAt) && !loaded.UpdatedAt.Equal(sess.UpdatedAt) {
+		t.Fatalf("session updated_at이 보존되지 않았어요: before=%s after=%s", sess.UpdatedAt, loaded.UpdatedAt)
+	}
+}

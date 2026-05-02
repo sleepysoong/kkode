@@ -331,17 +331,23 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]Sessi
 
 func (s *SQLiteStore) AppendEvent(ctx context.Context, ev Event) error {
 	normalizeEvent(ev.SessionID, &ev)
-	var ordinal int
-	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM events WHERE session_id = ?`, ev.SessionID).Scan(&ordinal); err != nil {
-		return err
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO events (id, session_id, turn_id, ordinal, at, type, tool, payload_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ev.ID, ev.SessionID, ev.TurnID, ordinal, formatTime(ev.At), ev.Type, ev.Tool, nullableBytes(ev.Payload), ev.Error)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), ev.SessionID)
-	return err
+	defer tx.Rollback()
+	var ordinal int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(ordinal), -1) + 1 FROM events WHERE session_id = ?`, ev.SessionID).Scan(&ordinal); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO events (id, session_id, turn_id, ordinal, at, type, tool, payload_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ev.ID, ev.SessionID, ev.TurnID, ordinal, formatTime(ev.At), ev.Type, ev.Tool, nullableBytes(ev.Payload), ev.Error); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), ev.SessionID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) SaveCheckpoint(ctx context.Context, cp Checkpoint) error {
