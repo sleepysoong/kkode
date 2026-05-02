@@ -766,3 +766,54 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 		t.Fatalf("checkpoint 상세가 이상해요: %+v", got)
 	}
 }
+
+func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "docs", "a.md"), "one\ntwo\nthree")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files?project_root="+root+"&path=docs", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed FileListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "a.md" || listed.Entries[0].Kind != "file" {
+		t.Fatalf("files list가 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/a.md&offset_line=2&limit_lines=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var content FileContentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &content); err != nil {
+		t.Fatal(err)
+	}
+	if content.Content != "two" {
+		t.Fatalf("file content range가 이상해요: %+v", content)
+	}
+
+	body := `{"project_root":"` + root + `","path":"docs/b.md","content":"new"}`
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/files/content", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	data, err := os.ReadFile(filepath.Join(root, "docs", "b.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Fatalf("file write가 이상해요: %q", data)
+	}
+}

@@ -128,6 +128,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleLSP(w, r, parts)
 	case "tools":
 		s.handleTools(w, r, parts)
+	case "files":
+		s.handleFiles(w, r, parts)
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}
@@ -206,10 +208,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
-	limit := queryInt(r, "limit", 50)
-	if limit > 200 {
-		limit = 200
-	}
+	limit := queryLimit(r, "limit", 50, 200)
 	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: r.URL.Query().Get("project_root"), Limit: limit})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_sessions_failed", err.Error())
@@ -305,16 +304,7 @@ func (s *Server) writeSSEEvents(w http.ResponseWriter, r *http.Request, events [
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
 	for _, ev := range events {
-		data, err := json.Marshal(ev)
-		if err != nil {
-			continue
-		}
-		fmt.Fprintf(w, "id: %d\n", ev.Seq)
-		fmt.Fprintf(w, "event: %s\n", ev.Type)
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		if flusher != nil {
-			flusher.Flush()
-		}
+		writeSSEFrame(w, flusher, ev.Seq, ev.Type, ev)
 	}
 }
 
@@ -359,10 +349,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
 		return
 	}
-	limit := queryInt(r, "limit", 50)
-	if limit > 200 {
-		limit = 200
-	}
+	limit := queryLimit(r, "limit", 50, 200)
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), Limit: limit})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
@@ -461,10 +448,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 
 func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO) []RunEventDTO {
 	afterSeq := queryInt(r, "after_seq", 0)
-	limit := queryInt(r, "limit", 200)
-	if limit > 1000 {
-		limit = 1000
-	}
+	limit := queryLimit(r, "limit", 200, 1000)
 	if s.cfg.RunEventLister != nil {
 		events, err := s.cfg.RunEventLister(r.Context(), runID, afterSeq, limit)
 		if err == nil && len(events) > 0 {
@@ -518,12 +502,16 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 }
 
 func writeRunSSEEvent(w http.ResponseWriter, flusher http.Flusher, event RunEventDTO) {
-	data, err := json.Marshal(event)
+	writeSSEFrame(w, flusher, event.Seq, event.Type, event)
+}
+
+func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, seq int, eventType string, payload any) {
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return
 	}
-	fmt.Fprintf(w, "id: %d\n", event.Seq)
-	fmt.Fprintf(w, "event: %s\n", event.Type)
+	fmt.Fprintf(w, "id: %d\n", seq)
+	fmt.Fprintf(w, "event: %s\n", eventType)
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	if flusher != nil {
 		flusher.Flush()
@@ -576,6 +564,14 @@ func queryInt(r *http.Request, key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func queryLimit(r *http.Request, key string, fallback int, maxValue int) int {
+	limit := queryInt(r, key, fallback)
+	if maxValue > 0 && limit > maxValue {
+		return maxValue
+	}
+	return limit
 }
 
 func wantsSSE(r *http.Request) bool {

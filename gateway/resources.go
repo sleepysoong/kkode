@@ -106,10 +106,7 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 }
 
 func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute) {
-	limit := queryInt(r, "limit", 100)
-	if limit > 500 {
-		limit = 500
-	}
+	limit := queryLimit(r, "limit", 100, 500)
 	var enabled *bool
 	if raw := strings.TrimSpace(r.URL.Query().Get("enabled")); raw != "" {
 		value := raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")

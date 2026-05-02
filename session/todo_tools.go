@@ -8,6 +8,7 @@ import (
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/prompts"
+	tooldefs "github.com/sleepysoong/kkode/tools"
 )
 
 type todoSaver interface {
@@ -18,9 +19,9 @@ type todoSaver interface {
 func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry) {
 	strict := true
 	defs := []llm.Tool{
-		{Kind: llm.ToolFunction, Name: "todo_write", Description: "현재 session의 todo 목록 전체를 저장해요", Strict: &strict, Parameters: objectSchema(map[string]any{"items": arraySchema(objectSchema(map[string]any{"id": stringSchema(), "content": stringSchema(), "status": stringSchema(), "priority": stringSchema()}))})},
-		{Kind: llm.ToolFunction, Name: "todo_update", Description: "현재 session의 todo 하나를 갱신해요", Strict: &strict, Parameters: objectSchema(map[string]any{"id": stringSchema(), "content": stringSchema(), "status": stringSchema(), "priority": stringSchema()})},
-		{Kind: llm.ToolFunction, Name: "todo_list", Description: "현재 session의 todo 목록을 읽어요", Strict: &strict, Parameters: objectSchema(map[string]any{})},
+		{Kind: llm.ToolFunction, Name: "todo_write", Description: "현재 session의 todo 목록 전체를 저장해요", Strict: &strict, Parameters: tooldefs.ObjectSchema(map[string]any{"items": tooldefs.ArraySchema(tooldefs.ObjectSchema(map[string]any{"id": tooldefs.StringSchema(), "content": tooldefs.StringSchema(), "status": tooldefs.StringSchema(), "priority": tooldefs.StringSchema()}))})},
+		{Kind: llm.ToolFunction, Name: "todo_update", Description: "현재 session의 todo 하나를 갱신해요", Strict: &strict, Parameters: tooldefs.ObjectSchema(map[string]any{"id": tooldefs.StringSchema(), "content": tooldefs.StringSchema(), "status": tooldefs.StringSchema(), "priority": tooldefs.StringSchema()})},
+		{Kind: llm.ToolFunction, Name: "todo_list", Description: "현재 session의 todo 목록을 읽어요", Strict: &strict, Parameters: tooldefs.ObjectSchema(map[string]any{})},
 	}
 	handlers := llm.ToolRegistry{
 		"todo_write": llm.JSONToolHandler(func(ctx context.Context, in struct {
@@ -89,18 +90,6 @@ func todoText(items []Todo) string {
 	}
 	b, _ := json.MarshalIndent(items, "", "  ")
 	return string(b)
-}
-
-func objectSchema(properties map[string]any) map[string]any {
-	required := make([]any, 0, len(properties))
-	for name := range properties {
-		required = append(required, name)
-	}
-	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
-}
-func stringSchema() map[string]any { return map[string]any{"type": "string"} }
-func arraySchema(items map[string]any) map[string]any {
-	return map[string]any{"type": "array", "items": items}
 }
 
 func TodoInstructions() string {

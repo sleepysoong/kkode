@@ -144,3 +144,27 @@ func TestWorkspaceCanWriteDotGitAndRunCommands(t *testing.T) {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
 }
+
+func TestWorkspaceSearchSkipsGeneratedDirectories(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("src/a.txt", "needle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("node_modules/pkg/a.txt", "needle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile(".omx/logs/run.log", "needle"); err != nil {
+		t.Fatal(err)
+	}
+	matches, err := w.Grep("needle", GrepOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0].Path != "src/a.txt" {
+		t.Fatalf("생성물 디렉터리는 검색에서 건너뛰어야 해요: %+v", matches)
+	}
+}

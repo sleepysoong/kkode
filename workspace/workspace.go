@@ -57,6 +57,17 @@ type SearchMatch struct {
 	Excerpt string `json:"excerpt"`
 }
 
+var defaultWalkSkipDirs = map[string]struct{}{
+	".cache":       {},
+	".git":         {},
+	".next":        {},
+	".serena":      {},
+	".turbo":       {},
+	"build":        {},
+	"dist":         {},
+	"node_modules": {},
+}
+
 func New(root string) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -184,18 +195,7 @@ func (w *Workspace) Glob(pattern string) ([]string, error) {
 		return nil, errors.New("pattern is required")
 	}
 	var matches []string
-	err := filepath.WalkDir(w.Root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(w.Root, path)
-		rel = filepath.ToSlash(rel)
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+	err := w.walkFiles(func(_ string, rel string, _ os.DirEntry) error {
 		if globMatches(pattern, rel) {
 			matches = append(matches, rel)
 		}
@@ -245,21 +245,10 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 		re = compiled
 	}
 	var matches []SearchMatch
-	err := filepath.WalkDir(w.Root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	err := w.walkFiles(func(path string, rel string, _ os.DirEntry) error {
 		if len(matches) >= maxMatches {
 			return filepath.SkipAll
 		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, _ := filepath.Rel(w.Root, path)
-		rel = filepath.ToSlash(rel)
 		if opts.PathGlob != "" && !globMatches(opts.PathGlob, rel) {
 			return nil
 		}
@@ -292,6 +281,36 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 		return scanner.Err()
 	})
 	return matches, err
+}
+
+func (w *Workspace) walkFiles(visit func(path string, rel string, entry os.DirEntry) error) error {
+	return filepath.WalkDir(w.Root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(w.Root, path)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			if shouldSkipWalkDir(rel, d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		return visit(path, rel, d)
+	})
+}
+
+func shouldSkipWalkDir(rel, name string) bool {
+	if rel == "." {
+		return false
+	}
+	if _, ok := defaultWalkSkipDirs[name]; ok {
+		return true
+	}
+	return rel == ".omx/logs" || strings.HasPrefix(rel, ".omx/logs/")
 }
 
 func (w *Workspace) Run(ctx context.Context, command string, args ...string) (string, error) {

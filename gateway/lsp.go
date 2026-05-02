@@ -41,10 +41,7 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 	}
 	switch parts[1] {
 	case "symbols":
-		limit := queryInt(r, "limit", 200)
-		if limit > 1000 {
-			limit = 1000
-		}
+		limit := queryLimit(r, "limit", 200, 1000)
 		symbols, err := scanGoSymbols(root, strings.TrimSpace(r.URL.Query().Get("query")), limit)
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, "scan_symbols_failed", err.Error())

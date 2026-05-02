@@ -54,6 +54,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderListResponse'
+  /api/v1/files:
+    get:
+      summary: workspace 디렉터리 항목을 나열해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          schema:
+            type: string
+            default: .
+      responses:
+        '200':
+          description: file entry 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/files/content:
+    get:
+      summary: workspace 파일 내용을 읽어요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: offset_line
+          schema:
+            type: integer
+        - in: query
+          name: limit_lines
+          schema:
+            type: integer
+        - in: query
+          name: max_bytes
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: file content예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileContentResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: workspace 파일 내용을 써요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileWriteRequest'
+      responses:
+        '200':
+          description: 저장된 file content예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileContentResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/tools:
     get:
       summary: 표준 file/shell/web tool 목록을 반환해요.
@@ -867,6 +942,55 @@ components:
           type: object
           additionalProperties: true
         auth_status:
+          type: string
+    FileListResponse:
+      type: object
+      required: [project_root, path, entries]
+      properties:
+        project_root:
+          type: string
+        path:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileEntry'
+    FileEntry:
+      type: object
+      required: [name, path, kind, size]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        kind:
+          type: string
+          enum: [file, directory]
+        size:
+          type: integer
+          format: int64
+        mod_time:
+          type: string
+          format: date-time
+    FileContentResponse:
+      type: object
+      required: [project_root, path, content]
+      properties:
+        project_root:
+          type: string
+        path:
+          type: string
+        content:
+          type: string
+    FileWriteRequest:
+      type: object
+      required: [project_root, path, content]
+      properties:
+        project_root:
+          type: string
+        path:
+          type: string
+        content:
           type: string
     ToolListResponse:
       type: object
