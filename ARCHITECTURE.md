@@ -666,7 +666,7 @@ func BuildResponsesRequest(req llm.Request) (map[string]any, error)
 func ParseResponsesResponse(data []byte, providerName string) (*llm.Response, error)
 ```
 
-`Generate`와 `Stream`은 같은 request builder와 retry 경로를 공유해요. JSON request 생성, bearer auth, custom header 복사, retry/backoff는 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
+`Generate`와 `Stream`은 같은 request builder와 retry 경로를 공유해요. JSON request 생성, bearer auth, custom header 복사, retry/backoff, SSE line framing은 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
 
 built-in tool helper도 제공해요.
 

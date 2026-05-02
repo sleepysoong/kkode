@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -62,5 +63,26 @@ func TestDoWithRetryRetriesServerErrors(t *testing.T) {
 	defer res.Body.Close()
 	if attempts != 2 || res.StatusCode != http.StatusOK {
 		t.Fatalf("retry 결과가 이상해요: attempts=%d status=%d", attempts, res.StatusCode)
+	}
+}
+
+func TestReadSSEFramesEvents(t *testing.T) {
+	input := strings.NewReader(": keepalive\n" +
+		"event: response.output_text.delta\n" +
+		"data: {\"delta\":\"hel\"}\n" +
+		"data: {\"delta\":\"lo\"}\n\n" +
+		"data: [DONE]\n\n")
+	var events []string
+	var payloads []string
+	err := ReadSSE(context.Background(), input, func(eventName string, data []byte) bool {
+		events = append(events, eventName)
+		payloads = append(payloads, string(data))
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0] != "response.output_text.delta" || payloads[0] != "{\"delta\":\"hel\"}\n{\"delta\":\"lo\"}" {
+		t.Fatalf("SSE framing이 이상해요: events=%v payloads=%v", events, payloads)
 	}
 }

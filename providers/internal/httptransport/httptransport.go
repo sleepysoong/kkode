@@ -1,12 +1,14 @@
 package httptransport
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -139,4 +141,60 @@ func DoJSONRaw(ctx context.Context, client *http.Client, method string, endpoint
 		return nil, fmt.Errorf("%s returned %s: %s", errorLabel, res.Status, string(data))
 	}
 	return data, nil
+}
+
+// ReadSSE는 text/event-stream line framing을 읽고 event/data 묶음마다 handle을 호출해요.
+// handle이 false를 반환하거나 [DONE]을 만나면 읽기를 멈춰요.
+func ReadSSE(ctx context.Context, reader io.Reader, handle func(eventName string, data []byte) bool) error {
+	s := bufio.NewScanner(reader)
+	// 큰 JSON event도 처리할 수 있게 buffer를 넉넉하게 잡아요.
+	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var eventName string
+	var dataLines []string
+	flush := func() bool {
+		if len(dataLines) == 0 {
+			eventName = ""
+			return true
+		}
+		data := strings.Join(dataLines, "\n")
+		dataLines = nil
+		if data == "[DONE]" {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+		if handle != nil && !handle(eventName, []byte(data)) {
+			return false
+		}
+		eventName = ""
+		return true
+	}
+	for s.Scan() {
+		line := s.Text()
+		if line == "" {
+			if !flush() {
+				return nil
+			}
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		if strings.HasPrefix(line, "event:") {
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			continue
+		}
+	}
+	if err := s.Err(); err != nil {
+		return err
+	}
+	flush()
+	return nil
 }

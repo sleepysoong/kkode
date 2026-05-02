@@ -1,14 +1,13 @@
 package openai
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/internal/httptransport"
 )
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
@@ -32,55 +31,18 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, 
 
 func readSSE(ctx context.Context, r io.Reader, provider string, out chan<- llm.StreamEvent) {
 	defer close(out)
-	s := bufio.NewScanner(r)
-	// 큰 JSON event도 처리할 수 있게 buffer를 넉넉하게 잡아요.
-	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	var eventName string
-	var dataLines []string
-	flush := func() bool {
-		if len(dataLines) == 0 {
-			eventName = ""
-			return true
-		}
-		data := strings.Join(dataLines, "\n")
-		dataLines = nil
-		if data == "[DONE]" {
-			return false
-		}
-		ev := parseStreamEvent(eventName, []byte(data), provider)
+	err := httptransport.ReadSSE(ctx, r, func(eventName string, data []byte) bool {
+		ev := parseStreamEvent(eventName, data, provider)
 		select {
 		case <-ctx.Done():
 			return false
 		case out <- ev:
+			return true
 		}
-		eventName = ""
-		return true
-	}
-	for s.Scan() {
-		line := s.Text()
-		if line == "" {
-			if !flush() {
-				return
-			}
-			continue
-		}
-		if strings.HasPrefix(line, ":") {
-			continue
-		}
-		if strings.HasPrefix(line, "event:") {
-			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-			continue
-		}
-		if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
-			continue
-		}
-	}
-	if err := s.Err(); err != nil {
+	})
+	if err != nil {
 		out <- llm.StreamEvent{Type: llm.StreamEventError, Provider: provider, Error: err}
-		return
 	}
-	flush()
 }
 
 func parseStreamEvent(eventName string, raw []byte, provider string) llm.StreamEvent {
