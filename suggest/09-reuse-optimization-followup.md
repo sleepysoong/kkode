@@ -23,9 +23,9 @@
 
 이렇게 하면 `/api/v1/capabilities`, `gateway/openapi_contract_test.go`, 문서 endpoint 목록을 같은 소스에서 검증하기 쉬워져요.
 
-### 2. LSP Go 파일 scan helper가 필요해요
+### 2. LSP Go 파일 scan helper는 반영했어요
 
-`scanGoSymbols`, `scanGoDefinitions`, `scanGoReferences`, `scanGoDiagnostics`, `scanGoHover`가 `filepath.WalkDir`, skip directory, `.go` 필터, `parser.ParseFile`, limit 처리를 반복해요. `walkGoFiles(root, limit, mode, visitor)` 같은 helper를 만들면 LSP API 성능 튜닝과 skip rule 변경을 한 곳에서 처리할 수 있어요.
+`scanGoSymbols`, `scanGoDefinitions`, `scanGoReferences`, `scanGoDiagnostics`, `scanGoHover`가 이제 `walkParsedGoFiles`를 공유해요. skip directory, `.go` 필터, parse mode, limit 조기 중단을 한 곳에서 다루므로 다음 LSP endpoint를 추가해도 순회 규칙이 흔들리지 않아요.
 
 ### 3. SQLite session 저장 경로를 append 중심으로 바꿔야 해요
 

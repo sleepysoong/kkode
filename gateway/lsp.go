@@ -147,27 +147,10 @@ func scanGoSymbols(root string, query string, limit int) ([]LSPSymbolDTO, error)
 	}
 	fset := token.NewFileSet()
 	out := []LSPSymbolDTO{}
-	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if len(out) >= limit {
-			return fs.SkipAll
-		}
-		if entry.IsDir() {
-			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
-				return filepath.SkipDir
-			}
+	err = walkParsedGoFiles(absRoot, fset, 0, func() bool { return len(out) >= limit }, func(parsed parsedGoFile) error {
+		if parsed.Err != nil {
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(absRoot, path)
 		appendSymbol := func(name string, kind string, pos token.Pos, container string) {
 			if len(out) >= limit || name == "" {
 				return
@@ -176,9 +159,9 @@ func scanGoSymbols(root string, query string, limit int) ([]LSPSymbolDTO, error)
 				return
 			}
 			p := fset.Position(pos)
-			out = append(out, LSPSymbolDTO{Name: name, Kind: kind, File: filepath.ToSlash(rel), Line: p.Line, Column: p.Column, Container: container})
+			out = append(out, LSPSymbolDTO{Name: name, Kind: kind, File: parsed.Rel, Line: p.Line, Column: p.Column, Container: container})
 		}
-		collectGoSymbols(file, appendSymbol)
+		collectGoSymbols(parsed.File, appendSymbol)
 		return nil
 	})
 	return out, err
@@ -260,35 +243,18 @@ func scanGoDefinitions(root string, symbol string, limit int) ([]LSPSymbolDTO, e
 	}
 	fset := token.NewFileSet()
 	out := []LSPSymbolDTO{}
-	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if len(out) >= limit {
-			return fs.SkipAll
-		}
-		if entry.IsDir() {
-			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
-				return filepath.SkipDir
-			}
+	err = walkParsedGoFiles(absRoot, fset, 0, func() bool { return len(out) >= limit }, func(parsed parsedGoFile) error {
+		if parsed.Err != nil {
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(absRoot, path)
 		appendSymbol := func(name string, kind string, pos token.Pos, container string) {
 			if len(out) >= limit || !matchesLSPSymbol(symbol, name, container) {
 				return
 			}
 			p := fset.Position(pos)
-			out = append(out, LSPSymbolDTO{Name: name, Kind: kind, File: filepath.ToSlash(rel), Line: p.Line, Column: p.Column, Container: container})
+			out = append(out, LSPSymbolDTO{Name: name, Kind: kind, File: parsed.Rel, Line: p.Line, Column: p.Column, Container: container})
 		}
-		collectGoSymbols(file, appendSymbol)
+		collectGoSymbols(parsed.File, appendSymbol)
 		return nil
 	})
 	return out, err
@@ -312,28 +278,11 @@ func scanGoReferences(root string, symbol string, limit int) ([]LSPReferenceDTO,
 	}
 	fset := token.NewFileSet()
 	out := []LSPReferenceDTO{}
-	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if len(out) >= limit {
-			return fs.SkipAll
-		}
-		if entry.IsDir() {
-			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
-				return filepath.SkipDir
-			}
+	err = walkParsedGoFiles(absRoot, fset, 0, func() bool { return len(out) >= limit }, func(parsed parsedGoFile) error {
+		if parsed.Err != nil {
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		source, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(absRoot, path)
-		lines := readFileLines(path)
+		lines := readFileLines(parsed.Path)
 		seen := map[token.Pos]bool{}
 		addReference := func(name string, kind string, pos token.Pos) {
 			if len(out) >= limit || name != target || seen[pos] {
@@ -341,9 +290,9 @@ func scanGoReferences(root string, symbol string, limit int) ([]LSPReferenceDTO,
 			}
 			seen[pos] = true
 			p := fset.Position(pos)
-			out = append(out, LSPReferenceDTO{Name: name, Kind: kind, File: filepath.ToSlash(rel), Line: p.Line, Column: p.Column, Excerpt: lineExcerpt(lines, p.Line)})
+			out = append(out, LSPReferenceDTO{Name: name, Kind: kind, File: parsed.Rel, Line: p.Line, Column: p.Column, Excerpt: lineExcerpt(lines, p.Line)})
 		}
-		ast.Inspect(source, func(node ast.Node) bool {
+		ast.Inspect(parsed.File, func(node ast.Node) bool {
 			switch n := node.(type) {
 			case *ast.SelectorExpr:
 				addReference(n.Sel.Name, "selector", n.Sel.Pos())
@@ -410,23 +359,13 @@ func scanGoDiagnostics(root string, relPath string, limit int) ([]LSPDiagnosticD
 		}
 		return out, visit(path)
 	}
-	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if len(out) >= limit {
-			return fs.SkipAll
-		}
-		if entry.IsDir() {
-			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
-				return filepath.SkipDir
-			}
+	fset := token.NewFileSet()
+	err = walkParsedGoFiles(absRoot, fset, parser.AllErrors, func() bool { return len(out) >= limit }, func(parsed parsedGoFile) error {
+		if parsed.Err == nil {
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		return visit(path)
+		appendParseDiagnostics(&out, parsed.Rel, parsed.Err, limit)
+		return nil
 	})
 	return out, err
 }
@@ -456,32 +395,11 @@ func scanGoHover(root string, symbol string) (LSPHoverResponse, error) {
 	}
 	fset := token.NewFileSet()
 	var found LSPHoverResponse
-	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if found.Found {
-			return fs.SkipAll
-		}
-		if entry.IsDir() {
-			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
-				return filepath.SkipDir
-			}
+	err = walkParsedGoFiles(absRoot, fset, parser.ParseComments, func() bool { return found.Found }, func(parsed parsedGoFile) error {
+		if parsed.Err != nil {
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") {
-			return nil
-		}
-		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(absRoot, path)
-		rel = filepath.ToSlash(rel)
-		found = hoverFromFile(fset, file, rel, symbol)
-		if found.Found {
-			return fs.SkipAll
-		}
+		found = hoverFromFile(fset, parsed.File, parsed.Rel, symbol)
 		return nil
 	})
 	return found, err
@@ -592,6 +510,36 @@ func firstDocText(groups ...*ast.CommentGroup) string {
 		}
 	}
 	return ""
+}
+
+type parsedGoFile struct {
+	Path string
+	Rel  string
+	File *ast.File
+	Err  error
+}
+
+func walkParsedGoFiles(absRoot string, fset *token.FileSet, mode parser.Mode, stop func() bool, visit func(parsedGoFile) error) error {
+	return filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if stop != nil && stop() {
+			return fs.SkipAll
+		}
+		if entry.IsDir() {
+			if shouldSkipLSPDir(entry.Name()) && path != absRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		rel, _ := filepath.Rel(absRoot, path)
+		file, err := parser.ParseFile(fset, path, nil, mode)
+		return visit(parsedGoFile{Path: path, Rel: filepath.ToSlash(rel), File: file, Err: err})
+	})
 }
 
 func shouldSkipLSPDir(name string) bool {

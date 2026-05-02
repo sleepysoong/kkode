@@ -98,3 +98,54 @@ func Main() {}
 		t.Fatalf("document symbol 응답이 이상해요: %+v", got)
 	}
 }
+
+func TestScanGoNavigationDiagnosticsAndHover(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "pkg", "nav.go"), `package pkg
+
+// Runner는 작업을 실행해요.
+type Runner struct{}
+
+// Run은 작업을 시작해요.
+func (Runner) Run() {}
+
+func Use(r Runner) {
+	r.Run()
+}
+`)
+	writeFile(t, filepath.Join(root, "bad.go"), `package bad
+func Broken( {
+`)
+
+	defs, err := scanGoDefinitions(root, "Runner.Run", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(defs) != 1 || defs[0].Kind != "method" || defs[0].Container != "Runner" {
+		t.Fatalf("definition scan이 이상해요: %+v", defs)
+	}
+
+	refs, err := scanGoReferences(root, "Run", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) < 2 {
+		t.Fatalf("reference scan이 부족해요: %+v", refs)
+	}
+
+	diagnostics, err := scanGoDiagnostics(root, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics) == 0 || diagnostics[0].Source != "go/parser" {
+		t.Fatalf("diagnostics scan이 이상해요: %+v", diagnostics)
+	}
+
+	hover, err := scanGoHover(root, "Runner.Run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hover.Found || hover.Kind != "method" || hover.Documentation == "" || hover.Signature == "" {
+		t.Fatalf("hover scan이 이상해요: %+v", hover)
+	}
+}
