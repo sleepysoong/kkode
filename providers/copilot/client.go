@@ -34,19 +34,19 @@ func New(cfg Config) *Client { return &Client{cfg: cfg} }
 
 func (c *Client) Name() string { return "github-copilot-sdk" }
 
-func (c *Client) Capabilities() llm.Capabilities {
+func (c *Client) Capabilities() llm.Capabilities { return DefaultCapabilities() }
+
+// DefaultCapabilities는 GitHub Copilot SDK provider의 기능 계약이에요.
+func DefaultCapabilities() llm.Capabilities {
 	return llm.Capabilities{
-		Tools:              true,
-		CustomTools:        true,
-		Reasoning:          true,
-		ReasoningSummaries: false,
-		StructuredOutput:   false,
-		Streaming:          true,
-		ToolChoice:         false,
-		ParallelToolCalls:  true,
-		MCP:                true,
-		Skills:             true,
-		CustomAgents:       true,
+		Tools:             true,
+		CustomTools:       true,
+		Reasoning:         true,
+		Streaming:         true,
+		ParallelToolCalls: true,
+		MCP:               true,
+		Skills:            true,
+		CustomAgents:      true,
 	}
 }
 

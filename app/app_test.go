@@ -2,9 +2,14 @@ package app
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/codexcli"
+	"github.com/sleepysoong/kkode/providers/copilot"
+	"github.com/sleepysoong/kkode/providers/omniroute"
+	"github.com/sleepysoong/kkode/providers/openai"
 	"github.com/sleepysoong/kkode/session"
 	"github.com/sleepysoong/kkode/workspace"
 )
@@ -33,6 +38,24 @@ func TestCSVAndDefaultModel(t *testing.T) {
 	}
 	if ProviderAuthStatus(ProviderSpec{Name: "local", Local: true}) != "local" {
 		t.Fatal("local provider auth status가 바뀌면 안 돼요")
+	}
+}
+
+func TestProviderSpecsUseProviderCapabilityContracts(t *testing.T) {
+	expected := map[string]map[string]any{
+		"openai":    openai.DefaultCapabilities().ToMap(),
+		"omniroute": omniroute.DefaultCapabilities().ToMap(),
+		"copilot":   copilot.DefaultCapabilities().ToMap(),
+		"codex":     codexcli.DefaultCapabilities().ToMap(),
+	}
+	for _, spec := range ProviderSpecs() {
+		want, ok := expected[spec.Name]
+		if !ok {
+			continue
+		}
+		if !reflect.DeepEqual(spec.Capabilities, want) {
+			t.Fatalf("%s provider capability discovery drifted: got %#v want %#v", spec.Name, spec.Capabilities, want)
+		}
 	}
 }
 

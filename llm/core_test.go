@@ -76,3 +76,14 @@ func TestRenderTranscriptPromptAndTextResponse(t *testing.T) {
 		t.Fatalf("resp=%#v", resp)
 	}
 }
+
+func TestCapabilitiesToMapExposesOnlyEnabledCapabilities(t *testing.T) {
+	caps := Capabilities{Tools: true, Streaming: true, A2A: true}
+	got := caps.ToMap()
+	if got["tools"] != true || got["streaming"] != true || got["a2a"] != true {
+		t.Fatalf("enabled capability가 map에 있어야 해요: %#v", got)
+	}
+	if _, ok := got["skills"]; ok {
+		t.Fatalf("false capability는 생략해야 해요: %#v", got)
+	}
+}

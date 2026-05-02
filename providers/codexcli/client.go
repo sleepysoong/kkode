@@ -38,7 +38,10 @@ func New(cfg Config) *Client {
 
 func (c *Client) Name() string { return "codex-cli" }
 
-func (c *Client) Capabilities() llm.Capabilities {
+func (c *Client) Capabilities() llm.Capabilities { return DefaultCapabilities() }
+
+// DefaultCapabilities는 Codex CLI provider의 기능 계약이에요.
+func DefaultCapabilities() llm.Capabilities {
 	return llm.Capabilities{Reasoning: true, Streaming: true, Tools: true, MCP: true, Skills: true}
 }
 

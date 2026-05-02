@@ -107,26 +107,26 @@ func DefaultModel(provider string) string {
 
 var providerRegistry = []providerRegistryEntry{
 	{
-		Spec: ProviderSpec{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "reasoning_summaries": true, "structured_output": true, "streaming": true, "tool_choice": true, "parallel_tool_calls": true}},
+		Spec: ProviderSpec{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: openai.DefaultCapabilities().ToMap()},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")})}, nil
 		},
 	},
 	{
-		Spec: ProviderSpec{Name: "omniroute", DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini", "auto"}, AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "a2a": true, "routing": true}},
+		Spec: ProviderSpec{Name: "omniroute", DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini", "auto"}, AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: omniroute.DefaultCapabilities().ToMap()},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")})}, nil
 		},
 	},
 	{
-		Spec: ProviderSpec{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}, Capabilities: map[string]any{"tools": true, "custom_tools": true, "reasoning": true, "streaming": true, "parallel_tool_calls": true, "mcp": true, "skills": true, "custom_agents": true}},
+		Spec: ProviderSpec{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}, Capabilities: copilot.DefaultCapabilities().ToMap()},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
 			return ProviderHandle{Provider: client, Close: client.Close}, nil
 		},
 	},
 	{
-		Spec: ProviderSpec{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Models: []string{"gpt-5.3-codex"}, Local: true, Capabilities: map[string]any{"tools": true, "reasoning": true, "streaming": true, "mcp": true, "skills": true}},
+		Spec: ProviderSpec{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Models: []string{"gpt-5.3-codex"}, Local: true, Capabilities: codexcli.DefaultCapabilities().ToMap()},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
 		},

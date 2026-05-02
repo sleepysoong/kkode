@@ -70,14 +70,17 @@ func New(cfg Config) *Client {
 
 func (c *Client) Name() string { return c.providerName }
 
-func (c *Client) Capabilities() llm.Capabilities {
+func (c *Client) Capabilities() llm.Capabilities { return DefaultCapabilities() }
+
+// DefaultCapabilities는 OpenAI-compatible Responses API가 지원하는 기능 계약이에요.
+func DefaultCapabilities() llm.Capabilities {
 	return llm.Capabilities{
 		Tools:              true,
 		CustomTools:        true,
 		Reasoning:          true,
 		ReasoningSummaries: true,
 		StructuredOutput:   true,
-		Streaming:          false,
+		Streaming:          true,
 		ToolChoice:         true,
 		ParallelToolCalls:  true,
 		PromptRefs:         true,

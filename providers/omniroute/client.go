@@ -92,11 +92,14 @@ func New(cfg Config) *Client {
 
 func (c *Client) Name() string { return "omniroute" }
 
-func (c *Client) Capabilities() llm.Capabilities {
-	caps := c.openai.Capabilities()
-	caps.PromptRefs = true
-	caps.PreviousResponseID = true
+func (c *Client) Capabilities() llm.Capabilities { return DefaultCapabilities() }
+
+// DefaultCapabilities는 OmniRoute의 OpenAI-compatible + routing 확장 기능 계약이에요.
+func DefaultCapabilities() llm.Capabilities {
+	caps := openai.DefaultCapabilities()
 	caps.MCP = true
+	caps.A2A = true
+	caps.Routing = true
 	return caps
 }
 

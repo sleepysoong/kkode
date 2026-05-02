@@ -28,6 +28,35 @@ type Capabilities struct {
 	MCP                bool
 	Skills             bool
 	CustomAgents       bool
+	A2A                bool
+	Routing            bool
+}
+
+// ToMap은 API discovery에서 쓰는 snake_case capability map을 만들어요.
+// false 값은 생략해서 provider가 지원하는 기능만 간결하게 노출해요.
+func (c Capabilities) ToMap() map[string]any {
+	out := map[string]any{}
+	add := func(name string, enabled bool) {
+		if enabled {
+			out[name] = true
+		}
+	}
+	add("tools", c.Tools)
+	add("custom_tools", c.CustomTools)
+	add("reasoning", c.Reasoning)
+	add("reasoning_summaries", c.ReasoningSummaries)
+	add("structured_output", c.StructuredOutput)
+	add("streaming", c.Streaming)
+	add("tool_choice", c.ToolChoice)
+	add("parallel_tool_calls", c.ParallelToolCalls)
+	add("prompt_refs", c.PromptRefs)
+	add("previous_response_id", c.PreviousResponseID)
+	add("mcp", c.MCP)
+	add("skills", c.Skills)
+	add("custom_agents", c.CustomAgents)
+	add("a2a", c.A2A)
+	add("routing", c.Routing)
+	return out
 }
 
 type Auth struct {
