@@ -51,6 +51,40 @@ func TestSQLiteStoreSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt-5-mini", "agent", AgentModeBuild)
+	turn := NewTurn("통계", llm.Request{Model: "gpt-5-mini"})
+	turn.Response = &llm.Response{ID: "resp_stats", Text: "ok"}
+	turn.EndedAt = turn.StartedAt
+	sess.AppendTurn(turn)
+	sess.AppendEvent(Event{ID: "ev_stats", SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed"})
+	sess.Todos = []Todo{{ID: "todo_stats", Content: "통계", Status: TodoPending}}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCheckpoint(ctx, Checkpoint{ID: "cp_stats", SessionID: sess.ID, TurnID: turn.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveResource(ctx, Resource{Kind: ResourceSkill, Name: "skill"}); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.LoadStats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 {
+		t.Fatalf("기본 stats가 이상해요: %+v", stats)
+	}
+	if stats.Runs["completed"] != 1 || stats.Resources[string(ResourceSkill)] != 1 {
+		t.Fatalf("grouped stats가 이상해요: %+v", stats)
+	}
+}
+
 func TestSQLiteTimelineStoreListsTurnsAndEventsWithoutFullSession(t *testing.T) {
 	ctx := context.Background()
 	store := openSQLiteForTest(t)

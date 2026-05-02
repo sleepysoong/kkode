@@ -79,6 +79,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelListResponse'
+  /api/v1/stats:
+    get:
+      summary: gateway dashboard 통계를 반환해요.
+      responses:
+        '200':
+          description: 저장소 통계예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '501':
+          $ref: '#/components/responses/Error'
   /api/v1/files:
     get:
       summary: workspace 디렉터리 항목을 나열해요.
@@ -1389,6 +1401,28 @@ components:
           additionalProperties: true
         auth_status:
           type: string
+    StatsResponse:
+      type: object
+      required: [sessions, turns, events, todos, checkpoints, runs, resources]
+      properties:
+        sessions:
+          type: integer
+        turns:
+          type: integer
+        events:
+          type: integer
+        todos:
+          type: integer
+        checkpoints:
+          type: integer
+        runs:
+          type: object
+          additionalProperties:
+            type: integer
+        resources:
+          type: object
+          additionalProperties:
+            type: integer
     FileListResponse:
       type: object
       required: [project_root, path, entries]

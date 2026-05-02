@@ -42,6 +42,7 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		{schema: "GitDiffResponse", dto: GitDiffResponse{}},
 		{schema: "GitLogResponse", dto: GitLogResponse{}},
 		{schema: "GitLogEntry", dto: GitLogEntryDTO{}},
+		{schema: "StatsResponse", dto: StatsResponse{}},
 	}
 	for _, tc := range cases {
 		props := schemas[tc.schema]

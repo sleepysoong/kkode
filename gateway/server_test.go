@@ -18,6 +18,40 @@ import (
 	"github.com/sleepysoong/kkode/session"
 )
 
+func TestGatewayStatsEndpoint(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("통계", llm.Request{Model: "gpt-5-mini"})
+	turn.Response = &llm.Response{ID: "resp_stats", Text: "ok"}
+	turn.EndedAt = turn.StartedAt
+	sess.AppendTurn(turn)
+	sess.AppendEvent(session.Event{ID: "ev_stats", SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed"})
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveRun(ctx, session.Run{ID: "run_stats", SessionID: sess.ID, Status: "running", Prompt: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "mcp"}); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var stats StatsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &stats); err != nil {
+		t.Fatal(err)
+	}
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Runs["running"] != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
+		t.Fatalf("stats 응답이 이상해요: %+v", stats)
+	}
+}
+
 func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")

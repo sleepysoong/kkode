@@ -137,6 +137,21 @@ type TurnEventStore interface {
 	AppendTurnWithEvents(ctx context.Context, sess *Session, turn Turn, events []Event) error
 }
 
+// StoreStats는 운영 패널에서 한 번에 보여줄 저장소 규모와 상태 카운트예요.
+type StoreStats struct {
+	Sessions    int
+	Turns       int
+	Events      int
+	Todos       int
+	Checkpoints int
+	Runs        map[string]int
+	Resources   map[string]int
+}
+
+// StatsStore는 dashboard/API adapter가 여러 목록 API를 반복 호출하지 않게 exact count를 제공해요.
+type StatsStore interface {
+	LoadStats(ctx context.Context) (StoreStats, error)
+}
 type SessionSummary struct {
 	ID           string    `json:"id"`
 	ProjectRoot  string    `json:"project_root"`

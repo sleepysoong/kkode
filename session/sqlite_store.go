@@ -460,6 +460,32 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 	return &sess, nil
 }
 
+func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
+	stats := StoreStats{Runs: map[string]int{}, Resources: map[string]int{}}
+	counts := []struct {
+		query string
+		out   *int
+	}{
+		{query: `SELECT COUNT(1) FROM sessions`, out: &stats.Sessions},
+		{query: `SELECT COUNT(1) FROM turns`, out: &stats.Turns},
+		{query: `SELECT COUNT(1) FROM events`, out: &stats.Events},
+		{query: `SELECT COUNT(1) FROM todos`, out: &stats.Todos},
+		{query: `SELECT COUNT(1) FROM checkpoints`, out: &stats.Checkpoints},
+	}
+	for _, item := range counts {
+		if err := s.db.QueryRowContext(ctx, item.query).Scan(item.out); err != nil {
+			return stats, err
+		}
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT status, COUNT(1) FROM runs GROUP BY status`, stats.Runs); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM resources GROUP BY kind`, stats.Resources); err != nil {
+		return stats, err
+	}
+	return stats, nil
+}
+
 func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]SessionSummary, error) {
 	limit := q.Limit
 	if limit <= 0 {
@@ -1146,6 +1172,23 @@ func replaceTodos(ctx context.Context, tx *sql.Tx, sessionID string, todos []Tod
 		}
 	}
 	return nil
+}
+
+func scanGroupedCounts(ctx context.Context, db *sql.DB, query string, out map[string]int) error {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var count int
+		if err := rows.Scan(&key, &count); err != nil {
+			return err
+		}
+		out[key] = count
+	}
+	return rows.Err()
 }
 
 func normalizeSession(sess *Session) {

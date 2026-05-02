@@ -120,6 +120,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handlePrompts(w, r, parts)
 	case "capabilities":
 		s.handleCapabilities(w, r, parts)
+	case "stats":
+		s.handleStats(w, r, parts)
 	case "sessions":
 		s.handleSessions(w, r, parts)
 	case "runs":
