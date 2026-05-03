@@ -520,6 +520,52 @@ func TestGatewayStreamsRequestCorrelationEvents(t *testing.T) {
 	}
 }
 
+func TestGatewayRequestCorrelationSSECatchesUpdateDuringReplay(t *testing.T) {
+	store := openTestStore(t)
+	bus := NewRunEventBus()
+	run := RunDTO{ID: "run_req_replay_race", SessionID: "sess_1", Status: "running", Metadata: map[string]string{RequestIDMetadataKey: "req_replay_race"}}
+	published := false
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			if q.RequestID != "req_replay_race" {
+				return nil, nil
+			}
+			return []RunDTO{run}, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			if !published {
+				published = true
+				bus.Publish(RunDTO{ID: "run_req_replay_race", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: "req_replay_race"}})
+			}
+			return []RunEventDTO{{Seq: 1, At: time.Now().UTC(), Type: "run.running", Run: run}}, nil
+		},
+		RunSubscriber: bus.Subscribe,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_replay_race/events?stream=true", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(rec, req)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("request replay 중 들어온 terminal update를 놓치면 SSE가 끝나지 않아요")
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: run.running") || !strings.Contains(body, "event: run.completed") {
+		t.Fatalf("request replay 중 live update를 모두 보내야 해요: %s", body)
+	}
+}
+
 func openTestStore(t *testing.T) *session.SQLiteStore {
 	t.Helper()
 	store, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))

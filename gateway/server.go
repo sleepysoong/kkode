@@ -329,50 +329,54 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	updates := make(chan RunDTO, len(runs)*2)
+	active := 0
+	activeIDs := map[string]bool{}
+	if s.cfg.RunSubscriber != nil {
+		for _, run := range runs {
+			if isTerminalRunStatus(run.Status) {
+				continue
+			}
+			ch, unsubscribe := s.cfg.RunSubscriber(r.Context(), run.ID)
+			defer unsubscribe()
+			active++
+			activeIDs[run.ID] = true
+			go func(ch <-chan RunDTO) {
+				for {
+					select {
+					case <-r.Context().Done():
+						return
+					case run, ok := <-ch:
+						if !ok {
+							return
+						}
+						select {
+						case <-r.Context().Done():
+							return
+						case updates <- run:
+						}
+					}
+				}
+			}(ch)
+		}
+	}
 	events, err := s.collectRequestRunEvents(r, runs, limit)
 	if err != nil {
 		writeSSEFrame(w, flusher, 1, "error", map[string]string{"error": err.Error()})
 		return
 	}
 	streamSeq := 0
+	terminal := map[string]bool{}
 	for _, event := range events {
 		streamSeq++
 		writeSSEFrame(w, flusher, streamSeq, event.Type, event)
-	}
-	if s.cfg.RunSubscriber == nil {
-		return
-	}
-	updates := make(chan RunDTO, len(runs)*2)
-	active := 0
-	for _, run := range runs {
-		if isTerminalRunStatus(run.Status) {
-			continue
+		if activeIDs[event.Run.ID] && isTerminalRunStatus(event.Run.Status) {
+			terminal[event.Run.ID] = true
 		}
-		ch, unsubscribe := s.cfg.RunSubscriber(r.Context(), run.ID)
-		defer unsubscribe()
-		active++
-		go func(ch <-chan RunDTO) {
-			for {
-				select {
-				case <-r.Context().Done():
-					return
-				case run, ok := <-ch:
-					if !ok {
-						return
-					}
-					select {
-					case <-r.Context().Done():
-						return
-					case updates <- run:
-					}
-				}
-			}
-		}(ch)
 	}
 	if active == 0 {
 		return
 	}
-	terminal := map[string]bool{}
 	for len(terminal) < active {
 		select {
 		case <-r.Context().Done():
