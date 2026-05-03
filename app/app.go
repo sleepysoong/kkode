@@ -94,6 +94,7 @@ func BuildProviderWithOptions(name, root string, opts ProviderOptions) (Provider
 	if !ok || entry.Factory == nil {
 		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
 	}
+	opts = MergeProviderOptions(DefaultProviderOptions(root), opts)
 	return entry.Factory(root, opts)
 }
 

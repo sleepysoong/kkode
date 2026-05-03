@@ -79,6 +79,38 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	}
 }
 
+func TestDefaultMCPServersExposeSerenaAndContext7(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KKODE_SERENA_COMMAND", "uvx")
+	t.Setenv("CONTEXT7_API_KEY", "ctx7sk-test")
+	servers := DefaultMCPServers(root)
+	serena := servers["serena"]
+	if serena.Kind != llm.MCPStdio || serena.Command != "uvx" || serena.Cwd == "" || !containsString(serena.Args, "--project") || !containsString(serena.Args, serena.Cwd) {
+		t.Fatalf("Serena 기본 MCP manifest가 이상해요: %+v", serena)
+	}
+	context7 := servers["context7"]
+	if context7.Kind != llm.MCPHTTP || context7.URL != defaultContext7URL || context7.Headers["CONTEXT7_API_KEY"] != "ctx7sk-test" {
+		t.Fatalf("Context7 기본 MCP manifest가 이상해요: %+v", context7)
+	}
+}
+
+func TestDefaultProviderOptionsCanDisableMCPDefaults(t *testing.T) {
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	if opts := DefaultProviderOptions(t.TempDir()); len(opts.MCPServers) != 0 {
+		t.Fatalf("KKODE_DEFAULT_MCP=off면 기본 MCP를 붙이면 안 돼요: %+v", opts)
+	}
+}
+
+func TestMergeProviderOptionsLetsExplicitMCPOverrideDefaults(t *testing.T) {
+	merged := MergeProviderOptions(
+		ProviderOptions{MCPServers: map[string]llm.MCPServer{"context7": {Name: "context7", Kind: llm.MCPHTTP, URL: "https://default.test"}}},
+		ProviderOptions{MCPServers: map[string]llm.MCPServer{"context7": {Name: "context7", Kind: llm.MCPStdio, Command: "custom"}}},
+	)
+	if merged.MCPServers["context7"].Command != "custom" || merged.MCPServers["context7"].URL != "" {
+		t.Fatalf("명시 MCP 설정이 default를 덮어써야 해요: %+v", merged.MCPServers["context7"])
+	}
+}
+
 func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	ws, _, err := NewWorkspace(WorkspaceOptions{Root: t.TempDir()})
 	if err != nil {
@@ -112,6 +144,15 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	if _, ok := handlers["web_fetch"]; !ok {
 		t.Fatal("기본 agent surface에는 web_fetch도 붙어야 해요")
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestNewAgentRejectsNilWorkspace(t *testing.T) {

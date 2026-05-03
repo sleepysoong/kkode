@@ -227,6 +227,9 @@ func ResolveProviderSpec(name string) (ProviderSpec, bool)
 func ProviderAuthStatus(spec ProviderSpec) string
 func BuildProvider(name, root string) (ProviderHandle, error)
 func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error)
+func DefaultProviderOptions(root string) ProviderOptions
+func DefaultMCPServers(root string) map[string]llm.MCPServer
+func MergeProviderOptions(defaults ProviderOptions, explicit ProviderOptions) ProviderOptions
 func DefaultModel(provider string) string
 func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error)
 func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions) (*agent.Agent, error)
@@ -234,7 +237,7 @@ func NewRuntime(store session.Store, ag *agent.Agent, opts RuntimeOptions) *runt
 func DefaultCompactionPolicy() session.CompactionPolicy
 ```
 
-`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `BuildProviderWithOptions`는 같은 registry entry의 factory를 실행하므로 새 provider를 추가할 때 spec, alias, capability, 생성 로직을 한 곳에서 맞추면 돼요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델과 인증 상태 표시를 공유해요. `BuildProviderWithOptions`는 `DefaultProviderOptions(root)`와 저장 resource manifest를 `MergeProviderOptions`로 합친 뒤 같은 registry entry의 factory를 실행하므로 새 provider를 추가할 때 spec, alias, capability, 생성 로직을 한 곳에서 맞추면 돼요. 기본 MCP는 Context7 원격 HTTP MCP(`https://mcp.context7.com/mcp`)와 Serena stdio MCP예요. Serena는 `uvx` 또는 `KKODE_SERENA_COMMAND`가 있을 때만 붙여서 실행 환경에 없는 바이너리 때문에 기본 run이 깨지지 않게 해요. `KKODE_DEFAULT_MCP=off`면 기본 MCP를 붙이지 않아요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
 ## Prompt 템플릿 구현체
 
