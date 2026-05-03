@@ -49,4 +49,5 @@
    - `providers/openai.ResponsesConverter`는 OpenAI-compatible Responses payload 변환을 맡고, `openai.Client`는 HTTP caller 역할만 수행해요.
    - OmniRoute 같은 OpenAI-compatible 파생 provider는 같은 converter를 재사용하고 base URL/header/provider label만 바꾸면 붙일 수 있어요.
    - gateway JSON API는 unknown field와 trailing top-level JSON 값을 모두 `invalid_json`으로 거부해서 adapter가 모호한 입력을 조용히 무시하지 않게 했어요.
-   - 다음 단계는 Copilot/Codex CLI도 `convert.go` 단위로 session config, prompt rendering, event decoding을 분리해서 같은 구조로 맞추는 일이에요.
+   - Codex CLI 단발 실행도 `ExecConverter`와 `Client.CallProvider`를 통해 같은 adapted provider 흐름을 타게 했어요.
+   - 다음 단계는 Copilot도 `convert.go` 단위로 session config, prompt rendering, event decoding을 분리해서 같은 구조로 맞추는 일이에요.

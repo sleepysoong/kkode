@@ -46,25 +46,42 @@ func DefaultCapabilities() llm.Capabilities {
 }
 
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	adapter := llm.AdaptedProvider{
+		ProviderName:         c.Name(),
+		ProviderCapabilities: c.Capabilities(),
+		Converter:            ExecConverter{},
+		Caller:               c,
+		Options:              llm.ConvertOptions{Operation: execOperation},
+	}
+	return adapter.Generate(ctx, req)
+}
+
+func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error) {
+	if req.Operation != "" && req.Operation != execOperation {
+		return llm.ProviderResult{}, fmt.Errorf("지원하지 않는 Codex CLI operation이에요: %s", req.Operation)
+	}
+	payload, ok := req.Raw.(execPayload)
+	if !ok {
+		return llm.ProviderResult{}, fmt.Errorf("codex CLI exec payload가 필요해요")
+	}
 	out, err := os.CreateTemp("", "kkode-codex-last-*.txt")
 	if err != nil {
-		return nil, err
+		return llm.ProviderResult{}, err
 	}
 	outPath := out.Name()
 	_ = out.Close()
 	defer os.Remove(outPath)
-	cmd := c.command(ctx, req, "-o", outPath)
+	cmd := c.commandPrompt(ctx, payload.Request, payload.Prompt, "-o", outPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("codex exec failed: %w: %s", err, stderr.String())
+		return llm.ProviderResult{}, fmt.Errorf("codex exec failed: %w: %s", err, stderr.String())
 	}
 	data, err := os.ReadFile(outPath)
 	if err != nil {
-		return nil, err
+		return llm.ProviderResult{}, err
 	}
-	text := strings.TrimSpace(string(data))
-	return llm.TextResponse(c.Name(), req.Model, text), nil
+	return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Body: data}, nil
 }
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
@@ -87,6 +104,10 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, 
 }
 
 func (c *Client) command(ctx context.Context, req llm.Request, extra ...string) *exec.Cmd {
+	return c.commandPrompt(ctx, req, renderPrompt(req), extra...)
+}
+
+func (c *Client) commandPrompt(ctx context.Context, req llm.Request, prompt string, extra ...string) *exec.Cmd {
 	args := []string{"-a", "never"}
 	args = append(args, "exec", "--json")
 	if c.cfg.Ephemeral {
@@ -102,7 +123,7 @@ func (c *Client) command(ctx context.Context, req llm.Request, extra ...string) 
 	}
 	args = append(args, c.cfg.ExtraArgs...)
 	args = append(args, extra...)
-	args = append(args, renderPrompt(req))
+	args = append(args, prompt)
 	cmd := exec.CommandContext(ctx, c.cfg.Binary, args...)
 	cmd.Dir = wd
 	return cmd

@@ -1,6 +1,10 @@
 package codexcli
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -21,5 +25,53 @@ func TestRenderPromptUsesSharedTranscriptRenderer(t *testing.T) {
 	got := renderPrompt(llm.Request{Instructions: "rules", Messages: []llm.Message{llm.UserText("hi")}})
 	if got != "rules\n\nUSER: hi" {
 		t.Fatalf("prompt=%q", got)
+	}
+}
+
+func TestExecConverterBuildsProviderRequest(t *testing.T) {
+	preq, err := ExecConverter{}.ConvertRequest(context.Background(), llm.Request{Model: "gpt-5.3-codex", Messages: []llm.Message{llm.UserText("hi")}}, llm.ConvertOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := preq.Raw.(execPayload)
+	if preq.Operation != execOperation || preq.Model != "gpt-5.3-codex" || payload.Prompt != "USER: hi" {
+		t.Fatalf("Codex CLI provider request가 이상해요: %+v payload=%+v", preq, payload)
+	}
+}
+
+func TestClientGenerateUsesConverterAndYoloCommand(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "fake-codex")
+	argsPath := filepath.Join(dir, "args.txt")
+	script := `#!/bin/sh
+printf '%s\n' "$@" > ` + argsPath + `
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    shift
+    out="$1"
+  fi
+  shift
+done
+printf ' converted\n' > "$out"
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	client := New(Config{Binary: bin, WorkingDirectory: dir})
+	resp, err := client.Generate(context.Background(), llm.Request{Model: "gpt-5.3-codex", Messages: []llm.Message{llm.UserText("hi")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Provider != "codex-cli" || resp.Text != "converted" {
+		t.Fatalf("Codex CLI 표준 응답이 이상해요: %+v", resp)
+	}
+	args, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotArgs := string(args)
+	if !strings.Contains(gotArgs, "-a\nnever\n") || !strings.Contains(gotArgs, "--sandbox\ndanger-full-access\n") {
+		t.Fatalf("YOLO 실행 인자를 유지해야 해요: %q", gotArgs)
 	}
 }

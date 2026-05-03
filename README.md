@@ -222,6 +222,7 @@ erDiagram
   - session, streaming event 변환, custom tool, MCP/custom agent/skill mapping을 제공해요.
 - `providers/codexcli`
   - `codex exec --json` subprocess adapter예요.
+  - `ExecConverter`가 표준 request를 CLI prompt 실행 payload로 바꾸고, `Client`가 subprocess caller 역할을 해요.
   - JSONL event stream을 `llm.StreamEvent`로 바꿔요.
 - `providers/omniroute`
   - OmniRoute gateway adapter예요.

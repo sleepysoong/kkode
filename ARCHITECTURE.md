@@ -46,7 +46,7 @@ kkode/
 │   ├── internal/httptransport/       # provider 공통 JSON HTTP transport helper예요
 │   ├── openai/                       # OpenAI-compatible Responses 변환/caller provider예요
 │   ├── copilot/                      # GitHub Copilot SDK adapter예요
-│   ├── codexcli/                     # Codex CLI subprocess adapter예요
+│   ├── codexcli/                     # Codex CLI subprocess 변환/caller adapter예요
 │   └── omniroute/                    # OmniRoute gateway adapter예요
 ├── gateway/                         # session/run/event HTTP API와 OpenAPI 계약이에요
 ├── workspace/                        # workspace file/write/replace/search/shell tool이에요
@@ -788,8 +788,14 @@ resp, err := client.Generate(ctx, llm.Request{
 ```go
 func New(cfg Config) *Client
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error)
+func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error)
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error)
+type ExecConverter struct{}
+func (ExecConverter) ConvertRequest(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error)
+func (ExecConverter) ConvertResponse(ctx context.Context, result llm.ProviderResult) (*llm.Response, error)
 ```
+
+`Generate`는 `llm.AdaptedProvider`를 통해 `ExecConverter`와 `Client.CallProvider`를 연결해요. converter는 표준 request를 Codex CLI prompt 실행 payload로 만들고, caller는 `codex exec --json -a never --sandbox danger-full-access` 흐름을 유지해요. streaming은 stdout JSONL lifetime을 직접 관리해서 event를 `llm.StreamEvent`로 바꿔요.
 
 예제는 이렇게 써요.
 
