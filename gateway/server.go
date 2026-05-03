@@ -552,6 +552,7 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", "session_id와 prompt가 필요해요")
 		return
 	}
+	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
 	run, err := s.cfg.RunStarter(r.Context(), req)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "start_run_failed", err.Error())
@@ -601,6 +602,7 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 		metadata = map[string]string{}
 	}
 	metadata["retried_from"] = original.ID
+	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
 	retry, err := s.cfg.RunStarter(r.Context(), RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents)})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "retry_run_failed", err.Error())

@@ -42,6 +42,20 @@ func TestAsyncRunManagerStartsAndCompletesRun(t *testing.T) {
 	}
 }
 
+func TestAsyncRunManagerPreservesRequestIDWhenStarterReturnsMetadata(t *testing.T) {
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: map[string]string{"provider": "ok"}}, nil
+	})
+	run, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "go", Metadata: map[string]string{RequestIDMetadataKey: "req_keep"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed := waitForRunStatus(t, manager, run.ID, "completed")
+	if completed.Metadata[RequestIDMetadataKey] != "req_keep" || completed.Metadata["provider"] != "ok" {
+		t.Fatalf("starter metadata와 request id를 함께 보존해야 해요: %+v", completed.Metadata)
+	}
+}
+
 func TestAsyncRunManagerCancelsRun(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		<-ctx.Done()
@@ -263,7 +277,7 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
 	}, store)
-	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go"})
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go", Metadata: map[string]string{RequestIDMetadataKey: "req_async"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,6 +285,11 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	replay := waitForRunEventType(t, manager, run.ID, "run.completed")
 	if len(replay) < 3 || replay[0].Type != "run.queued" || replay[len(replay)-1].Type != "run.completed" {
 		t.Fatalf("run event replay가 이상해요: %+v", replay)
+	}
+	for _, event := range replay {
+		if event.Run.Metadata[RequestIDMetadataKey] != "req_async" {
+			t.Fatalf("run event에 request id metadata가 유지돼야 해요: %+v", event)
+		}
 	}
 	restarted := NewAsyncRunManagerWithStore(nil, store)
 	afterFirst, err := restarted.Events(ctx, run.ID, 1, 10)

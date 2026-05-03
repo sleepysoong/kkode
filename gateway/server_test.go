@@ -280,16 +280,19 @@ func TestGatewayAccessLoggerUsesRequestID(t *testing.T) {
 
 func TestGatewayRunStarterBoundary(t *testing.T) {
 	store := openTestStore(t)
+	var started RunStartRequest
 	srv, err := New(Config{
 		Store: store,
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
-			return &RunDTO{ID: "run_test", SessionID: req.SessionID, Status: "queued", EventsURL: "/api/v1/runs/run_test/events"}, nil
+			started = req
+			return &RunDTO{ID: "run_test", SessionID: req.SessionID, Status: "queued", EventsURL: "/api/v1/runs/run_test/events", Metadata: req.Metadata}, nil
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test","metadata":{"source":"panel"}}`))
+	req.Header.Set(RequestIDHeader, "req_run")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
@@ -299,7 +302,7 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
 		t.Fatal(err)
 	}
-	if run.ID != "run_test" || run.Status != "queued" {
+	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata["source"] != "panel" {
 		t.Fatalf("unexpected run: %+v", run)
 	}
 }
@@ -872,6 +875,7 @@ func TestGatewayRetriesRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/run_old/retry", nil)
+	req.Header.Set(RequestIDHeader, "req_retry")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
@@ -881,7 +885,7 @@ func TestGatewayRetriesRun(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &retried); err != nil {
 		t.Fatal(err)
 	}
-	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" {
+	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" || retryReq.Metadata[RequestIDMetadataKey] != "req_retry" {
 		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
 	}
 	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" {

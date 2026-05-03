@@ -289,6 +289,7 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		if len(run.Subagents) == 0 {
 			run.Subagents = cloneStringSlice(req.Subagents)
 		}
+		run.Metadata = withRequestIDMetadata(run.Metadata, req.Metadata[RequestIDMetadataKey])
 		if run.EventsURL == "" {
 			run.EventsURL = "/api/v1/sessions/" + run.SessionID + "/events"
 		}

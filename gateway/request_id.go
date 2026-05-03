@@ -13,6 +13,9 @@ import (
 // RequestIDHeader는 외부 adapter와 gateway 로그가 같은 요청을 찾을 때 쓰는 공통 header예요.
 const RequestIDHeader = "X-Request-Id"
 
+// RequestIDMetadataKey는 HTTP 요청과 background run/event를 연결하는 metadata key예요.
+const RequestIDMetadataKey = "request_id"
+
 type requestIDContextKey struct{}
 
 func newRequestID() string {
@@ -40,4 +43,17 @@ func requestIDFromRequest(r *http.Request) string {
 		return id
 	}
 	return strings.TrimSpace(r.Header.Get(RequestIDHeader))
+}
+
+func withRequestIDMetadata(metadata map[string]string, requestID string) map[string]string {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return cloneMap(metadata)
+	}
+	out := cloneMap(metadata)
+	if out == nil {
+		out = map[string]string{}
+	}
+	out[RequestIDMetadataKey] = requestID
+	return out
 }
