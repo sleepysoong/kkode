@@ -57,6 +57,27 @@ func TestGatewayReadyChecksStoreHealth(t *testing.T) {
 	}
 }
 
+func TestGatewayRejectsOversizedRequestBody(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Version: "test", MaxRequestBytes: 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", strings.NewReader(`{"too":"large"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("큰 요청 body는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body errorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error.Code != "request_too_large" {
+		t.Fatalf("오류 코드가 이상해요: %+v", body)
+	}
+}
+
 func TestGatewayStatsEndpoint(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)

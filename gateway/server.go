@@ -26,6 +26,7 @@ type Config struct {
 	AllowLocalhostNoAuth bool
 	CORSOrigins          []string
 	RequestIDGenerator   func() string
+	MaxRequestBytes      int64
 	AccessLogger         AccessLogger
 	Providers            []ProviderDTO
 	Features             []FeatureDTO
@@ -58,6 +59,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.RequestIDGenerator == nil {
 		cfg.RequestIDGenerator = newRequestID
 	}
+	if cfg.MaxRequestBytes == 0 {
+		cfg.MaxRequestBytes = 32 << 20
+	}
 	srv := &Server{cfg: cfg}
 	srv.handler = srv.buildHandler()
 	return srv, nil
@@ -75,10 +79,27 @@ func (s *Server) buildHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/readyz", s.handleReady)
-	apiHandler := s.withAPIAuth(http.HandlerFunc(s.handleAPI))
+	apiHandler := s.bodyLimitMiddleware(s.withAPIAuth(http.HandlerFunc(s.handleAPI)))
 	mux.Handle("/api/v1", apiHandler)
 	mux.Handle("/api/v1/", apiHandler)
 	return s.requestIDMiddleware(s.accessLogMiddleware(s.recoverMiddleware(s.corsMiddleware(mux))))
+}
+
+func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
+	limit := s.cfg.MaxRequestBytes
+	if limit < 0 {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			if r.ContentLength > limit {
+				writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", "요청 body가 gateway 제한보다 커요")
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) requestIDMiddleware(next http.Handler) http.Handler {
