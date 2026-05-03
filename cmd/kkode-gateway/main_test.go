@@ -31,6 +31,13 @@ func TestLoopbackListenAddr(t *testing.T) {
 	}
 }
 
+func TestSplitCSV(t *testing.T) {
+	got := splitCSV(" https://panel.example, ,http://localhost:3000 ")
+	if len(got) != 2 || got[0] != "https://panel.example" || got[1] != "http://localhost:3000" {
+		t.Fatalf("splitCSV 결과가 이상해요: %+v", got)
+	}
+}
+
 func TestLoadProviderOptionsFromResources(t *testing.T) {
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
 	if err != nil {

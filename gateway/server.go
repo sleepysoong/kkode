@@ -23,6 +23,7 @@ type Config struct {
 	Commit               string
 	APIKey               string
 	AllowLocalhostNoAuth bool
+	CORSOrigins          []string
 	Providers            []ProviderDTO
 	Features             []FeatureDTO
 	ResourceStore        session.ResourceStore
@@ -71,7 +72,7 @@ func (s *Server) buildHandler() http.Handler {
 	apiHandler := s.withAPIAuth(http.HandlerFunc(s.handleAPI))
 	mux.Handle("/api/v1", apiHandler)
 	mux.Handle("/api/v1/", apiHandler)
-	return s.recoverMiddleware(mux)
+	return s.recoverMiddleware(s.corsMiddleware(mux))
 }
 
 func (s *Server) recoverMiddleware(next http.Handler) http.Handler {

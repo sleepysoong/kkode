@@ -190,6 +190,32 @@ func TestGatewayRequiresAPIKeyWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Version: "test", APIKey: "secret", CORSOrigins: []string{"https://panel.example"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/version", nil)
+	req.RemoteAddr = "203.0.113.10:1234"
+	req.Header.Set("Origin", "https://panel.example")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" {
+		t.Fatalf("CORS preflight가 이상해요: status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	req.RemoteAddr = "203.0.113.10:1234"
+	req.Header.Set("Origin", "https://panel.example")
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" {
+		t.Fatalf("CORS response header가 필요해요: status=%d headers=%v", rec.Code, rec.Header())
+	}
+}
+
 func TestGatewayRunStarterBoundary(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{

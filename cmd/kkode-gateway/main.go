@@ -33,6 +33,7 @@ func run(args []string) error {
 	apiKey := fs.String("api-key", os.Getenv("KKODE_API_KEY"), "API bearer token이에요")
 	apiKeyEnv := fs.String("api-key-env", "", "API bearer token을 읽을 환경변수 이름이에요")
 	allowLocalhostNoAuth := fs.Bool("no-auth-localhost", app.EnvBoolDefault("KKODE_NO_AUTH_LOCALHOST", true), "localhost 요청은 API key 없이 허용해요")
+	corsOrigins := fs.String("cors-origins", app.EnvDefault("KKODE_CORS_ORIGINS", ""), "쉼표로 구분한 허용 CORS origin 목록이에요")
 	version := fs.String("version", app.EnvDefault("KKODE_VERSION", "dev"), "version endpoint에 표시할 버전이에요")
 	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", 8), "gateway run tool loop 최대 반복 횟수예요")
 	noWeb := fs.Bool("no-web", app.EnvBool("KKODE_NO_WEB"), "gateway run에서 web_fetch tool을 비활성화해요")
@@ -63,6 +64,7 @@ func run(args []string) error {
 		Version:              *version,
 		APIKey:               *apiKey,
 		AllowLocalhostNoAuth: *allowLocalhostNoAuth,
+		CORSOrigins:          splitCSV(*corsOrigins),
 		RunStarter:           runManager.Start,
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
@@ -88,6 +90,18 @@ type runOptions struct {
 	MaxIterations int
 	NoWeb         bool
 	WebMaxBytes   int64
+}
+
+func splitCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
