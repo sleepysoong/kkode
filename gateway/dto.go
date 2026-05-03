@@ -215,11 +215,12 @@ type FeatureDTO struct {
 
 // CapabilityResponse는 gateway feature discovery 응답이에요.
 type CapabilityResponse struct {
-	Version   string        `json:"version"`
-	Commit    string        `json:"commit,omitempty"`
-	Features  []FeatureDTO  `json:"features"`
-	Providers []ProviderDTO `json:"providers"`
-	Limits    LimitDTO      `json:"limits"`
+	Version           string        `json:"version"`
+	Commit            string        `json:"commit,omitempty"`
+	Features          []FeatureDTO  `json:"features"`
+	Providers         []ProviderDTO `json:"providers"`
+	DefaultMCPServers []ResourceDTO `json:"default_mcp_servers,omitempty"`
+	Limits            LimitDTO      `json:"limits"`
 }
 
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.

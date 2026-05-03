@@ -85,6 +85,7 @@ func run(args []string) error {
 		RunEventLister:       runManager.Events,
 		RunSubscriber:        runManager.Subscribe,
 		Providers:            providerDTOs(),
+		DefaultMCPServers:    defaultMCPDTOs(),
 		ResourceStore:        store,
 	})
 	if err != nil {
@@ -292,6 +293,48 @@ func providerDTOs() []gateway.ProviderDTO {
 			models = []string{spec.DefaultModel}
 		}
 		out = append(out, gateway.ProviderDTO{Name: spec.Name, Models: models, DefaultModel: spec.DefaultModel, Capabilities: spec.Capabilities, AuthStatus: app.ProviderAuthStatus(spec)})
+	}
+	return out
+}
+
+func defaultMCPDTOs() []gateway.ResourceDTO {
+	servers := app.DefaultMCPServers("")
+	out := make([]gateway.ResourceDTO, 0, len(servers))
+	enabled := true
+	for name, server := range servers {
+		config := map[string]any{
+			"kind":    string(server.Kind),
+			"name":    firstNonEmpty(server.Name, name),
+			"tools":   append([]string{}, server.Tools...),
+			"timeout": server.Timeout,
+		}
+		if server.Command != "" {
+			config["command"] = server.Command
+		}
+		if len(server.Args) > 0 {
+			config["args"] = append([]string{}, server.Args...)
+		}
+		if len(server.Env) > 0 {
+			config["env"] = cloneStringMap(server.Env)
+		}
+		if server.Cwd != "" {
+			config["cwd"] = server.Cwd
+		}
+		if server.URL != "" {
+			config["url"] = server.URL
+		}
+		if len(server.Headers) > 0 {
+			config["headers"] = cloneStringMap(server.Headers)
+		}
+		out = append(out, gateway.ResourceDTO{Kind: string(session.ResourceMCPServer), Name: firstNonEmpty(server.Name, name), Description: "kkode 기본 MCP server예요", Enabled: &enabled, Config: config})
+	}
+	return out
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
 	}
 	return out
 }

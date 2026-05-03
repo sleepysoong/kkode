@@ -1427,6 +1427,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Provider'
+        default_mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
         limits:
           $ref: '#/components/schemas/Limit'
     Limit:

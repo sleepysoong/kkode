@@ -217,3 +217,23 @@ func toResourceDTO(resource session.Resource) ResourceDTO {
 	enabled := resource.Enabled
 	return ResourceDTO{ID: resource.ID, Kind: string(resource.Kind), Name: resource.Name, Description: resource.Description, Enabled: &enabled, Config: config, CreatedAt: resource.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: resource.UpdatedAt.Format(time.RFC3339Nano)}
 }
+
+func cloneResourceDTOs(resources []ResourceDTO) []ResourceDTO {
+	out := make([]ResourceDTO, 0, len(resources))
+	for _, resource := range resources {
+		cloned := resource
+		if resource.Enabled != nil {
+			enabled := *resource.Enabled
+			cloned.Enabled = &enabled
+		}
+		if resource.Config != nil {
+			config := make(map[string]any, len(resource.Config))
+			for key, value := range resource.Config {
+				config[key] = value
+			}
+			cloned.Config = config
+		}
+		out = append(out, cloned)
+	}
+	return out
+}
