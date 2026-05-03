@@ -853,6 +853,10 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 		where = append(where, `status = ?`)
 		args = append(args, q.Status)
 	}
+	if q.RequestID != "" {
+		where = append(where, `json_extract(metadata_json, '$.request_id') = ?`)
+		args = append(args, q.RequestID)
+	}
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}

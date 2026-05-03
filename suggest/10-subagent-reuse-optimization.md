@@ -40,4 +40,5 @@
    - `writeError`는 request context의 같은 ID를 오류 envelope에 담아서 웹 패널, Discord bot, gateway 로그가 같은 요청을 추적할 수 있게 해요.
    - `AccessLogger` hook과 `AccessLogEntry`를 추가해서 host app이 같은 request id, method, path, status, bytes, duration을 structured log나 metric으로 받을 수 있게 했어요.
    - `POST /api/v1/runs`와 run retry는 같은 값을 metadata `request_id`로 주입하고, `AsyncRunManager`는 starter가 별도 metadata를 반환해도 request id를 보존해요.
+   - `GET /api/v1/runs?request_id=...` 필터를 추가해서 외부 adapter가 HTTP 요청에서 파생된 background run을 다시 찾을 수 있게 했어요.
    - 다음 단계는 access log와 run event를 묶은 별도 observability API를 추가하는 일이에요.

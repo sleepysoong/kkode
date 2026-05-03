@@ -1166,6 +1166,11 @@ paths:
           schema:
             type: string
         - in: query
+          name: request_id
+          schema:
+            type: string
+          description: "`X-Request-Id`에서 run metadata로 전파된 request id로 좁혀요."
+        - in: query
           name: limit
           schema:
             type: integer

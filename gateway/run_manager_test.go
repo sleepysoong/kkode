@@ -56,6 +56,27 @@ func TestAsyncRunManagerPreservesRequestIDWhenStarterReturnsMetadata(t *testing.
 	}
 }
 
+func TestAsyncRunManagerListsRunsByRequestID(t *testing.T) {
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	})
+	first, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "one", Metadata: map[string]string{RequestIDMetadataKey: "req_one"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "two", Metadata: map[string]string{RequestIDMetadataKey: "req_two"}}); err != nil {
+		t.Fatal(err)
+	}
+	waitForRunStatus(t, manager, first.ID, "completed")
+	listed, err := manager.List(context.Background(), RunQuery{RequestID: "req_one", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != first.ID || listed[0].Metadata[RequestIDMetadataKey] != "req_one" {
+		t.Fatalf("request_id run 목록이 이상해요: %+v", listed)
+	}
+}
+
 func TestAsyncRunManagerCancelsRun(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		<-ctx.Done()

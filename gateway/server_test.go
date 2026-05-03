@@ -307,6 +307,37 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	}
 }
 
+func TestGatewayListsRunsByRequestID(t *testing.T) {
+	store := openTestStore(t)
+	var query RunQuery
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			query = q
+			return []RunDTO{{ID: "run_req", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&limit=5", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if query.RequestID != "req_filter" || query.Limit != 5 {
+		t.Fatalf("run query가 이상해요: %+v", query)
+	}
+	var body RunListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Runs) != 1 || body.Runs[0].Metadata[RequestIDMetadataKey] != "req_filter" {
+		t.Fatalf("run list 응답이 이상해요: %+v", body)
+	}
+}
+
 func openTestStore(t *testing.T) *session.SQLiteStore {
 	t.Helper()
 	store, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))

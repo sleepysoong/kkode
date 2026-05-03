@@ -29,6 +29,7 @@ type Run struct {
 type RunQuery struct {
 	SessionID string
 	Status    string
+	RequestID string
 	Limit     int
 }
 

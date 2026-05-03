@@ -15,6 +15,7 @@ import (
 type RunQuery struct {
 	SessionID string
 	Status    string
+	RequestID string
 	Limit     int
 }
 
@@ -168,13 +169,16 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 		limit = 50
 	}
 	if m.runStore != nil {
-		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, Limit: limit})
+		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, RequestID: q.RequestID, Limit: limit})
 		if err != nil {
 			return nil, err
 		}
 		out := make([]RunDTO, 0, len(runs))
 		for _, run := range runs {
-			out = append(out, *runDTOFromSession(run))
+			dto := runDTOFromSession(run)
+			if runMatchesQuery(*dto, q) {
+				out = append(out, *dto)
+			}
 		}
 		return out, nil
 	}
@@ -183,19 +187,28 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 	out := make([]RunDTO, 0, len(m.runs))
 	for _, managed := range m.runs {
 		run := managed.run
-		if q.SessionID != "" && run.SessionID != q.SessionID {
-			continue
+		if runMatchesQuery(run, q) {
+			out = append(out, *cloneRun(&run))
 		}
-		if q.Status != "" && run.Status != q.Status {
-			continue
-		}
-		out = append(out, *cloneRun(&run))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
 	if len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func runMatchesQuery(run RunDTO, q RunQuery) bool {
+	if q.SessionID != "" && run.SessionID != q.SessionID {
+		return false
+	}
+	if q.Status != "" && run.Status != q.Status {
+		return false
+	}
+	if q.RequestID != "" && run.Metadata[RequestIDMetadataKey] != q.RequestID {
+		return false
+	}
+	return true
 }
 
 // Cancel은 queued/running run의 context를 취소해요.

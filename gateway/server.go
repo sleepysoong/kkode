@@ -530,7 +530,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 50, 200)
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), Limit: limit})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), Limit: limit})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
