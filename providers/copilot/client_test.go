@@ -37,6 +37,35 @@ func TestRenderPromptUsesSharedTranscriptRenderer(t *testing.T) {
 	}
 }
 
+func TestSessionConverterBuildsProviderRequest(t *testing.T) {
+	preq, err := SessionConverter{}.ConvertRequest(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("hello")}}, llm.ConvertOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := preq.Raw.(sessionSendPayload)
+	if preq.Operation != sessionSendOperation || preq.Model != "gpt-5-mini" || payload.Prompt != "USER: hello" {
+		t.Fatalf("Copilot provider request가 이상해요: %+v payload=%+v", preq, payload)
+	}
+}
+
+func TestSessionConverterMapsResponse(t *testing.T) {
+	want := llm.TextResponse("copilot", "gpt-5-mini", "ok")
+	resp, err := SessionConverter{}.ConvertResponse(context.Background(), llm.ProviderResult{Provider: "copilot", Model: "gpt-5-mini", Raw: want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp != want {
+		t.Fatalf("이미 표준 응답이면 그대로 돌려줘야 해요")
+	}
+	resp, err = SessionConverter{}.ConvertResponse(context.Background(), llm.ProviderResult{Provider: "copilot", Model: "gpt-5-mini", Raw: "text"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Provider != "copilot" || resp.Model != "gpt-5-mini" || resp.Text != "text" {
+		t.Fatalf("문자열 응답 변환이 이상해요: %+v", resp)
+	}
+}
+
 func TestToCopilotMCPServerAndAgent(t *testing.T) {
 	stdio := ToCopilotMCPServer(llm.MCPServer{Kind: llm.MCPStdio, Command: "go", Args: []string{"run", "."}, Tools: []string{"*"}})
 	if _, ok := stdio.(ghcopilot.MCPStdioServerConfig); !ok {

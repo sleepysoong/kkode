@@ -219,6 +219,7 @@ erDiagram
   - `providers/internal/httptransport`의 JSON request/header/retry/SSE framing helper를 써서 파생 provider와 HTTP 처리 방식을 공유해요.
 - `providers/copilot`
   - GitHub Copilot SDK session adapter예요.
+  - `SessionConverter`가 표준 request를 SDK session prompt payload로 바꾸고, `Client`가 SDK caller 역할을 해요.
   - session, streaming event 변환, custom tool, MCP/custom agent/skill mapping을 제공해요.
 - `providers/codexcli`
   - `codex exec --json` subprocess adapter예요.

@@ -51,15 +51,41 @@ func DefaultCapabilities() llm.Capabilities {
 }
 
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
-	if renderPrompt(req) == "" {
-		return nil, fmt.Errorf("copilot provider requires at least one user message or input item")
+	adapter := llm.AdaptedProvider{
+		ProviderName:         c.Name(),
+		ProviderCapabilities: c.Capabilities(),
+		Converter:            SessionConverter{},
+		Caller:               c,
+		Options:              llm.ConvertOptions{Operation: sessionSendOperation},
 	}
-	sess, err := c.NewSession(ctx, llm.SessionRequest{Model: req.Model, WorkingDirectory: c.cfg.WorkingDirectory, Reasoning: req.Reasoning})
+	return adapter.Generate(ctx, req)
+}
+
+func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error) {
+	if req.Operation != "" && req.Operation != sessionSendOperation {
+		return llm.ProviderResult{}, fmt.Errorf("지원하지 않는 Copilot SDK operation이에요: %s", req.Operation)
+	}
+	payload, ok := req.Raw.(sessionSendPayload)
+	if !ok {
+		return llm.ProviderResult{}, fmt.Errorf("copilot session payload가 필요해요")
+	}
+	sess, err := c.NewSession(ctx, llm.SessionRequest{Model: req.Model, WorkingDirectory: c.cfg.WorkingDirectory, Reasoning: payload.Request.Reasoning})
 	if err != nil {
-		return nil, err
+		return llm.ProviderResult{}, err
 	}
 	defer sess.Close()
-	return sess.Send(ctx, req)
+	if concrete, ok := sess.(*Session); ok {
+		resp, err := concrete.sendPrompt(ctx, payload.Request, payload.Prompt)
+		if err != nil {
+			return llm.ProviderResult{}, err
+		}
+		return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Raw: resp}, nil
+	}
+	resp, err := sess.Send(ctx, payload.Request)
+	if err != nil {
+		return llm.ProviderResult{}, err
+	}
+	return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Raw: resp}, nil
 }
 
 func (c *Client) ensureClient(ctx context.Context) (*ghcopilot.Client, error) {
@@ -167,6 +193,10 @@ type Session struct {
 func (s *Session) ID() string { return s.session.SessionID }
 
 func (s *Session) Send(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	return s.sendPrompt(ctx, req, renderPrompt(req))
+}
+
+func (s *Session) sendPrompt(ctx context.Context, req llm.Request, prompt string) (*llm.Response, error) {
 	var finalText strings.Builder
 	unsubscribe := s.session.On(func(event ghcopilot.SessionEvent) {
 		if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
@@ -174,7 +204,7 @@ func (s *Session) Send(ctx context.Context, req llm.Request) (*llm.Response, err
 		}
 	})
 	defer unsubscribe()
-	event, err := s.session.SendAndWait(ctx, ghcopilot.MessageOptions{Prompt: renderPrompt(req)})
+	event, err := s.session.SendAndWait(ctx, ghcopilot.MessageOptions{Prompt: prompt})
 	if err != nil {
 		return nil, err
 	}

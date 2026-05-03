@@ -759,12 +759,18 @@ for {
 ```go
 func New(cfg Config) *Client
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error)
+func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error)
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error)
 func (c *Client) NewSession(ctx context.Context, req llm.SessionRequest) (llm.Session, error)
+type SessionConverter struct{}
+func (SessionConverter) ConvertRequest(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error)
+func (SessionConverter) ConvertResponse(ctx context.Context, result llm.ProviderResult) (*llm.Response, error)
 func ToCopilotTool(tool llm.Tool, handler llm.ToolHandler) copilot.Tool
 func ToCopilotMCPServer(server llm.MCPServer) copilot.MCPServerConfig
 func ToCopilotAgent(agent llm.Agent) copilot.CustomAgentConfig
 ```
+
+`Generate`는 `llm.AdaptedProvider`를 통해 `SessionConverter`와 `Client.CallProvider`를 연결해요. converter는 표준 request를 SDK session prompt payload로 만들고, caller는 Copilot session 생성, send, close lifetime을 관리해요. SDK가 요청하는 실행 확인은 별도 권한 시스템으로 끌어올리지 않고 기존 YOLO 승인 handler로 즉시 승인해요.
 
 예제는 이렇게 써요.
 
