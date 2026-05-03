@@ -186,3 +186,19 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 		t.Fatalf("run preview는 MCP secret header를 숨겨야 해요: %+v", preview.MCPServers[0].Config)
 	}
 }
+
+func TestDefaultMCPDTOsAreStableAndRedacted(t *testing.T) {
+	t.Setenv("KKODE_SERENA_COMMAND", "uvx")
+	t.Setenv("CONTEXT7_API_KEY", "secret")
+	resources := defaultMCPDTOs()
+	if len(resources) < 2 {
+		t.Fatalf("Serena와 Context7 기본 MCP가 필요해요: %+v", resources)
+	}
+	if resources[0].Name != "context7" {
+		t.Fatalf("default MCP discovery 순서는 이름순이어야 해요: %+v", resources)
+	}
+	headers := resources[0].Config["headers"].(map[string]string)
+	if headers["CONTEXT7_API_KEY"] != "[REDACTED]" {
+		t.Fatalf("default MCP DTO는 secret을 숨겨야 해요: %+v", resources[0].Config)
+	}
+}

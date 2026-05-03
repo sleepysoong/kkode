@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -374,9 +375,15 @@ func providerDTOs() []gateway.ProviderDTO {
 
 func defaultMCPDTOs() []gateway.ResourceDTO {
 	servers := app.DefaultMCPServers("")
-	out := make([]gateway.ResourceDTO, 0, len(servers))
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]gateway.ResourceDTO, 0, len(names))
 	enabled := true
-	for name, server := range servers {
+	for _, name := range names {
+		server := servers[name]
 		config := map[string]any{
 			"kind":    string(server.Kind),
 			"name":    firstNonEmpty(server.Name, name),
