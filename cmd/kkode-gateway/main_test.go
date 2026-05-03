@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sleepysoong/kkode/gateway"
 	"github.com/sleepysoong/kkode/session"
@@ -35,6 +38,25 @@ func TestSplitCSV(t *testing.T) {
 	got := splitCSV(" https://panel.example, ,http://localhost:3000 ")
 	if len(got) != 2 || got[0] != "https://panel.example" || got[1] != "http://localhost:3000" {
 		t.Fatalf("splitCSV 결과가 이상해요: %+v", got)
+	}
+}
+
+func TestAccessLoggerWritesJSONL(t *testing.T) {
+	var buf bytes.Buffer
+	logger := accessLoggerForFlag(true, &buf)
+	if logger == nil {
+		t.Fatal("access logger가 필요해요")
+	}
+	logger(gateway.AccessLogEntry{RequestID: "req_1", Method: "GET", Path: "/api/v1/version", Status: 200, Bytes: 42, Duration: 1500 * time.Microsecond, Remote: "127.0.0.1:1", UserAgent: "test"})
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("JSONL access log가 필요해요: %s err=%v", buf.String(), err)
+	}
+	if got["type"] != "access" || got["request_id"] != "req_1" || got["path"] != "/api/v1/version" || got["duration_ms"].(float64) != 1.5 {
+		t.Fatalf("access log payload가 이상해요: %+v", got)
+	}
+	if accessLoggerForFlag(false, &buf) != nil {
+		t.Fatal("비활성화된 access logger는 nil이어야 해요")
 	}
 }
 

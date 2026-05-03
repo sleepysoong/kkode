@@ -6,10 +6,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sleepysoong/kkode/app"
@@ -34,6 +36,7 @@ func run(args []string) error {
 	apiKeyEnv := fs.String("api-key-env", "", "API bearer token을 읽을 환경변수 이름이에요")
 	allowLocalhostNoAuth := fs.Bool("no-auth-localhost", app.EnvBoolDefault("KKODE_NO_AUTH_LOCALHOST", true), "localhost 요청은 API key 없이 허용해요")
 	corsOrigins := fs.String("cors-origins", app.EnvDefault("KKODE_CORS_ORIGINS", ""), "쉼표로 구분한 허용 CORS origin 목록이에요")
+	accessLog := fs.Bool("access-log", app.EnvBool("KKODE_ACCESS_LOG"), "JSONL access log를 stderr로 출력해요")
 	version := fs.String("version", app.EnvDefault("KKODE_VERSION", "dev"), "version endpoint에 표시할 버전이에요")
 	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", 8), "gateway run tool loop 최대 반복 횟수예요")
 	noWeb := fs.Bool("no-web", app.EnvBool("KKODE_NO_WEB"), "gateway run에서 web_fetch tool을 비활성화해요")
@@ -65,6 +68,7 @@ func run(args []string) error {
 		APIKey:               *apiKey,
 		AllowLocalhostNoAuth: *allowLocalhostNoAuth,
 		CORSOrigins:          splitCSV(*corsOrigins),
+		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
@@ -84,6 +88,35 @@ func run(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "kkode gateway가 http://%s 에서 실행돼요\n", *addr)
 	return httpServer.ListenAndServe()
+}
+
+type accessLogWriter struct {
+	mu      sync.Mutex
+	encoder *json.Encoder
+}
+
+func accessLoggerForFlag(enabled bool, out io.Writer) gateway.AccessLogger {
+	if !enabled || out == nil {
+		return nil
+	}
+	writer := &accessLogWriter{encoder: json.NewEncoder(out)}
+	return writer.log
+}
+
+func (w *accessLogWriter) log(entry gateway.AccessLogEntry) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_ = w.encoder.Encode(map[string]any{
+		"type":        "access",
+		"request_id":  entry.RequestID,
+		"method":      entry.Method,
+		"path":        entry.Path,
+		"status":      entry.Status,
+		"bytes":       entry.Bytes,
+		"duration_ms": float64(entry.Duration.Microseconds()) / 1000.0,
+		"remote":      entry.Remote,
+		"user_agent":  entry.UserAgent,
+	})
 }
 
 type runOptions struct {
