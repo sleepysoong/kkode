@@ -305,6 +305,32 @@ func TestRunEventBusPublishesRunUpdates(t *testing.T) {
 	}
 }
 
+func TestRunEventBusPreservesTerminalUpdateWhenSubscriberBufferIsFull(t *testing.T) {
+	bus := NewRunEventBus()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, unsubscribe := bus.Subscribe(ctx, "run_full")
+	defer unsubscribe()
+	for i := 0; i < 32; i++ {
+		bus.Publish(RunDTO{ID: "run_full", Status: "running"})
+	}
+	bus.Publish(RunDTO{ID: "run_full", Status: "completed"})
+	var sawCompleted bool
+	for i := 0; i < 16; i++ {
+		select {
+		case run := <-ch:
+			if run.Status == "completed" {
+				sawCompleted = true
+			}
+		case <-time.After(time.Second):
+			t.Fatal("buffered run event를 받지 못했어요")
+		}
+	}
+	if !sawCompleted {
+		t.Fatal("subscriber buffer가 꽉 차도 terminal update는 보존해야 해요")
+	}
+}
+
 func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	ctx := context.Background()
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")

@@ -64,9 +64,29 @@ func (b *RunEventBus) Publish(run RunDTO) {
 	}
 	b.mu.RUnlock()
 	for _, ch := range channels {
-		select {
-		case ch <- *cloneRun(&run):
-		default:
-		}
+		publishRunToChannel(ch, run)
+	}
+}
+
+func publishRunToChannel(ch chan RunDTO, run RunDTO) {
+	defer func() {
+		_ = recover()
+	}()
+	cloned := *cloneRun(&run)
+	select {
+	case ch <- cloned:
+		return
+	default:
+	}
+	if !isTerminalRunStatus(run.Status) {
+		return
+	}
+	select {
+	case <-ch:
+	default:
+	}
+	select {
+	case ch <- cloned:
+	default:
 	}
 }
