@@ -106,6 +106,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		`ALTER TABLE runs ADD COLUMN subagents_json BLOB NOT NULL DEFAULT '[]';`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_session_updated ON runs(session_id, updated_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_status_updated ON runs(status, updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_runs_request_id_updated ON runs(json_extract(CAST(metadata_json AS TEXT), '$.request_id'), updated_at);`,
 		`CREATE TABLE IF NOT EXISTS run_events (
 			id TEXT PRIMARY KEY,
 			run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -854,7 +855,7 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 		args = append(args, q.Status)
 	}
 	if q.RequestID != "" {
-		where = append(where, `json_extract(metadata_json, '$.request_id') = ?`)
+		where = append(where, `json_extract(CAST(metadata_json AS TEXT), '$.request_id') = ?`)
 		args = append(args, q.RequestID)
 	}
 	if len(where) > 0 {

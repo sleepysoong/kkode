@@ -295,6 +295,33 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	if len(byRequestID) != 1 || byRequestID[0].ID != "run_1" {
 		t.Fatalf("request_id run list가 이상해요: %+v", byRequestID)
 	}
+	assertSQLiteIndexExists(t, store, "runs", "idx_runs_request_id_updated")
+}
+
+func assertSQLiteIndexExists(t *testing.T, store *SQLiteStore, table string, indexName string) {
+	t.Helper()
+	rows, err := store.db.QueryContext(context.Background(), "PRAGMA index_list("+table+")")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq int
+		var name string
+		var unique int
+		var origin string
+		var partial int
+		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
+			t.Fatal(err)
+		}
+		if name == indexName {
+			return
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatalf("%s index가 %s table에 필요해요", indexName, table)
 }
 
 func TestRunEventStorePersistsReplay(t *testing.T) {
