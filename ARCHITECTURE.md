@@ -472,7 +472,7 @@ curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&afte
 go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db -cors-origins http://localhost:3000
 ```
 
-`-cors-origins` 또는 `KKODE_CORS_ORIGINS`는 쉼표로 여러 origin을 받을 수 있어요. preflight는 처리하지만 실제 API 호출은 bearer auth 정책을 그대로 따라요. 외부 adapter는 `X-Request-Id`를 직접 넣어 여러 시스템 로그를 연결할 수 있고, 넣지 않으면 gateway가 `req_...` 값을 생성해요. 이 값은 background run metadata에도 `request_id`로 저장돼요. `-access-log` 또는 `KKODE_ACCESS_LOG=1`은 `gateway.AccessLogEntry`를 JSONL stderr 로그로 연결해서 컨테이너/VM 배포에서 바로 수집할 수 있게 해요.
+`-cors-origins` 또는 `KKODE_CORS_ORIGINS`는 쉼표로 여러 origin을 받을 수 있어요. preflight는 처리하지만 실제 API 호출은 bearer auth 정책을 그대로 따라요. 외부 adapter는 `X-Request-Id`를 직접 넣어 여러 시스템 로그를 연결할 수 있고, 넣지 않으면 gateway가 `req_...` 값을 생성해요. 이 값은 background run metadata에도 `request_id`로 저장돼요. `-access-log` 또는 `KKODE_ACCESS_LOG=1`은 `gateway.AccessLogEntry`를 JSONL stderr 로그로 연결해서 컨테이너/VM 배포에서 바로 수집할 수 있게 해요. gateway CLI는 SIGINT/SIGTERM을 `http.Server.Shutdown`으로 처리해서 종료 시 진행 중 요청을 정리해요.
 
 OpenAPI 계약은 `gateway/openapi.yaml`에 있어요. 웹 패널과 Discord adapter는 이 계약을 기준으로 붙이면 돼요. `gateway/openapi_contract_test.go`는 feature catalog endpoint가 OpenAPI paths에서 빠지지 않았는지 검사해요.
 

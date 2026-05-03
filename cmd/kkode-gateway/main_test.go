@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +59,49 @@ func TestAccessLoggerWritesJSONL(t *testing.T) {
 	}
 	if accessLoggerForFlag(false, &buf) != nil {
 		t.Fatal("비활성화된 access logger는 nil이어야 해요")
+	}
+}
+
+func TestServeHTTPGracefulShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }),
+		ReadHeaderTimeout: time.Second,
+	}
+	done := make(chan error, 1)
+	go func() { done <- serveHTTP(ctx, server, nil) }()
+	deadline := time.Now().Add(time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		resp, err := http.Get("http://" + addr)
+		if err == nil {
+			_ = resp.Body.Close()
+			ready = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !ready {
+		cancel()
+		t.Fatal("test HTTP server가 시작되지 않았어요")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("graceful shutdown은 nil이어야 해요: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("graceful shutdown이 끝나지 않았어요")
 	}
 }
 
