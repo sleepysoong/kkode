@@ -174,6 +174,10 @@ type Store interface {
 	Close() error
 }
 
+type HealthChecker interface {
+	Ping(ctx context.Context) error
+}
+
 type CheckpointStore interface {
 	SaveCheckpoint(ctx context.Context, cp Checkpoint) error
 	LoadCheckpoint(ctx context.Context, sessionID string, checkpointID string) (Checkpoint, error)

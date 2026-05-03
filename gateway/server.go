@@ -116,6 +116,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 method예요")
 		return
 	}
+	if checker, ok := s.cfg.Store.(session.HealthChecker); ok {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+		if err := checker.Ping(ctx); err != nil {
+			writeError(w, r, http.StatusServiceUnavailable, "not_ready", err.Error())
+			return
+		}
+	}
 	writeJSON(w, map[string]any{"ready": true})
 }
 

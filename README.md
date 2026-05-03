@@ -312,7 +312,7 @@ go run ./cmd/kkode-agent \
 
 ## Gateway API 예제
 
-로컬 웹 패널이나 Discord adapter가 session state를 읽게 하려면 gateway를 실행해요. 기본 listen 주소는 localhost라 개발 중에는 안전하게 시작할 수 있어요.
+로컬 웹 패널이나 Discord adapter가 session state를 읽게 하려면 gateway를 실행해요. 기본 listen 주소는 localhost라 개발 중에는 안전하게 시작할 수 있어요. `/readyz`는 SQLite store가 ping 가능한지도 확인해서 배포 readiness probe로 쓸 수 있어요.
 
 ```bash
 go run ./cmd/kkode-gateway \

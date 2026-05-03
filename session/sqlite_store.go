@@ -41,6 +41,13 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
 
+func (s *SQLiteStore) Ping(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return errors.New("sqlite store is not open")
+	}
+	return s.db.PingContext(ctx)
+}
+
 func (s *SQLiteStore) migrate(ctx context.Context) error {
 	stmts := []string{
 		`PRAGMA journal_mode = WAL;`,

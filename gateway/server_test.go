@@ -37,6 +37,26 @@ func TestGatewayAPIIndex(t *testing.T) {
 	}
 }
 
+func TestGatewayReadyChecksStoreHealth(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ready status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("닫힌 store는 ready가 아니어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGatewayStatsEndpoint(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)
