@@ -324,10 +324,13 @@ go run ./cmd/kkode-gateway \
 
 ```bash
 KKODE_API_KEY=kk_live_local \
+KKODE_CORS_ORIGINS=https://panel.example \
   go run ./cmd/kkode-gateway \
   -addr 0.0.0.0:41234 \
   -api-key-env KKODE_API_KEY
 ```
+
+별도 웹 패널 origin이 있으면 `KKODE_CORS_ORIGINS` 또는 `-cors-origins`에 쉼표로 나열해요. 실제 API 호출은 여전히 bearer token을 써야 해요.
 
 session 생성 예시는 다음과 같아요.
 

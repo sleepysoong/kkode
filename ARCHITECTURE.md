@@ -465,8 +465,10 @@ curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&afte
 `cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요. file/shell/web tool surface가 외부에 노출될 수 있기 때문이에요.
 
 ```bash
-go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db
+go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db -cors-origins http://localhost:3000
 ```
+
+`-cors-origins` 또는 `KKODE_CORS_ORIGINS`는 쉼표로 여러 origin을 받을 수 있어요. preflight는 처리하지만 실제 API 호출은 bearer auth 정책을 그대로 따라요.
 
 OpenAPI 계약은 `gateway/openapi.yaml`에 있어요. 웹 패널과 Discord adapter는 이 계약을 기준으로 붙이면 돼요. `gateway/openapi_contract_test.go`는 feature catalog endpoint가 OpenAPI paths에서 빠지지 않았는지 검사해요.
 
