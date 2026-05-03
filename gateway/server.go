@@ -451,7 +451,7 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 	if len(features) == 0 {
 		features = DefaultFeatureCatalog()
 	}
-	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: cloneResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes}})
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes}})
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts []string) {

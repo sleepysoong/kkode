@@ -609,7 +609,7 @@ func TestGatewayListsGetsAndCancelsRuns(t *testing.T) {
 
 func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	store := openTestStore(t)
-	srv, err := New(Config{Store: store, Version: "test", MaxRequestBytes: 1234, Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}, DefaultMCPServers: []ResourceDTO{{Name: "context7", Kind: string(session.ResourceMCPServer), Config: map[string]any{"url": "https://mcp.context7.com/mcp"}}}})
+	srv, err := New(Config{Store: store, Version: "test", MaxRequestBytes: 1234, Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}, DefaultMCPServers: []ResourceDTO{{Name: "context7", Kind: string(session.ResourceMCPServer), Config: map[string]any{"url": "https://mcp.context7.com/mcp", "headers": map[string]any{"CONTEXT7_API_KEY": "secret-token"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,6 +629,10 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if caps.DefaultMCPServers[0].Name != "context7" || caps.DefaultMCPServers[0].Config["url"] == "" {
 		t.Fatalf("기본 MCP discovery가 필요해요: %+v", caps.DefaultMCPServers)
 	}
+	headers := caps.DefaultMCPServers[0].Config["headers"].(map[string]any)
+	if headers["CONTEXT7_API_KEY"] != "[REDACTED]" {
+		t.Fatalf("capability discovery는 MCP secret header를 숨겨야 해요: %+v", caps.DefaultMCPServers[0].Config)
+	}
 	var sawBackground bool
 	for _, feature := range caps.Features {
 		if feature.Name == "background_runs" && feature.Status == "implemented" {
@@ -637,6 +641,26 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	}
 	if !sawBackground {
 		t.Fatalf("background run feature를 discovery해야 해요: %+v", caps.Features)
+	}
+}
+
+func TestResourceDTORedactionMasksSecretConfig(t *testing.T) {
+	redacted := RedactResourceDTO(ResourceDTO{Config: map[string]any{
+		"headers": map[string]any{"Authorization": "Bearer secret", "X-Test": "ok"},
+		"env":     map[string]string{"API_KEY": "secret", "PLAIN": "visible"},
+		"args":    []string{"--token=abc1234567890secretvalue"},
+	}})
+	if redacted.Config["headers"].(map[string]any)["Authorization"] != "[REDACTED]" {
+		t.Fatalf("Authorization header는 숨겨야 해요: %+v", redacted.Config)
+	}
+	if redacted.Config["env"].(map[string]string)["API_KEY"] != "[REDACTED]" {
+		t.Fatalf("env secret은 숨겨야 해요: %+v", redacted.Config)
+	}
+	if redacted.Config["env"].(map[string]string)["PLAIN"] != "visible" {
+		t.Fatalf("일반 값은 유지해야 해요: %+v", redacted.Config)
+	}
+	if redacted.Config["args"].([]string)[0] == "--token=abc1234567890secretvalue" {
+		t.Fatalf("args 안의 token 패턴도 숨겨야 해요: %+v", redacted.Config)
 	}
 }
 

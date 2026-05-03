@@ -304,7 +304,7 @@ func resourceDTOsForIDs(ctx context.Context, store session.Store, kind session.R
 		if err != nil {
 			continue
 		}
-		out = append(out, resourceToGatewayDTO(resource))
+		out = append(out, gateway.RedactResourceDTO(resourceToGatewayDTO(resource)))
 	}
 	return out
 }
@@ -401,7 +401,7 @@ func defaultMCPDTOs() []gateway.ResourceDTO {
 		if len(server.Headers) > 0 {
 			config["headers"] = cloneStringMap(server.Headers)
 		}
-		out = append(out, gateway.ResourceDTO{Kind: string(session.ResourceMCPServer), Name: firstNonEmpty(server.Name, name), Description: "kkode 기본 MCP server예요", Enabled: &enabled, Config: config})
+		out = append(out, gateway.RedactResourceDTO(gateway.ResourceDTO{Kind: string(session.ResourceMCPServer), Name: firstNonEmpty(server.Name, name), Description: "kkode 기본 MCP server예요", Enabled: &enabled, Config: config}))
 	}
 	return out
 }

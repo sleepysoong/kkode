@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -236,4 +237,112 @@ func cloneResourceDTOs(resources []ResourceDTO) []ResourceDTO {
 		out = append(out, cloned)
 	}
 	return out
+}
+
+// RedactResourceDTO는 discovery/preview 응답에서 secret성 config 값을 숨겨요.
+// 실행 경로는 원본 manifest를 쓰고, 외부 adapter용 응답만 마스킹해요.
+func RedactResourceDTO(resource ResourceDTO) ResourceDTO {
+	resources := cloneResourceDTOs([]ResourceDTO{resource})
+	if len(resources) == 0 {
+		return ResourceDTO{}
+	}
+	resources[0].Config = redactConfigMap(resources[0].Config)
+	return resources[0]
+}
+
+func RedactResourceDTOs(resources []ResourceDTO) []ResourceDTO {
+	out := make([]ResourceDTO, 0, len(resources))
+	for _, resource := range resources {
+		out = append(out, RedactResourceDTO(resource))
+	}
+	return out
+}
+
+func redactConfigMap(config map[string]any) map[string]any {
+	if config == nil {
+		return nil
+	}
+	out := make(map[string]any, len(config))
+	for key, value := range config {
+		if isSecretConfigKey(key) {
+			out[key] = redactWholeValue(value)
+			continue
+		}
+		out[key] = redactConfigValue(value)
+	}
+	return out
+}
+
+func redactConfigValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		return redactConfigMap(v)
+	case map[string]string:
+		out := make(map[string]string, len(v))
+		for key, value := range v {
+			if isSecretConfigKey(key) {
+				out[key] = "[REDACTED]"
+			} else {
+				out[key] = llm.RedactSecrets(value)
+			}
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(v))
+		for _, item := range v {
+			out = append(out, redactConfigValue(item))
+		}
+		return out
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			out = append(out, llm.RedactSecrets(item))
+		}
+		return out
+	case string:
+		return llm.RedactSecrets(v)
+	default:
+		return v
+	}
+}
+
+func redactWholeValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key := range v {
+			out[key] = "[REDACTED]"
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(v))
+		for key := range v {
+			out[key] = "[REDACTED]"
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i := range v {
+			out[i] = "[REDACTED]"
+		}
+		return out
+	case []string:
+		out := make([]string, len(v))
+		for i := range v {
+			out[i] = "[REDACTED]"
+		}
+		return out
+	case string:
+		if v == "" {
+			return ""
+		}
+		return "[REDACTED]"
+	default:
+		return value
+	}
+}
+
+func isSecretConfigKey(key string) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	return strings.Contains(key, "key") || strings.Contains(key, "token") || strings.Contains(key, "secret") || strings.Contains(key, "authorization") || strings.Contains(key, "password")
 }

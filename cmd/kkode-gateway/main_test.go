@@ -167,7 +167,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	mcp, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp","tools":["*"]}`)})
+	mcp, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp","tools":["*"],"headers":{"CONTEXT7_API_KEY":"secret"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,5 +180,9 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	}
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
+	}
+	headers := preview.MCPServers[0].Config["headers"].(map[string]any)
+	if headers["CONTEXT7_API_KEY"] != "[REDACTED]" {
+		t.Fatalf("run preview는 MCP secret header를 숨겨야 해요: %+v", preview.MCPServers[0].Config)
 	}
 }
