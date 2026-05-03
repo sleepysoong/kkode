@@ -42,6 +42,7 @@ type AsyncRunManager struct {
 
 	mu   sync.RWMutex
 	runs map[string]*managedRun
+	wg   sync.WaitGroup
 }
 
 type managedRun struct {
@@ -132,6 +133,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		return nil, err
 	}
 	m.publish(accepted)
+	m.wg.Add(1)
 	go m.execute(runCtx, cancel, req.withRunID(runID))
 	return cloneRun(&accepted), nil
 }
@@ -255,8 +257,51 @@ func (m *AsyncRunManager) Cancel(ctx context.Context, runID string) (*RunDTO, er
 	return &run, nil
 }
 
+// Shutdown은 gateway가 종료될 때 소유 중인 active run을 취소하고 최종 상태 저장을 기다려요.
+func (m *AsyncRunManager) Shutdown(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	type ownedRun struct {
+		run    RunDTO
+		cancel context.CancelFunc
+	}
+	var owned []ownedRun
+	m.mu.Lock()
+	for _, managed := range m.runs {
+		if isTerminalRunStatus(managed.run.Status) {
+			continue
+		}
+		managed.run.Status = "cancelling"
+		managed.run.EndedAt = m.timestamp()
+		managed.run.Error = "gateway shutting down"
+		owned = append(owned, ownedRun{run: *cloneRun(&managed.run), cancel: managed.cancel})
+	}
+	m.mu.Unlock()
+	for _, item := range owned {
+		run := item.run
+		_ = m.persist(ctx, &run)
+		m.publish(run)
+		if item.cancel != nil {
+			item.cancel()
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc, req RunStartRequest) {
 	defer cancel()
+	defer m.wg.Done()
 	m.update(req.RunID, func(run *RunDTO) {
 		run.Status = "running"
 		run.StartedAt = m.timestamp()

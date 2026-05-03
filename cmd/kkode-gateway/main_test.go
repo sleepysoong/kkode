@@ -72,13 +72,19 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	hookCalled := make(chan struct{}, 1)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }),
 		ReadHeaderTimeout: time.Second,
 	}
 	done := make(chan error, 1)
-	go func() { done <- serveHTTP(ctx, server, nil) }()
+	go func() {
+		done <- serveHTTP(ctx, server, nil, func(ctx context.Context) error {
+			hookCalled <- struct{}{}
+			return nil
+		})
+	}()
 	deadline := time.Now().Add(time.Second)
 	ready := false
 	for time.Now().Before(deadline) {
@@ -99,6 +105,11 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("graceful shutdown은 nil이어야 해요: %v", err)
+		}
+		select {
+		case <-hookCalled:
+		default:
+			t.Fatal("shutdown hook이 호출돼야 해요")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("graceful shutdown이 끝나지 않았어요")

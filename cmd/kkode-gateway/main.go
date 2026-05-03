@@ -91,10 +91,10 @@ func run(args []string) error {
 	fmt.Fprintf(os.Stderr, "kkode gateway가 http://%s 에서 실행돼요\n", *addr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return serveHTTP(ctx, httpServer, os.Stderr)
+	return serveHTTP(ctx, httpServer, os.Stderr, runManager.Shutdown)
 }
 
-func serveHTTP(ctx context.Context, server *http.Server, log io.Writer) error {
+func serveHTTP(ctx context.Context, server *http.Server, log io.Writer, shutdownHooks ...func(context.Context) error) error {
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -113,6 +113,14 @@ func serveHTTP(ctx context.Context, server *http.Server, log io.Writer) error {
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			return err
+		}
+		for _, hook := range shutdownHooks {
+			if hook == nil {
+				continue
+			}
+			if err := hook(shutdownCtx); err != nil {
+				return err
+			}
 		}
 		err := <-errCh
 		if errors.Is(err, http.ErrServerClosed) {

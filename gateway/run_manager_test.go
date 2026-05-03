@@ -96,6 +96,27 @@ func TestAsyncRunManagerCancelsRun(t *testing.T) {
 	waitForRunStatus(t, manager, run.ID, "cancelled")
 }
 
+func TestAsyncRunManagerShutdownCancelsActiveRuns(t *testing.T) {
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	run, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "long"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := manager.Get(context.Background(), run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Status != "cancelled" || cancelled.Error == "" {
+		t.Fatalf("shutdown은 active run을 취소 상태로 남겨야 해요: %+v", cancelled)
+	}
+}
+
 func TestAsyncRunManagerMarksFailedRun(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		return nil, errors.New("boom")
