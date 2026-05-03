@@ -38,4 +38,5 @@
 6. Gateway request id 처리를 middleware로 공통화했어요.
    - `X-Request-Id`를 client가 보내면 보존하고, 없으면 gateway가 생성해서 모든 응답 header에 붙여요.
    - `writeError`는 request context의 같은 ID를 오류 envelope에 담아서 웹 패널, Discord bot, gateway 로그가 같은 요청을 추적할 수 있게 해요.
-   - 다음 단계는 같은 request id를 structured access log와 background run event metadata에 연결하는 일이에요.
+   - `AccessLogger` hook과 `AccessLogEntry`를 추가해서 host app이 같은 request id, method, path, status, bytes, duration을 structured log나 metric으로 받을 수 있게 했어요.
+   - 다음 단계는 같은 request id를 background run event metadata에 연결하는 일이에요.

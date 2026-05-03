@@ -25,6 +25,7 @@ type Config struct {
 	AllowLocalhostNoAuth bool
 	CORSOrigins          []string
 	RequestIDGenerator   func() string
+	AccessLogger         AccessLogger
 	Providers            []ProviderDTO
 	Features             []FeatureDTO
 	ResourceStore        session.ResourceStore
@@ -76,7 +77,7 @@ func (s *Server) buildHandler() http.Handler {
 	apiHandler := s.withAPIAuth(http.HandlerFunc(s.handleAPI))
 	mux.Handle("/api/v1", apiHandler)
 	mux.Handle("/api/v1/", apiHandler)
-	return s.requestIDMiddleware(s.recoverMiddleware(s.corsMiddleware(mux)))
+	return s.requestIDMiddleware(s.accessLogMiddleware(s.recoverMiddleware(s.corsMiddleware(mux))))
 }
 
 func (s *Server) requestIDMiddleware(next http.Handler) http.Handler {

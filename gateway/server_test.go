@@ -245,6 +245,39 @@ func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestGatewayAccessLoggerUsesRequestID(t *testing.T) {
+	store := openTestStore(t)
+	var entries []AccessLogEntry
+	now := time.Unix(100, 0).UTC()
+	srv, err := New(Config{
+		Store:              store,
+		Version:            "test",
+		RequestIDGenerator: func() string { return "req_log" },
+		Now:                func() time.Time { return now },
+		AccessLogger: func(entry AccessLogEntry) {
+			entries = append(entries, entry)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/version?detail=true", nil)
+	req.RemoteAddr = "198.51.100.7:4567"
+	req.Header.Set("User-Agent", "panel-test")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if len(entries) != 1 {
+		t.Fatalf("access log entry가 하나 필요해요: %+v", entries)
+	}
+	entry := entries[0]
+	if entry.RequestID != "req_log" || entry.Method != http.MethodGet || entry.Path != "/api/v1/version?detail=true" || entry.Status != http.StatusOK || entry.Bytes <= 0 || entry.Remote != "198.51.100.7:4567" || entry.UserAgent != "panel-test" {
+		t.Fatalf("access log entry가 이상해요: %+v", entry)
+	}
+}
+
 func TestGatewayRunStarterBoundary(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{
