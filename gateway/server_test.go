@@ -76,6 +76,14 @@ func TestGatewayRejectsOversizedRequestBody(t *testing.T) {
 	if body.Error.Code != "request_too_large" {
 		t.Fatalf("오류 코드가 이상해요: %+v", body)
 	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions", strings.NewReader(`{"also":"large"}`))
+	req.ContentLength = -1
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("chunked 큰 요청 body도 413이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayStatsEndpoint(t *testing.T) {

@@ -48,7 +48,7 @@ func (s *Server) getSessionTodos(w http.ResponseWriter, r *http.Request, session
 func (s *Server) replaceSessionTodos(w http.ResponseWriter, r *http.Request, sessionID string) {
 	var req TodoListResponse
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	todos, err := todosFromDTOs(req.Todos, s.cfg.Now())
@@ -66,7 +66,7 @@ func (s *Server) replaceSessionTodos(w http.ResponseWriter, r *http.Request, ses
 func (s *Server) upsertSessionTodo(w http.ResponseWriter, r *http.Request, sessionID string) {
 	var req TodoDTO
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	todo, err := todoFromDTO(req, s.cfg.Now())

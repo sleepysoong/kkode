@@ -62,7 +62,7 @@ func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, 
 func (s *Server) createSessionCheckpoint(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string) {
 	var req CheckpointDTO
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	cp := session.Checkpoint{ID: strings.TrimSpace(req.ID), SessionID: sessionID, TurnID: strings.TrimSpace(req.TurnID), CreatedAt: req.CreatedAt, Payload: req.Payload}

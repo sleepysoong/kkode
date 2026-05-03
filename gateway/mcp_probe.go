@@ -140,7 +140,7 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 		var req MCPPromptGetRequest
 		if r.Body != nil && r.ContentLength != 0 {
 			if err := decodeJSON(r, &req); err != nil {
-				writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+				writeJSONDecodeError(w, r, err)
 				return
 			}
 		}
@@ -186,7 +186,7 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 		var req MCPToolCallRequest
 		if r.Body != nil && r.ContentLength != 0 {
 			if err := decodeJSON(r, &req); err != nil {
-				writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+				writeJSONDecodeError(w, r, err)
 				return
 			}
 		}

@@ -115,7 +115,7 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 	var req FileWriteRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)

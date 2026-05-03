@@ -65,7 +65,7 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	var req ToolCallRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)

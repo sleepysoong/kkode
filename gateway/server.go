@@ -515,7 +515,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	var req SessionCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
@@ -555,7 +555,7 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request, sessionID s
 	}
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+			writeJSONDecodeError(w, r, err)
 			return
 		}
 	}
@@ -761,7 +761,7 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	}
 	var req RunStartRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	if strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.Prompt) == "" {

@@ -154,7 +154,7 @@ func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store ses
 func (s *Server) saveResource(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute, id string) {
 	var req ResourceDTO
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	resource, err := resourceFromDTO(route.Kind, id, req)

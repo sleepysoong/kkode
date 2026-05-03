@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -19,6 +20,15 @@ type errorEnvelope struct {
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	requestID := requestIDFromRequest(r)
 	writeJSONStatus(w, status, errorEnvelope{Error: apiError{Code: code, Message: message, RequestID: requestID}})
+}
+
+func writeJSONDecodeError(w http.ResponseWriter, r *http.Request, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", "요청 body가 gateway 제한보다 커요")
+		return
+	}
+	writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

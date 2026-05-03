@@ -75,7 +75,7 @@ func (s *Server) getPromptTemplate(w http.ResponseWriter, r *http.Request, name 
 func (s *Server) renderPromptTemplate(w http.ResponseWriter, r *http.Request, name string) {
 	var req PromptRenderRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	text, err := prompts.Render(name, req.Data)

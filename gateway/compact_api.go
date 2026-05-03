@@ -29,7 +29,7 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionI
 	var req SessionCompactRequest
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid_json", err.Error())
+			writeJSONDecodeError(w, r, err)
 			return
 		}
 	}
