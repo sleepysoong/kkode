@@ -1413,7 +1413,7 @@ components:
             type: string
     CapabilityResponse:
       type: object
-      required: [version, features, providers]
+      required: [version, features, providers, limits]
       properties:
         version:
           type: string
@@ -1427,6 +1427,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Provider'
+        limits:
+          $ref: '#/components/schemas/Limit'
+    Limit:
+      type: object
+      required: [max_request_bytes]
+      properties:
+        max_request_bytes:
+          type: integer
+          format: int64
     Feature:
       type: object
       required: [name, status]

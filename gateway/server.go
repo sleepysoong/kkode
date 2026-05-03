@@ -443,7 +443,7 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 	if len(features) == 0 {
 		features = DefaultFeatureCatalog()
 	}
-	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers})
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes}})
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []string) {

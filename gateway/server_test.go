@@ -590,7 +590,7 @@ func TestGatewayListsGetsAndCancelsRuns(t *testing.T) {
 
 func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	store := openTestStore(t)
-	srv, err := New(Config{Store: store, Version: "test", Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}})
+	srv, err := New(Config{Store: store, Version: "test", MaxRequestBytes: 1234, Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,7 +604,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || caps.Limits.MaxRequestBytes != 1234 {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	var sawBackground bool

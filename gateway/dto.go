@@ -219,6 +219,12 @@ type CapabilityResponse struct {
 	Commit    string        `json:"commit,omitempty"`
 	Features  []FeatureDTO  `json:"features"`
 	Providers []ProviderDTO `json:"providers"`
+	Limits    LimitDTO      `json:"limits"`
+}
+
+// LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.
+type LimitDTO struct {
+	MaxRequestBytes int64 `json:"max_request_bytes"`
 }
 
 func toSessionDTO(sess *session.Session) SessionDTO {
