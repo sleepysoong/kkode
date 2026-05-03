@@ -640,6 +640,48 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	}
 }
 
+func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store:             store,
+		Version:           "test",
+		MaxRequestBytes:   123,
+		Providers:         []ProviderDTO{{Name: "openai"}},
+		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			return &RunDTO{}, nil
+		},
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			return &RunPreviewResponse{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var diagnostics DiagnosticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if !diagnostics.OK || diagnostics.Providers != 1 || diagnostics.DefaultMCPServers != 1 || diagnostics.MaxRequestBytes != 123 {
+		t.Fatalf("diagnostics 응답이 이상해요: %+v", diagnostics)
+	}
+	var sawStore bool
+	for _, check := range diagnostics.Checks {
+		if check.Name == "store" && check.Status == "ok" {
+			sawStore = true
+		}
+	}
+	if !sawStore {
+		t.Fatalf("store check가 필요해요: %+v", diagnostics.Checks)
+	}
+}
+
 func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)

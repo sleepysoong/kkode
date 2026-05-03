@@ -236,6 +236,25 @@ type CapabilityResponse struct {
 	Limits            LimitDTO      `json:"limits"`
 }
 
+// DiagnosticsResponse는 배포/adapter 연결 상태를 한 번에 점검하는 운영 응답이에요.
+type DiagnosticsResponse struct {
+	OK                bool                 `json:"ok"`
+	Version           string               `json:"version"`
+	Commit            string               `json:"commit,omitempty"`
+	Time              time.Time            `json:"time"`
+	Checks            []DiagnosticCheckDTO `json:"checks"`
+	Providers         int                  `json:"providers"`
+	Features          int                  `json:"features"`
+	DefaultMCPServers int                  `json:"default_mcp_servers"`
+	MaxRequestBytes   int64                `json:"max_request_bytes"`
+}
+
+type DiagnosticCheckDTO struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.
 type LimitDTO struct {
 	MaxRequestBytes int64 `json:"max_request_bytes"`

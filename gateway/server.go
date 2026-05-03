@@ -175,6 +175,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handlePrompts(w, r, parts)
 	case "capabilities":
 		s.handleCapabilities(w, r, parts)
+	case "diagnostics":
+		s.handleDiagnostics(w, r, parts)
 	case "stats":
 		s.handleStats(w, r, parts)
 	case "sessions":
@@ -450,6 +452,44 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 		features = DefaultFeatureCatalog()
 	}
 	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: cloneResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes}})
+}
+
+func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) != 1 || r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 diagnostics 요청이에요")
+		return
+	}
+	features := s.cfg.Features
+	if len(features) == 0 {
+		features = DefaultFeatureCatalog()
+	}
+	checks := []DiagnosticCheckDTO{{Name: "http", Status: "ok", Message: "gateway handler가 응답하고 있어요"}}
+	ok := true
+	if checker, supportsPing := s.cfg.Store.(session.HealthChecker); supportsPing {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		err := checker.Ping(ctx)
+		cancel()
+		if err != nil {
+			ok = false
+			checks = append(checks, DiagnosticCheckDTO{Name: "store", Status: "error", Message: err.Error()})
+		} else {
+			checks = append(checks, DiagnosticCheckDTO{Name: "store", Status: "ok"})
+		}
+	} else {
+		checks = append(checks, DiagnosticCheckDTO{Name: "store", Status: "unknown", Message: "store ping을 지원하지 않아요"})
+	}
+	if s.cfg.RunStarter == nil {
+		ok = false
+		checks = append(checks, DiagnosticCheckDTO{Name: "run_starter", Status: "missing"})
+	} else {
+		checks = append(checks, DiagnosticCheckDTO{Name: "run_starter", Status: "ok"})
+	}
+	if s.cfg.RunPreviewer == nil {
+		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "missing"})
+	} else {
+		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
+	}
+	writeJSON(w, DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes})
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []string) {

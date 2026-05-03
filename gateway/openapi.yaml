@@ -64,6 +64,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CapabilityResponse'
+  /api/v1/diagnostics:
+    get:
+      summary: gateway 운영 진단 정보를 반환해요.
+      responses:
+        '200':
+          description: diagnostics 응답이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsResponse'
   /api/v1/providers:
     get:
       summary: gateway가 알고 있는 provider 목록을 반환해요.
@@ -1459,6 +1469,42 @@ components:
         max_request_bytes:
           type: integer
           format: int64
+    DiagnosticsResponse:
+      type: object
+      required: [ok, version, time, checks, providers, features, default_mcp_servers, max_request_bytes]
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        commit:
+          type: string
+        time:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticCheck'
+        providers:
+          type: integer
+        features:
+          type: integer
+        default_mcp_servers:
+          type: integer
+        max_request_bytes:
+          type: integer
+          format: int64
+    DiagnosticCheck:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
     Feature:
       type: object
       required: [name, status]
