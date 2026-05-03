@@ -1203,6 +1203,25 @@ paths:
                 $ref: '#/components/schemas/Run'
         '501':
           $ref: '#/components/responses/Error'
+  /api/v1/runs/preview:
+    post:
+      summary: agent run 조립 결과를 실행 없이 미리 보여줘요.
+      description: provider/model/default MCP/선택 resource/base request tool을 계산하지만 background run은 만들지 않아요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunStartRequest'
+      responses:
+        '200':
+          description: run 조립 preview예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunPreviewResponse'
+        '501':
+          $ref: '#/components/responses/Error'
   /api/v1/requests/{request_id}/runs:
     get:
       summary: request id로 연결된 background run 목록을 반환해요.
@@ -1946,6 +1965,38 @@ components:
         subagents:
           type: array
           description: run에 연결할 subagent resource id 목록이에요.
+          items:
+            type: string
+    RunPreviewResponse:
+      type: object
+      required: [session_id, provider, model]
+      properties:
+        session_id:
+          type: string
+        project_root:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        subagents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        default_mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        base_request_tools:
+          type: array
           items:
             type: string
     MCPToolListResponse:

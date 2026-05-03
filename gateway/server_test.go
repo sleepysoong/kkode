@@ -640,6 +640,39 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	}
 }
 
+func TestGatewayPreviewsRunAssembly(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	var gotReq RunStartRequest
+	srv, err := New(Config{
+		Store: store,
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			gotReq = req
+			return &RunPreviewResponse{SessionID: req.SessionID, Provider: "openai", Model: "gpt-5-mini", BaseRequestTools: []string{"mcp"}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","provider":"openai"}`))
+	req.Header.Set(RequestIDHeader, "req_preview")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var preview RunPreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" {
+		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
+	}
+}
+
 func TestGatewayServesOpenAPISpec(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")

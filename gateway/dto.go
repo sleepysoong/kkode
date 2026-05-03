@@ -149,6 +149,19 @@ type RunDTO struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
+// RunPreviewResponse는 실제 실행 없이 run 조립 결과를 외부 adapter에 보여줘요.
+type RunPreviewResponse struct {
+	SessionID         string        `json:"session_id"`
+	ProjectRoot       string        `json:"project_root,omitempty"`
+	Provider          string        `json:"provider"`
+	Model             string        `json:"model"`
+	MCPServers        []ResourceDTO `json:"mcp_servers,omitempty"`
+	Skills            []ResourceDTO `json:"skills,omitempty"`
+	Subagents         []ResourceDTO `json:"subagents,omitempty"`
+	DefaultMCPServers []ResourceDTO `json:"default_mcp_servers,omitempty"`
+	BaseRequestTools  []string      `json:"base_request_tools,omitempty"`
+}
+
 // RunListResponse는 background run 목록 응답이에요.
 type RunListResponse struct {
 	Runs []RunDTO `json:"runs"`

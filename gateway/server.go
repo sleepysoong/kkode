@@ -18,6 +18,9 @@ import (
 // RunStarter는 gateway가 실제 agent 실행을 시작할 때 주입하는 경계예요.
 type RunStarter func(ctx context.Context, req RunStartRequest) (*RunDTO, error)
 
+// RunPreviewer는 실제 실행 전에 provider/model/resource 조립 결과를 계산해요.
+type RunPreviewer func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error)
+
 // Config는 gateway HTTP server 구성값이에요.
 type Config struct {
 	Store                session.Store
@@ -34,6 +37,7 @@ type Config struct {
 	Features             []FeatureDTO
 	ResourceStore        session.ResourceStore
 	RunStarter           RunStarter
+	RunPreviewer         RunPreviewer
 	RunGetter            RunGetter
 	RunLister            RunLister
 	RunCanceler          RunCanceler
@@ -722,6 +726,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
 		return
 	}
+	if len(parts) == 2 && parts[1] == "preview" && r.Method == http.MethodPost {
+		s.previewRun(w, r)
+		return
+	}
 	runID := parts[1]
 	if len(parts) == 2 && r.Method == http.MethodGet {
 		s.getRun(w, r, runID)
@@ -766,8 +774,8 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		writeJSONDecodeError(w, r, err)
 		return
 	}
-	if strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.Prompt) == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_run", "session_id와 prompt가 필요해요")
+	if err := validateRunStartRequest(req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
 		return
 	}
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
@@ -777,6 +785,36 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusAccepted, run)
+}
+
+func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.RunPreviewer == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_previewer_missing", "이 gateway에는 RunPreviewer가 연결되지 않았어요")
+		return
+	}
+	var req RunStartRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	if err := validateRunStartRequest(req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
+		return
+	}
+	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
+	preview, err := s.cfg.RunPreviewer(r.Context(), req)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "preview_run_failed", err.Error())
+		return
+	}
+	writeJSON(w, preview)
+}
+
+func validateRunStartRequest(req RunStartRequest) error {
+	if strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.Prompt) == "" {
+		return errors.New("session_id와 prompt가 필요해요")
+	}
+	return nil
 }
 
 func (s *Server) getRun(w http.ResponseWriter, r *http.Request, runID string) {

@@ -37,6 +37,7 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		{schema: "Limit", dto: LimitDTO{}},
 		{schema: "SessionCreateRequest", dto: SessionCreateRequest{}},
 		{schema: "RunStartRequest", dto: RunStartRequest{}},
+		{schema: "RunPreviewResponse", dto: RunPreviewResponse{}},
 		{schema: "Run", dto: RunDTO{}},
 		{schema: "RequestCorrelationResponse", dto: RequestCorrelationResponse{}},
 		{schema: "RequestCorrelationEventsResponse", dto: RequestCorrelationEventsResponse{}},

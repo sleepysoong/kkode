@@ -79,6 +79,7 @@ func run(args []string) error {
 		MaxRequestBytes:      *maxBodyBytes,
 		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
+		RunPreviewer:         syncRunPreviewer(store),
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
 		RunCanceler:          runManager.Cancel,
@@ -251,6 +252,80 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		}
 		return run, nil
 	}
+}
+
+func syncRunPreviewer(store session.Store) gateway.RunPreviewer {
+	return func(ctx context.Context, req gateway.RunStartRequest) (*gateway.RunPreviewResponse, error) {
+		sess, err := store.LoadSession(ctx, req.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		providerName := firstNonEmpty(req.Provider, sess.ProviderName)
+		model := firstNonEmpty(req.Model, sess.Model)
+		if model == "" {
+			model = app.DefaultModel(providerName)
+		}
+		providerOptions, err := loadProviderOptions(ctx, store, req)
+		if err != nil {
+			return nil, err
+		}
+		handle, err := app.BuildProviderWithOptions(providerName, sess.ProjectRoot, providerOptions)
+		if err != nil {
+			return nil, err
+		}
+		if handle.Close != nil {
+			defer handle.Close()
+		}
+		if model == "" && handle.Provider != nil {
+			model = app.DefaultModel(handle.Provider.Name())
+		}
+		return &gateway.RunPreviewResponse{
+			SessionID:         req.SessionID,
+			ProjectRoot:       sess.ProjectRoot,
+			Provider:          providerName,
+			Model:             model,
+			MCPServers:        resourceDTOsForIDs(ctx, store, session.ResourceMCPServer, req.MCPServers),
+			Skills:            resourceDTOsForIDs(ctx, store, session.ResourceSkill, req.Skills),
+			Subagents:         resourceDTOsForIDs(ctx, store, session.ResourceSubagent, req.Subagents),
+			DefaultMCPServers: defaultMCPDTOs(),
+			BaseRequestTools:  toolNames(handle.BaseRequest.Tools),
+		}, nil
+	}
+}
+
+func resourceDTOsForIDs(ctx context.Context, store session.Store, kind session.ResourceKind, ids []string) []gateway.ResourceDTO {
+	resourceStore, _ := store.(session.ResourceStore)
+	if resourceStore == nil || len(ids) == 0 {
+		return nil
+	}
+	out := make([]gateway.ResourceDTO, 0, len(ids))
+	for _, id := range ids {
+		resource, err := resourceStore.LoadResource(ctx, kind, id)
+		if err != nil {
+			continue
+		}
+		out = append(out, resourceToGatewayDTO(resource))
+	}
+	return out
+}
+
+func resourceToGatewayDTO(resource session.Resource) gateway.ResourceDTO {
+	config := map[string]any{}
+	if len(resource.Config) > 0 {
+		_ = json.Unmarshal(resource.Config, &config)
+	}
+	enabled := resource.Enabled
+	return gateway.ResourceDTO{ID: resource.ID, Kind: string(resource.Kind), Name: resource.Name, Description: resource.Description, Enabled: &enabled, Config: config, CreatedAt: resource.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: resource.UpdatedAt.Format(time.RFC3339Nano)}
+}
+
+func toolNames(tools []llm.Tool) []string {
+	out := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Name != "" {
+			out = append(out, tool.Name)
+		}
+	}
+	return out
 }
 
 func isLoopbackListenAddr(addr string) bool {

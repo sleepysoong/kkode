@@ -154,3 +154,31 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 		t.Fatalf("provider options가 이상해요: %+v", opts)
 	}
 }
+
+func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	sess := session.NewSession(t.TempDir(), "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	mcp, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp","tools":["*"]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := syncRunPreviewer(store)(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Provider != "openai" || preview.Model != "gpt-5-mini" || len(preview.MCPServers) != 1 || preview.MCPServers[0].Name != "context7" {
+		t.Fatalf("preview 기본 정보가 이상해요: %+v", preview)
+	}
+	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
+		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
+	}
+}
