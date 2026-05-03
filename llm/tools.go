@@ -74,12 +74,21 @@ func (r ToolRegistry) WithMiddleware(middlewares ...ToolMiddleware) ToolRegistry
 	return out
 }
 
-func (r ToolRegistry) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+func (r ToolRegistry) Execute(ctx context.Context, call ToolCall) (result ToolResult, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("tool %q panic: %v", call.Name, recovered)
+			result = ToolResult{CallID: call.CallID, Name: call.Name, Error: err.Error(), Custom: call.Custom}
+		}
+	}()
 	h, ok := r[call.Name]
 	if !ok {
 		return ToolResult{}, fmt.Errorf("tool %q is not registered", call.Name)
 	}
-	result, err := h(ctx, call)
+	if h == nil {
+		return ToolResult{}, fmt.Errorf("tool %q handler is nil", call.Name)
+	}
+	result, err = h(ctx, call)
 	if err != nil {
 		return ToolResult{CallID: call.CallID, Name: call.Name, Error: err.Error(), Custom: call.Custom}, err
 	}
@@ -178,7 +187,12 @@ func executeToolCalls(ctx context.Context, calls []ToolCall, tools ToolRegistry,
 	return results
 }
 
-func executeToolCall(ctx context.Context, tools ToolRegistry, call ToolCall) ToolResult {
+func executeToolCall(ctx context.Context, tools ToolRegistry, call ToolCall) (result ToolResult) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = ToolResult{CallID: call.CallID, Name: call.Name, Error: fmt.Sprintf("tool %q panic: %v", call.Name, recovered), Custom: call.Custom}
+		}
+	}()
 	result, execErr := tools.Execute(ctx, call)
 	if execErr != nil && result.Error == "" {
 		result = ToolResult{CallID: call.CallID, Name: call.Name, Error: execErr.Error(), Custom: call.Custom}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -102,6 +103,21 @@ func TestToolRegistryWithMiddlewareClonesAndOrders(t *testing.T) {
 	}
 }
 
+func TestToolRegistryRecoversHandlerPanic(t *testing.T) {
+	reg := ToolRegistry{
+		"boom": func(ctx context.Context, call ToolCall) (ToolResult, error) {
+			panic("폭발")
+		},
+	}
+	result, err := reg.Execute(context.Background(), ToolCall{CallID: "call_boom", Name: "boom"})
+	if err == nil || result.Error == "" {
+		t.Fatalf("tool panic은 오류 result로 바뀌어야 해요: result=%+v err=%v", result, err)
+	}
+	if result.CallID != "call_boom" || result.Name != "boom" || !strings.Contains(result.Error, "panic") {
+		t.Fatalf("panic result가 이상해요: %+v", result)
+	}
+}
+
 func TestRunToolLoopPreservesProviderItemsAndAppendsToolOutput(t *testing.T) {
 	testingError = ""
 	p := &scriptedProvider{}
@@ -121,6 +137,22 @@ func TestRunToolLoopPreservesProviderItemsAndAppendsToolOutput(t *testing.T) {
 	}
 	if p.calls != 2 || resp.Text != "final" {
 		t.Fatalf("unexpected loop result calls=%d resp=%#v", p.calls, resp)
+	}
+}
+
+func TestRunToolLoopConvertsParallelToolPanicToToolOutput(t *testing.T) {
+	p := &panicToolProvider{}
+	reg := ToolRegistry{
+		"boom": func(ctx context.Context, call ToolCall) (ToolResult, error) {
+			panic("parallel boom")
+		},
+	}
+	resp, err := RunToolLoop(context.Background(), p, Request{Model: "test", Messages: []Message{UserText("go")}}, reg, ToolLoopOptions{MaxIterations: 2, ParallelToolCalls: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != "panic handled" || !p.sawPanic {
+		t.Fatalf("panic tool output을 provider에 전달해야 해요: resp=%+v saw=%v", resp, p.sawPanic)
 	}
 }
 
@@ -192,6 +224,29 @@ type parallelProvider struct {
 type manyToolProvider struct {
 	count int
 	calls int
+}
+
+type panicToolProvider struct {
+	calls    int
+	sawPanic bool
+}
+
+func (p *panicToolProvider) Name() string { return "panic-provider" }
+func (p *panicToolProvider) Capabilities() Capabilities {
+	return Capabilities{Tools: true, ParallelToolCalls: true}
+}
+func (p *panicToolProvider) Generate(ctx context.Context, req Request) (*Response, error) {
+	p.calls++
+	if p.calls == 1 {
+		call := ToolCall{CallID: "call_boom", Name: "boom", Arguments: json.RawMessage(`{}`)}
+		return &Response{ID: "panic_1", Output: []Item{{Type: ItemFunctionCall, ToolCall: &call}}, ToolCalls: []ToolCall{call}}, nil
+	}
+	for _, item := range req.InputItems {
+		if item.ToolResult != nil && strings.Contains(item.ToolResult.Error, "panic") {
+			p.sawPanic = true
+		}
+	}
+	return TextResponse(p.Name(), req.Model, "panic handled"), nil
 }
 
 func (p *manyToolProvider) Name() string { return "many" }
