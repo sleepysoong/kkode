@@ -222,6 +222,19 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
+	if wantsSSE(r) {
+		s.writeRequestEventsSSE(w, r, runs, limit)
+		return
+	}
+	events, err := s.collectRequestRunEvents(r, runs, limit)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "list_run_events_failed", err.Error())
+		return
+	}
+	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events})
+}
+
+func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int) ([]RunEventDTO, error) {
 	events := make([]RunEventDTO, 0, len(runs))
 	for _, run := range runs {
 		if len(events) >= limit {
@@ -230,8 +243,7 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		remaining := limit - len(events)
 		runEvents, err := s.eventsForCorrelationRun(r, run, remaining)
 		if err != nil {
-			writeError(w, r, http.StatusInternalServerError, "list_run_events_failed", err.Error())
-			return
+			return nil, err
 		}
 		events = append(events, runEvents...)
 	}
@@ -253,7 +265,7 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	if len(events) > limit {
 		events = events[:limit]
 	}
-	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events})
+	return events, nil
 }
 
 func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int) ([]RunEventDTO, error) {
@@ -273,6 +285,70 @@ func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int)
 		}
 	}
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}}, nil
+}
+
+func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, _ := w.(http.Flusher)
+	events, err := s.collectRequestRunEvents(r, runs, limit)
+	if err != nil {
+		writeSSEFrame(w, flusher, 1, "error", map[string]string{"error": err.Error()})
+		return
+	}
+	streamSeq := 0
+	for _, event := range events {
+		streamSeq++
+		writeSSEFrame(w, flusher, streamSeq, event.Type, event)
+	}
+	if s.cfg.RunSubscriber == nil {
+		return
+	}
+	updates := make(chan RunDTO, len(runs)*2)
+	active := 0
+	for _, run := range runs {
+		if isTerminalRunStatus(run.Status) {
+			continue
+		}
+		ch, unsubscribe := s.cfg.RunSubscriber(r.Context(), run.ID)
+		defer unsubscribe()
+		active++
+		go func(ch <-chan RunDTO) {
+			for {
+				select {
+				case <-r.Context().Done():
+					return
+				case run, ok := <-ch:
+					if !ok {
+						return
+					}
+					select {
+					case <-r.Context().Done():
+						return
+					case updates <- run:
+					}
+				}
+			}
+		}(ch)
+	}
+	if active == 0 {
+		return
+	}
+	terminal := map[string]bool{}
+	for len(terminal) < active {
+		select {
+		case <-r.Context().Done():
+			return
+		case run := <-updates:
+			streamSeq++
+			event := RunEventDTO{Seq: streamSeq, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}
+			writeSSEFrame(w, flusher, streamSeq, event.Type, event)
+			if isTerminalRunStatus(run.Status) {
+				terminal[run.ID] = true
+			}
+		}
+	}
 }
 
 func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []string) {

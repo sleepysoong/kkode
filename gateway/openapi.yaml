@@ -1242,6 +1242,12 @@ paths:
             type: integer
             default: 200
             maximum: 1000
+        - in: query
+          name: stream
+          schema:
+            type: boolean
+            default: false
+          description: true면 현재 replay 뒤 연결된 live run event를 SSE로 이어 받아요.
       responses:
         '200':
           description: request id와 연결된 run event 목록이에요.
@@ -1249,6 +1255,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RequestCorrelationEventsResponse'
+            text/event-stream:
+              schema:
+                type: string
         '501':
           $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}:

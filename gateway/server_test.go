@@ -408,6 +408,50 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}
 }
 
+func TestGatewayStreamsRequestCorrelationEvents(t *testing.T) {
+	store := openTestStore(t)
+	bus := NewRunEventBus()
+	run := RunDTO{ID: "run_req_stream", SessionID: "sess_1", Status: "running", Metadata: map[string]string{RequestIDMetadataKey: "req_stream"}}
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			if q.RequestID != "req_stream" {
+				return nil, nil
+			}
+			copy := run
+			return []RunDTO{copy}, nil
+		},
+		RunSubscriber: bus.Subscribe,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_stream/events?stream=true", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(rec, req)
+		close(done)
+	}()
+	waitForRunSubscription(t, bus, "run_req_stream")
+	bus.Publish(RunDTO{ID: "run_req_stream", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: "req_stream"}})
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("request correlation SSE가 종료되지 않았어요")
+	}
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("unexpected response: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: run.running") || !strings.Contains(body, "event: run.completed") || !strings.Contains(body, "run_req_stream") {
+		t.Fatalf("request correlation SSE body가 이상해요: %s", body)
+	}
+}
+
 func openTestStore(t *testing.T) *session.SQLiteStore {
 	t.Helper()
 	store, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
