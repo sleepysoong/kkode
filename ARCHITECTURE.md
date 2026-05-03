@@ -31,6 +31,7 @@ kkode/
 │   └── kkode-gateway/                # HTTP gateway API server예요
 ├── llm/                              # provider-neutral core예요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
+│   ├── conversion.go                 # 요청/응답 변환과 source 호출 adapter예요
 │   ├── prompt.go                     # 메시지 helper예요
 │   ├── redact.go                     # secret redaction helper예요
 │   ├── router.go                     # provider/model router예요
@@ -43,7 +44,7 @@ kkode/
 │   └── validate.go                   # request validation이에요
 ├── providers/
 │   ├── internal/httptransport/       # provider 공통 JSON HTTP transport helper예요
-│   ├── openai/                       # OpenAI-compatible Responses provider예요
+│   ├── openai/                       # OpenAI-compatible Responses 변환/caller provider예요
 │   ├── copilot/                      # GitHub Copilot SDK adapter예요
 │   ├── codexcli/                     # Codex CLI subprocess adapter예요
 │   └── omniroute/                    # OmniRoute gateway adapter예요
@@ -150,6 +151,34 @@ type Request struct {
 ```
 
 `Messages`는 사람이 쓰기 쉬운 입력이고, `InputItems`는 Responses-style loop에서 raw item을 보존하기 위한 입력이에요.
+
+### `llm` 변환 레이어
+
+provider 추가 비용을 줄이기 위해 core에는 얇은 변환 계약만 둬요. agent/runtime/gateway는 계속 표준 `llm.Request`와 `llm.Response`만 다루고, provider 패키지가 실제 API payload나 SDK 호출값으로 바꿔요.
+
+```go
+type RequestConverter interface {
+    ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error)
+}
+
+type ResponseConverter interface {
+    ConvertResponse(ctx context.Context, result ProviderResult) (*Response, error)
+}
+
+type ProviderCaller interface {
+    CallProvider(ctx context.Context, req ProviderRequest) (ProviderResult, error)
+}
+
+type AdaptedProvider struct {
+    ProviderName         string
+    ProviderCapabilities Capabilities
+    Converter            Converter
+    Caller               ProviderCaller
+    Options              ConvertOptions
+}
+```
+
+흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. HTTP API, subprocess, SDK session, in-memory fake 모두 `ProviderCaller` 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
 
 ### `llm.Response`
 
@@ -668,12 +697,16 @@ type Config struct {
 }
 func New(cfg Config) *Client
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error)
+func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error)
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error)
+type ResponsesConverter struct { ProviderName string }
+func (c ResponsesConverter) ConvertRequest(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error)
+func (c ResponsesConverter) ConvertResponse(ctx context.Context, result llm.ProviderResult) (*llm.Response, error)
 func BuildResponsesRequest(req llm.Request) (map[string]any, error)
 func ParseResponsesResponse(data []byte, providerName string) (*llm.Response, error)
 ```
 
-`Generate`와 `Stream`은 같은 request builder와 retry 경로를 공유해요. JSON request 생성, bearer auth, custom header 복사, retry/backoff, `Retry-After` backoff 반영, SSE line framing, HTTP 실패 분류는 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. provider 오류는 `httptransport.HTTPError`로 감싸서 gateway나 외부 adapter가 `errors.As`로 status code와 body를 일관되게 읽을 수 있어요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
+`Generate`는 `llm.AdaptedProvider`를 통해 `ResponsesConverter`와 `Client.CallProvider`를 연결해요. 그래서 새 OpenAI-compatible 파생 provider는 converter를 재사용하고 caller 설정만 바꾸면 돼요. `Stream`은 같은 request builder와 retry 경로를 공유하되 SSE body lifetime을 직접 관리해요. JSON request 생성, bearer auth, custom header 복사, retry/backoff, `Retry-After` backoff 반영, SSE line framing, HTTP 실패 분류는 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. provider 오류는 `httptransport.HTTPError`로 감싸서 gateway나 외부 adapter가 `errors.As`로 status code와 body를 일관되게 읽을 수 있어요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
 
 built-in tool helper도 제공해요.
 

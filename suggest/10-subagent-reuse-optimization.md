@@ -43,3 +43,10 @@
    - `POST /api/v1/runs`와 run retry는 같은 값을 metadata `request_id`로 주입하고, `AsyncRunManager`는 starter가 별도 metadata를 반환해도 request id를 보존해요.
    - `GET /api/v1/runs?request_id=...` 필터, `GET /api/v1/requests/{request_id}/runs`, `GET /api/v1/requests/{request_id}/events` correlation API와 `stream=true` SSE를 추가해서 외부 adapter가 HTTP 요청에서 파생된 background run과 event replay/live update를 다시 찾을 수 있게 했고, SQLite에는 `idx_runs_request_id_updated` expression index를 추가했어요.
    - 다음 단계는 access log와 run event를 묶은 별도 observability API를 추가하는 일이에요.
+
+7. provider 변환 레이어를 명시했어요.
+   - `llm.RequestConverter`, `llm.ResponseConverter`, `llm.ProviderCaller`, `llm.AdaptedProvider`를 추가해서 `표준 요청 → provider payload → API/source 호출 → 표준 응답` 흐름을 재사용하게 했어요.
+   - `providers/openai.ResponsesConverter`는 OpenAI-compatible Responses payload 변환을 맡고, `openai.Client`는 HTTP caller 역할만 수행해요.
+   - OmniRoute 같은 OpenAI-compatible 파생 provider는 같은 converter를 재사용하고 base URL/header/provider label만 바꾸면 붙일 수 있어요.
+   - gateway JSON API는 unknown field와 trailing top-level JSON 값을 모두 `invalid_json`으로 거부해서 adapter가 모호한 입력을 조용히 무시하지 않게 했어요.
+   - 다음 단계는 Copilot/Codex CLI도 `convert.go` 단위로 session config, prompt rendering, event decoding을 분리해서 같은 구조로 맞추는 일이에요.

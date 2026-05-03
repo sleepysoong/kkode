@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -935,7 +936,17 @@ func isTerminalRunStatus(status string) bool {
 func decodeJSON(r *http.Request, out any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	return dec.Decode(out)
+	if err := dec.Decode(out); err != nil {
+		return err
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("JSON body에는 하나의 값만 있어야 해요")
+		}
+		return err
+	}
+	return nil
 }
 
 func splitPath(path string) []string {

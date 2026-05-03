@@ -72,23 +72,48 @@ func DefaultCapabilities() llm.Capabilities {
 }
 
 func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
-	hreq, payload, err := c.newResponsesRequest(ctx, req, false)
+	adapter := llm.AdaptedProvider{
+		ProviderName:         c.Name(),
+		ProviderCapabilities: c.Capabilities(),
+		Converter:            ResponsesConverter{ProviderName: c.Name()},
+		Caller:               c,
+		Options:              llm.ConvertOptions{Operation: responsesOperation},
+	}
+	return adapter.Generate(ctx, req)
+}
+
+func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error) {
+	if req.Stream {
+		return llm.ProviderResult{}, errors.New("stream 요청은 Stream API를 사용해야 해요")
+	}
+	if req.Operation != "" && req.Operation != responsesOperation {
+		return llm.ProviderResult{}, fmt.Errorf("지원하지 않는 OpenAI-compatible operation이에요: %s", req.Operation)
+	}
+	u, err := url.JoinPath(c.baseURL, "responses")
 	if err != nil {
-		return nil, err
+		return llm.ProviderResult{}, err
+	}
+	headers := httptransport.CloneHeaders(c.headers)
+	for k, v := range req.Headers {
+		headers[k] = v
+	}
+	hreq, payload, err := httptransport.NewJSONRequest(ctx, http.MethodPost, u, c.apiKey, headers, req.Body, "")
+	if err != nil {
+		return llm.ProviderResult{}, err
 	}
 	res, err := c.do(hreq, payload)
 	if err != nil {
-		return nil, err
+		return llm.ProviderResult{}, err
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return llm.ProviderResult{}, err
 	}
 	if !httptransport.IsSuccessStatus(res.StatusCode) {
-		return nil, httptransport.ErrorFromResponse("openai-compatible responses API", res, data)
+		return llm.ProviderResult{}, httptransport.ErrorFromResponse("openai-compatible responses API", res, data)
 	}
-	return ParseResponsesResponse(data, c.Name())
+	return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Body: data, Headers: res.Header}, nil
 }
 
 func (c *Client) newResponsesRequest(ctx context.Context, req llm.Request, stream bool) (*http.Request, []byte, error) {
