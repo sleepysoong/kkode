@@ -154,6 +154,12 @@ type RunListResponse struct {
 	Runs []RunDTO `json:"runs"`
 }
 
+// RequestCorrelationResponse는 외부 요청 ID로 이어진 run들을 한 번에 보여줘요.
+type RequestCorrelationResponse struct {
+	RequestID string   `json:"request_id"`
+	Runs      []RunDTO `json:"runs"`
+}
+
 // RunEventDTO는 run 상태 변경을 SSE/JSON replay로 표현해요.
 type RunEventDTO struct {
 	Seq  int       `json:"seq"`

@@ -1203,6 +1203,30 @@ paths:
                 $ref: '#/components/schemas/Run'
         '501':
           $ref: '#/components/responses/Error'
+  /api/v1/requests/{request_id}/runs:
+    get:
+      summary: request id로 연결된 background run 목록을 반환해요.
+      parameters:
+        - in: path
+          name: request_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: request id와 연결된 run 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestCorrelationResponse'
+        '501':
+          $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}:
     get:
       summary: background run 상태를 조회해요.
@@ -2240,6 +2264,16 @@ components:
       type: object
       required: [runs]
       properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Run'
+    RequestCorrelationResponse:
+      type: object
+      required: [request_id, runs]
+      properties:
+        request_id:
+          type: string
         runs:
           type: array
           items:

@@ -145,6 +145,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSessions(w, r, parts)
 	case "runs":
 		s.handleRuns(w, r, parts)
+	case "requests":
+		s.handleRequests(w, r, parts)
 	case "mcp":
 		s.handleMCP(w, r, parts)
 	case "skills":
@@ -162,6 +164,37 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}
+}
+
+func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) == 3 && parts[2] == "runs" {
+		s.listRunsByRequestID(w, r, parts[1])
+		return
+	}
+	writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
+}
+
+func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 request correlation method예요")
+		return
+	}
+	if s.cfg.RunLister == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
+		return
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
+		return
+	}
+	limit := queryLimit(r, "limit", 50, 200)
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit})
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
+		return
+	}
+	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs})
 }
 
 func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []string) {

@@ -338,6 +338,37 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	}
 }
 
+func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
+	store := openTestStore(t)
+	var query RunQuery
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			query = q
+			return []RunDTO{{ID: "run_req", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?limit=7", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if query.RequestID != "req_filter" || query.Limit != 7 {
+		t.Fatalf("request correlation query가 이상해요: %+v", query)
+	}
+	var body RequestCorrelationResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.RequestID != "req_filter" || len(body.Runs) != 1 || body.Runs[0].ID != "run_req" {
+		t.Fatalf("request correlation 응답이 이상해요: %+v", body)
+	}
+}
+
 func openTestStore(t *testing.T) *session.SQLiteStore {
 	t.Helper()
 	store, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
