@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -171,6 +172,10 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request, parts []
 		s.listRunsByRequestID(w, r, parts[1])
 		return
 	}
+	if len(parts) == 3 && parts[2] == "events" {
+		s.listRunEventsByRequestID(w, r, parts[1])
+		return
+	}
 	writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
 }
 
@@ -195,6 +200,79 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs})
+}
+
+func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 request correlation method예요")
+		return
+	}
+	if s.cfg.RunLister == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
+		return
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
+		return
+	}
+	limit := queryLimit(r, "limit", 200, 1000)
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: 200})
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
+		return
+	}
+	events := make([]RunEventDTO, 0, len(runs))
+	for _, run := range runs {
+		if len(events) >= limit {
+			break
+		}
+		remaining := limit - len(events)
+		runEvents, err := s.eventsForCorrelationRun(r, run, remaining)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "list_run_events_failed", err.Error())
+			return
+		}
+		events = append(events, runEvents...)
+	}
+	sort.SliceStable(events, func(i, j int) bool {
+		if events[i].At.Equal(events[j].At) {
+			if events[i].Run.ID == events[j].Run.ID {
+				return events[i].Seq < events[j].Seq
+			}
+			return events[i].Run.ID < events[j].Run.ID
+		}
+		if events[i].At.IsZero() {
+			return false
+		}
+		if events[j].At.IsZero() {
+			return true
+		}
+		return events[i].At.Before(events[j].At)
+	})
+	if len(events) > limit {
+		events = events[:limit]
+	}
+	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events})
+}
+
+func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int) ([]RunEventDTO, error) {
+	if limit <= 0 {
+		return []RunEventDTO{}, nil
+	}
+	if s.cfg.RunEventLister != nil {
+		events, err := s.cfg.RunEventLister(r.Context(), run.ID, 0, limit)
+		if err != nil {
+			return nil, err
+		}
+		if len(events) > 0 {
+			if len(events) > limit {
+				return events[:limit], nil
+			}
+			return events, nil
+		}
+	}
+	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}}, nil
 }
 
 func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []string) {

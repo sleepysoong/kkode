@@ -369,6 +369,45 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	}
 }
 
+func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
+	store := openTestStore(t)
+	var query RunQuery
+	var eventRunID string
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			query = q
+			return []RunDTO{{ID: "run_req", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			eventRunID = runID
+			return []RunEventDTO{
+				{Seq: 1, At: time.Unix(2, 0).UTC(), Type: "run.completed", Run: RunDTO{ID: runID, Status: "completed"}},
+				{Seq: 2, At: time.Unix(1, 0).UTC(), Type: "run.queued", Run: RunDTO{ID: runID, Status: "queued"}},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?limit=5", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if query.RequestID != "req_filter" || eventRunID != "run_req" {
+		t.Fatalf("request event query가 이상해요: query=%+v runID=%s", query, eventRunID)
+	}
+	var body RequestCorrelationEventsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.RequestID != "req_filter" || len(body.Events) != 2 || body.Events[0].Type != "run.queued" || body.Events[1].Type != "run.completed" {
+		t.Fatalf("request correlation event 응답이 이상해요: %+v", body)
+	}
+}
+
 func openTestStore(t *testing.T) *session.SQLiteStore {
 	t.Helper()
 	store, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
