@@ -912,8 +912,16 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		writeError(w, r, http.StatusNotImplemented, "run_getter_missing", "이 gateway에는 RunGetter가 연결되지 않았어요")
 		return
 	}
+	var live <-chan RunDTO
+	var unsubscribe func()
+	if wantsSSE(r) && s.cfg.RunSubscriber != nil {
+		live, unsubscribe = s.cfg.RunSubscriber(r.Context(), runID)
+	}
 	run, err := s.cfg.RunGetter(r.Context(), runID)
 	if err != nil {
+		if unsubscribe != nil {
+			unsubscribe()
+		}
 		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
 		return
 	}
@@ -921,7 +929,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		writeJSON(w, RunEventListResponse{Events: s.runEventSnapshot(r, runID, *run)})
 		return
 	}
-	s.writeRunSSE(w, r, runID, *run)
+	s.writeRunSSE(w, r, runID, *run, live, unsubscribe)
 }
 
 func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO) []RunEventDTO {
@@ -942,26 +950,35 @@ func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}}
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO) {
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, unsubscribe func()) {
+	if unsubscribe != nil {
+		defer unsubscribe()
+	}
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
 	events := s.runEventSnapshot(r, runID, initial)
 	seq := 0
+	lastStatus := initial.Status
 	for _, event := range events {
 		seq = event.Seq
+		lastStatus = event.Run.Status
 		writeRunSSEEvent(w, flusher, event)
 	}
 	if seq == 0 {
 		seq = 1
 		writeRunSSEEvent(w, flusher, RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(initial.Status), Run: initial})
 	}
-	if isTerminalRunStatus(initial.Status) || s.cfg.RunSubscriber == nil {
+	if isTerminalRunStatus(lastStatus) || s.cfg.RunSubscriber == nil {
 		return
 	}
-	ch, unsubscribe := s.cfg.RunSubscriber(r.Context(), initial.ID)
-	defer unsubscribe()
+	ch := live
+	if ch == nil {
+		var localUnsubscribe func()
+		ch, localUnsubscribe = s.cfg.RunSubscriber(r.Context(), initial.ID)
+		defer localUnsubscribe()
+	}
 	for {
 		select {
 		case <-r.Context().Done():
