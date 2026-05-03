@@ -17,7 +17,7 @@ type errorEnvelope struct {
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
-	requestID := r.Header.Get("X-Request-Id")
+	requestID := requestIDFromRequest(r)
 	writeJSONStatus(w, status, errorEnvelope{Error: apiError{Code: code, Message: message, RequestID: requestID}})
 }
 

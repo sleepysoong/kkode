@@ -24,6 +24,7 @@ type Config struct {
 	APIKey               string
 	AllowLocalhostNoAuth bool
 	CORSOrigins          []string
+	RequestIDGenerator   func() string
 	Providers            []ProviderDTO
 	Features             []FeatureDTO
 	ResourceStore        session.ResourceStore
@@ -52,6 +53,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Now == nil {
 		cfg.Now = func() time.Time { return time.Now().UTC() }
 	}
+	if cfg.RequestIDGenerator == nil {
+		cfg.RequestIDGenerator = newRequestID
+	}
 	srv := &Server{cfg: cfg}
 	srv.handler = srv.buildHandler()
 	return srv, nil
@@ -72,7 +76,18 @@ func (s *Server) buildHandler() http.Handler {
 	apiHandler := s.withAPIAuth(http.HandlerFunc(s.handleAPI))
 	mux.Handle("/api/v1", apiHandler)
 	mux.Handle("/api/v1/", apiHandler)
-	return s.recoverMiddleware(s.corsMiddleware(mux))
+	return s.requestIDMiddleware(s.recoverMiddleware(s.corsMiddleware(mux)))
+}
+
+func (s *Server) requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := requestIDFromRequest(r)
+		if id == "" {
+			id = s.cfg.RequestIDGenerator()
+		}
+		w.Header().Set(RequestIDHeader, id)
+		next.ServeHTTP(w, withRequestID(r, id))
+	})
 }
 
 func (s *Server) recoverMiddleware(next http.Handler) http.Handler {

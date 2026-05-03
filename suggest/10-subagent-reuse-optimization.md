@@ -34,3 +34,8 @@
    - retryable status의 마지막 응답 body를 버리지 않고 호출자가 공통 오류로 해석하게 했고, `Retry-After` header를 backoff 계산에 반영해요.
    - OpenAI Responses client와 OmniRoute management/A2A helper가 같은 transport 규칙을 재사용해요.
    - 다음 단계는 provider별 stream event mapping을 더 작은 adapter 단위로 분리하고, provider별 오류 JSON schema를 `HTTPError` metadata로 보존하는 일이에요.
+
+6. Gateway request id 처리를 middleware로 공통화했어요.
+   - `X-Request-Id`를 client가 보내면 보존하고, 없으면 gateway가 생성해서 모든 응답 header에 붙여요.
+   - `writeError`는 request context의 같은 ID를 오류 envelope에 담아서 웹 패널, Discord bot, gateway 로그가 같은 요청을 추적할 수 있게 해요.
+   - 다음 단계는 같은 request id를 structured access log와 background run event metadata에 연결하는 일이에요.

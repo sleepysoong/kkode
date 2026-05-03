@@ -201,7 +201,7 @@ func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
 	req.Header.Set("Origin", "https://panel.example")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" {
+	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" || !strings.Contains(rec.Header().Get("Access-Control-Allow-Headers"), RequestIDHeader) {
 		t.Fatalf("CORS preflight가 이상해요: status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
 
@@ -213,6 +213,35 @@ func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" {
 		t.Fatalf("CORS response header가 필요해요: status=%d headers=%v", rec.Code, rec.Header())
+	}
+}
+
+func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Version: "test", RequestIDGenerator: func() string { return "req_test" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Header().Get(RequestIDHeader) != "req_test" {
+		t.Fatalf("성공 응답에도 request id header가 필요해요: %v", rec.Header())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/unknown", nil)
+	req.Header.Set(RequestIDHeader, "client_req")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Header().Get(RequestIDHeader) != "client_req" {
+		t.Fatalf("client request id를 보존해야 해요: %v", rec.Header())
+	}
+	var body errorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error.RequestID != "client_req" || body.Error.Code != "not_found" {
+		t.Fatalf("오류 envelope request id가 이상해요: %+v", body)
 	}
 }
 
