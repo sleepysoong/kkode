@@ -21,8 +21,9 @@ import (
 
 // ProviderHandle은 provider와 종료 함수를 함께 들고 다니는 실행 핸들이에요.
 type ProviderHandle struct {
-	Provider llm.Provider
-	Close    func() error
+	Provider    llm.Provider
+	BaseRequest llm.Request
+	Close       func() error
 }
 
 // ProviderFactory는 provider별 생성 방식을 registry entry 안에 묶는 함수예요.
@@ -110,13 +111,13 @@ var providerRegistry = []providerRegistryEntry{
 	{
 		Spec: ProviderSpec{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: openai.DefaultCapabilities().ToMap()},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
-			return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")})}, nil
+			return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
 		},
 	},
 	{
 		Spec: ProviderSpec{Name: "omniroute", DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini", "auto"}, AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: omniroute.DefaultCapabilities().ToMap()},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
-			return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")})}, nil
+			return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
 		},
 	},
 	{

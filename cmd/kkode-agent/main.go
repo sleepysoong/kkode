@@ -111,7 +111,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		BlockedOutputSubstrings: app.CSV(*blockedOutput),
 		RedactTranscript:        *redactTranscript,
 	}
-	base := llm.Request{Include: app.CSV(*include)}
+	base := app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Include: app.CSV(*include)})
 	if *reasoningEffort != "" || *reasoningSummary != "" {
 		base.Reasoning = &llm.ReasoningConfig{Effort: *reasoningEffort, Summary: *reasoningSummary}
 	}

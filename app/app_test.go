@@ -111,6 +111,37 @@ func TestMergeProviderOptionsLetsExplicitMCPOverrideDefaults(t *testing.T) {
 	}
 }
 
+func TestBuildProviderWithOptionsMapsHTTPMCPToOpenAITools(t *testing.T) {
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	handle, err := BuildProviderWithOptions("openai", t.TempDir(), ProviderOptions{MCPServers: map[string]llm.MCPServer{
+		"context7": {Kind: llm.MCPHTTP, Name: "context7", URL: "https://mcp.context7.com/mcp", Headers: map[string]string{"CONTEXT7_API_KEY": "test"}},
+		"serena":   {Kind: llm.MCPStdio, Name: "serena", Command: "uvx"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(handle.BaseRequest.Tools) != 1 {
+		t.Fatalf("HTTP MCP만 OpenAI-compatible tool로 붙어야 해요: %+v", handle.BaseRequest.Tools)
+	}
+	tool := handle.BaseRequest.Tools[0]
+	if tool.Kind != llm.ToolBuiltin || tool.Name != "mcp" || tool.ProviderOptions["server_label"] != "context7" || tool.ProviderOptions["server_url"] != "https://mcp.context7.com/mcp" {
+		t.Fatalf("OpenAI-compatible MCP tool 변환이 이상해요: %+v", tool)
+	}
+}
+
+func TestMergeBaseRequestPreservesProviderDefaults(t *testing.T) {
+	merged := MergeBaseRequest(
+		llm.Request{Instructions: "default", Tools: []llm.Tool{{Name: "mcp", Kind: llm.ToolBuiltin}}, Include: []string{"reasoning.encrypted_content"}, Metadata: map[string]string{"default": "yes"}},
+		llm.Request{Tools: []llm.Tool{{Name: "file_read"}}, Include: []string{"output"}, Metadata: map[string]string{"explicit": "yes"}},
+	)
+	if merged.Instructions != "default" || len(merged.Tools) != 2 || merged.Tools[0].Name != "mcp" || merged.Tools[1].Name != "file_read" {
+		t.Fatalf("provider default request와 explicit request를 순서대로 합쳐야 해요: %+v", merged)
+	}
+	if len(merged.Include) != 2 || merged.Metadata["default"] != "yes" || merged.Metadata["explicit"] != "yes" {
+		t.Fatalf("slice/map 필드 merge가 이상해요: %+v", merged)
+	}
+}
+
 func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	ws, _, err := NewWorkspace(WorkspaceOptions{Root: t.TempDir()})
 	if err != nil {

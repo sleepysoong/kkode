@@ -226,7 +226,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: providerHandle.BaseRequest, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
 		if err != nil {
 			return nil, err
 		}
