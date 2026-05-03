@@ -40,6 +40,11 @@ func run(args []string) error {
 	corsOrigins := fs.String("cors-origins", app.EnvDefault("KKODE_CORS_ORIGINS", ""), "쉼표로 구분한 허용 CORS origin 목록이에요")
 	accessLog := fs.Bool("access-log", app.EnvBool("KKODE_ACCESS_LOG"), "JSONL access log를 stderr로 출력해요")
 	maxBodyBytes := fs.Int64("max-body-bytes", app.EnvInt64("KKODE_MAX_BODY_BYTES", 32<<20), "gateway API 요청 body 최대 byte 수예요. 음수면 비활성화해요")
+	readHeaderTimeout := fs.Duration("read-header-timeout", envDuration("KKODE_READ_HEADER_TIMEOUT", 10*time.Second), "HTTP read header timeout이에요")
+	readTimeout := fs.Duration("read-timeout", envDuration("KKODE_READ_TIMEOUT", 0), "HTTP read timeout이에요. 0이면 비활성화해요")
+	writeTimeout := fs.Duration("write-timeout", envDuration("KKODE_WRITE_TIMEOUT", 0), "HTTP write timeout이에요. SSE를 오래 유지하려면 0을 권장해요")
+	idleTimeout := fs.Duration("idle-timeout", envDuration("KKODE_IDLE_TIMEOUT", 120*time.Second), "HTTP idle timeout이에요")
+	shutdownTimeout := fs.Duration("shutdown-timeout", envDuration("KKODE_SHUTDOWN_TIMEOUT", 10*time.Second), "graceful shutdown timeout이에요")
 	version := fs.String("version", app.EnvDefault("KKODE_VERSION", "dev"), "version endpoint에 표시할 버전이에요")
 	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", 8), "gateway run tool loop 최대 반복 횟수예요")
 	noWeb := fs.Bool("no-web", app.EnvBool("KKODE_NO_WEB"), "gateway run에서 web_fetch tool을 비활성화해요")
@@ -88,15 +93,18 @@ func run(args []string) error {
 	httpServer := &http.Server{
 		Addr:              *addr,
 		Handler:           srv.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: *readHeaderTimeout,
+		ReadTimeout:       *readTimeout,
+		WriteTimeout:      *writeTimeout,
+		IdleTimeout:       *idleTimeout,
 	}
 	fmt.Fprintf(os.Stderr, "kkode gateway가 http://%s 에서 실행돼요\n", *addr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return serveHTTP(ctx, httpServer, os.Stderr, runManager.Shutdown)
+	return serveHTTP(ctx, httpServer, os.Stderr, *shutdownTimeout, runManager.Shutdown)
 }
 
-func serveHTTP(ctx context.Context, server *http.Server, log io.Writer, shutdownHooks ...func(context.Context) error) error {
+func serveHTTP(ctx context.Context, server *http.Server, log io.Writer, shutdownTimeout time.Duration, shutdownHooks ...func(context.Context) error) error {
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -111,7 +119,7 @@ func serveHTTP(ctx context.Context, server *http.Server, log io.Writer, shutdown
 		if log != nil {
 			fmt.Fprintln(log, "kkode gateway를 정상 종료해요")
 		}
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			return err
@@ -130,6 +138,18 @@ func serveHTTP(ctx context.Context, server *http.Server, log io.Writer, shutdown
 		}
 		return err
 	}
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
 }
 
 type accessLogWriter struct {

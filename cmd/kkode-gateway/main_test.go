@@ -62,6 +62,17 @@ func TestAccessLoggerWritesJSONL(t *testing.T) {
 	}
 }
 
+func TestEnvDuration(t *testing.T) {
+	t.Setenv("KKODE_TEST_DURATION", "1500ms")
+	if got := envDuration("KKODE_TEST_DURATION", time.Second); got != 1500*time.Millisecond {
+		t.Fatalf("duration env가 이상해요: %s", got)
+	}
+	t.Setenv("KKODE_TEST_DURATION", "bad")
+	if got := envDuration("KKODE_TEST_DURATION", time.Second); got != time.Second {
+		t.Fatalf("잘못된 duration은 fallback이어야 해요: %s", got)
+	}
+}
+
 func TestServeHTTPGracefulShutdown(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -80,7 +91,7 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- serveHTTP(ctx, server, nil, func(ctx context.Context) error {
+		done <- serveHTTP(ctx, server, nil, time.Second, func(ctx context.Context) error {
 			hookCalled <- struct{}{}
 			return nil
 		})

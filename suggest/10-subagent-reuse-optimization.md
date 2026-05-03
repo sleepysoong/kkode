@@ -39,7 +39,7 @@
    - `X-Request-Id`를 client가 보내면 보존하고, 없으면 gateway가 생성해서 모든 응답 header에 붙여요.
    - `writeError`는 request context의 같은 ID를 오류 envelope에 담아서 웹 패널, Discord bot, gateway 로그가 같은 요청을 추적할 수 있게 해요.
    - `AccessLogger` hook과 `AccessLogEntry`를 추가해서 host app이 같은 request id, method, path, status, bytes, duration을 structured log나 metric으로 받을 수 있게 했어요.
-   - `cmd/kkode-gateway`의 `-access-log`/`KKODE_ACCESS_LOG=1`이 이 hook을 JSONL stderr 출력으로 연결해서 컨테이너/VM 배포에서도 바로 수집할 수 있게 했고, SIGINT/SIGTERM graceful shutdown, background run shutdown cancel, `/readyz` store ping, configurable request body limit도 추가했어요.
+   - `cmd/kkode-gateway`의 `-access-log`/`KKODE_ACCESS_LOG=1`이 이 hook을 JSONL stderr 출력으로 연결해서 컨테이너/VM 배포에서도 바로 수집할 수 있게 했고, SIGINT/SIGTERM graceful shutdown, background run shutdown cancel, `/readyz` store ping, configurable request body limit과 HTTP lifecycle timeout flag/env도 추가했어요.
    - `POST /api/v1/runs`와 run retry는 같은 값을 metadata `request_id`로 주입하고, `AsyncRunManager`는 starter가 별도 metadata를 반환해도 request id를 보존해요.
    - `GET /api/v1/runs?request_id=...` 필터, `GET /api/v1/requests/{request_id}/runs`, `GET /api/v1/requests/{request_id}/events` correlation API와 `stream=true` SSE를 추가해서 외부 adapter가 HTTP 요청에서 파생된 background run과 event replay/live update를 다시 찾을 수 있게 했고, SQLite에는 `idx_runs_request_id_updated` expression index를 추가했어요.
    - 다음 단계는 access log와 run event를 묶은 별도 observability API를 추가하는 일이에요.
