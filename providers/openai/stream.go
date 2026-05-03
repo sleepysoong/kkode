@@ -3,7 +3,6 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -19,10 +18,10 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, 
 	if err != nil {
 		return nil, err
 	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
+	if !httptransport.IsSuccessStatus(res.StatusCode) {
 		defer res.Body.Close()
 		data, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("openai-compatible stream returned %s: %s", res.Status, string(data))
+		return nil, httptransport.ErrorFromResponse("openai-compatible stream", res, data)
 	}
 	events := make(chan llm.StreamEvent, 32)
 	go readSSE(ctx, res.Body, c.Name(), events)

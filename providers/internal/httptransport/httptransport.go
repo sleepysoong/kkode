@@ -19,6 +19,25 @@ type RetryConfig struct {
 	MaxBackoff time.Duration
 }
 
+// HTTPError는 OpenAI-compatible provider들이 HTTP 실패를 같은 방식으로 분류하게 해요.
+type HTTPError struct {
+	Label      string
+	Status     string
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	label := strings.TrimSpace(e.Label)
+	if label == "" {
+		label = "provider request"
+	}
+	if e.Body == "" {
+		return fmt.Sprintf("%s returned %s", label, e.Status)
+	}
+	return fmt.Sprintf("%s returned %s: %s", label, e.Status, e.Body)
+}
+
 // NormalizeRetry는 0값 config를 provider 기본 retry 정책으로 채워요.
 func NormalizeRetry(retry RetryConfig) RetryConfig {
 	if retry.MaxRetries == 0 {
@@ -33,6 +52,29 @@ func NormalizeRetry(retry RetryConfig) RetryConfig {
 	return retry
 }
 
+// IsSuccessStatus는 HTTP 2xx 응답만 provider 성공으로 취급해요.
+func IsSuccessStatus(statusCode int) bool {
+	return statusCode >= 200 && statusCode < 300
+}
+
+// IsRetryableStatus는 quota/backpressure와 일시적 서버 오류를 retry 대상으로 분류해요.
+func IsRetryableStatus(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= 500
+}
+
+// ErrorFromResponse는 provider HTTP 실패를 errors.As로 검사할 수 있는 공통 오류로 만들어요.
+func ErrorFromResponse(label string, res *http.Response, body []byte) error {
+	if res == nil {
+		return &HTTPError{Label: label, Status: "no response"}
+	}
+	return &HTTPError{
+		Label:      label,
+		Status:     res.Status,
+		StatusCode: res.StatusCode,
+		Body:       string(body),
+	}
+}
+
 // DoWithRetry는 retry 가능한 HTTP status와 transport 오류를 같은 backoff 정책으로 재시도해요.
 func DoWithRetry(client *http.Client, req *http.Request, payload []byte, retry RetryConfig) (*http.Response, error) {
 	retry = NormalizeRetry(retry)
@@ -41,12 +83,11 @@ func DoWithRetry(client *http.Client, req *http.Request, payload []byte, retry R
 		attempts = 1
 	}
 	var lastErr error
+	var retryAfter string
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			backoff := retry.MinBackoff << (i - 1)
-			if backoff > retry.MaxBackoff {
-				backoff = retry.MaxBackoff
-			}
+			backoff := retryBackoff(retry, i, retryAfter)
+			retryAfter = ""
 			select {
 			case <-req.Context().Done():
 				return nil, req.Context().Err()
@@ -60,8 +101,9 @@ func DoWithRetry(client *http.Client, req *http.Request, payload []byte, retry R
 			lastErr = err
 			continue
 		}
-		if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+		if IsRetryableStatus(res.StatusCode) && i < attempts-1 {
 			lastErr = fmt.Errorf("retryable status: %s", res.Status)
+			retryAfter = res.Header.Get("Retry-After")
 			_, _ = io.Copy(io.Discard, res.Body)
 			_ = res.Body.Close()
 			continue
@@ -69,6 +111,38 @@ func DoWithRetry(client *http.Client, req *http.Request, payload []byte, retry R
 		return res, nil
 	}
 	return nil, lastErr
+}
+
+func retryBackoff(retry RetryConfig, attempt int, retryAfter string) time.Duration {
+	if delay, ok := parseRetryAfter(retryAfter); ok {
+		if delay > retry.MaxBackoff {
+			return retry.MaxBackoff
+		}
+		if delay < 0 {
+			return 0
+		}
+		return delay
+	}
+	backoff := retry.MinBackoff << (attempt - 1)
+	if backoff > retry.MaxBackoff {
+		return retry.MaxBackoff
+	}
+	return backoff
+}
+
+func parseRetryAfter(value string) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := time.ParseDuration(value + "s"); err == nil {
+		return seconds, true
+	}
+	when, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	return time.Until(when), true
 }
 
 // DefaultClient는 provider들이 공유하는 장시간 LLM 호출용 HTTP client 기본값을 돌려줘요.
@@ -138,7 +212,7 @@ func DoJSONRaw(ctx context.Context, client *http.Client, method string, endpoint
 		if errorLabel == "" {
 			errorLabel = endpoint
 		}
-		return nil, fmt.Errorf("%s returned %s: %s", errorLabel, res.Status, string(data))
+		return nil, ErrorFromResponse(errorLabel, res, data)
 	}
 	return data, nil
 }

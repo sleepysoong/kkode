@@ -3,10 +3,13 @@ package httptransport
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewJSONRequestAppliesSharedHeaders(t *testing.T) {
@@ -38,6 +41,10 @@ func TestDoJSONRawReturnsErrorBody(t *testing.T) {
 	if err == nil || err.Error() != "probe returned 502 Bad Gateway: nope\n" {
 		t.Fatalf("error body가 필요해요: %v", err)
 	}
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadGateway || httpErr.Body != "nope\n" {
+		t.Fatalf("공통 HTTP 오류 분류가 필요해요: %#v", err)
+	}
 }
 
 func TestDoWithRetryRetriesServerErrors(t *testing.T) {
@@ -63,6 +70,41 @@ func TestDoWithRetryRetriesServerErrors(t *testing.T) {
 	defer res.Body.Close()
 	if attempts != 2 || res.StatusCode != http.StatusOK {
 		t.Fatalf("retry 결과가 이상해요: attempts=%d status=%d", attempts, res.StatusCode)
+	}
+}
+
+func TestDoWithRetryReturnsFinalRetryableResponse(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		http.Error(w, "still down", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	req, payload, err := NewJSONRequest(context.Background(), http.MethodPost, server.URL, "", nil, map[string]any{"model": "gpt"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := DoWithRetry(server.Client(), req, payload, RetryConfig{MaxRetries: 1, MinBackoff: time.Nanosecond, MaxBackoff: time.Nanosecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	data, _ := io.ReadAll(res.Body)
+	if attempts != 2 || res.StatusCode != http.StatusServiceUnavailable || string(data) != "still down\n" {
+		t.Fatalf("마지막 retryable 응답을 호출자가 해석해야 해요: attempts=%d status=%d body=%q", attempts, res.StatusCode, string(data))
+	}
+}
+
+func TestRetryBackoffHonorsRetryAfter(t *testing.T) {
+	retry := NormalizeRetry(RetryConfig{MinBackoff: time.Second, MaxBackoff: 2 * time.Second})
+	if got := retryBackoff(retry, 1, "1"); got != time.Second {
+		t.Fatalf("Retry-After 초 단위를 따라야 해요: %s", got)
+	}
+	if got := retryBackoff(retry, 1, "5"); got != 2*time.Second {
+		t.Fatalf("Retry-After는 MaxBackoff로 제한돼야 해요: %s", got)
+	}
+	if got := retryBackoff(retry, 2, "bad"); got != 2*time.Second {
+		t.Fatalf("잘못된 Retry-After는 exponential backoff로 돌아가야 해요: %s", got)
 	}
 }
 

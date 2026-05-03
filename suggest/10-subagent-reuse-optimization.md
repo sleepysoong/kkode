@@ -30,5 +30,7 @@
 
 5. OpenAI-compatible provider transport 공통화를 시작했어요.
    - `providers/internal/httptransport`가 JSON request 생성, bearer auth, custom header 복사, response body 오류 처리, retry/backoff, SSE framing을 공유해요.
+   - `HTTPError`, `IsSuccessStatus`, `IsRetryableStatus`, `ErrorFromResponse`를 추가해서 OpenAI Responses, streaming, OmniRoute 관리 API가 같은 HTTP 실패 분류를 쓰게 했어요.
+   - retryable status의 마지막 응답 body를 버리지 않고 호출자가 공통 오류로 해석하게 했고, `Retry-After` header를 backoff 계산에 반영해요.
    - OpenAI Responses client와 OmniRoute management/A2A helper가 같은 transport 규칙을 재사용해요.
-   - 다음 단계는 provider별 stream event mapping과 compatible error normalization을 공통 경계로 더 분리하는 일이에요.
+   - 다음 단계는 provider별 stream event mapping을 더 작은 adapter 단위로 분리하고, provider별 오류 JSON schema를 `HTTPError` metadata로 보존하는 일이에요.

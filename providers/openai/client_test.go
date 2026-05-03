@@ -3,12 +3,15 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/internal/httptransport"
 )
 
 func TestBuildResponsesRequestIncludesToolsReasoningAndStructuredOutput(t *testing.T) {
@@ -140,6 +143,19 @@ func TestClientGenerateAgainstHTTPServer(t *testing.T) {
 	}
 }
 
+func TestClientGenerateReturnsSharedHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad model", http.StatusBadRequest)
+	}))
+	defer server.Close()
+	client := New(Config{BaseURL: server.URL + "/v1"})
+	_, err := client.Generate(context.Background(), llm.Request{Model: "missing", Messages: []llm.Message{llm.UserText("hi")}})
+	var httpErr *httptransport.HTTPError
+	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadRequest || httpErr.Body != "bad model\n" {
+		t.Fatalf("OpenAI-compatible 오류는 공통 HTTPError여야 해요: %#v", err)
+	}
+}
+
 func TestBuildResponsesRequestBuiltinTool(t *testing.T) {
 	body, err := BuildResponsesRequest(llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("search")}, Tools: []llm.Tool{WebSearchTool(map[string]any{"search_context_size": "low"})}})
 	if err != nil {
@@ -189,7 +205,7 @@ func TestStreamRetriesRetryableStatusAndUsesProviderName(t *testing.T) {
 		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"))
 	}))
 	defer server.Close()
-	client := New(Config{BaseURL: server.URL + "/v1", Retry: RetryConfig{MaxRetries: 1}, ProviderName: "derived"})
+	client := New(Config{BaseURL: server.URL + "/v1", Retry: RetryConfig{MaxRetries: 1, MinBackoff: time.Nanosecond, MaxBackoff: time.Nanosecond}, ProviderName: "derived"})
 	stream, err := client.Stream(context.Background(), llm.Request{Model: "gpt", Messages: []llm.Message{llm.UserText("hi")}})
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +228,7 @@ func TestClientRetriesRetryableStatus(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"r","model":"gpt","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}`))
 	}))
 	defer server.Close()
-	client := New(Config{BaseURL: server.URL + "/v1", Retry: RetryConfig{MaxRetries: 1}})
+	client := New(Config{BaseURL: server.URL + "/v1", Retry: RetryConfig{MaxRetries: 1, MinBackoff: time.Nanosecond, MaxBackoff: time.Nanosecond}})
 	resp, err := client.Generate(context.Background(), llm.Request{Model: "gpt", Messages: []llm.Message{llm.UserText("hi")}})
 	if err != nil || resp.Text != "ok" || calls != 2 {
 		t.Fatalf("resp=%#v calls=%d err=%v", resp, calls, err)

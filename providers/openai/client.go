@@ -85,8 +85,8 @@ func (c *Client) Generate(ctx context.Context, req llm.Request) (*llm.Response, 
 	if err != nil {
 		return nil, err
 	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("openai-compatible responses API returned %s: %s", res.Status, string(data))
+	if !httptransport.IsSuccessStatus(res.StatusCode) {
+		return nil, httptransport.ErrorFromResponse("openai-compatible responses API", res, data)
 	}
 	return ParseResponsesResponse(data, c.Name())
 }
