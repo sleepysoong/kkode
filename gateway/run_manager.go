@@ -232,17 +232,44 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	}
 	m.runs[runID] = &managedRun{run: accepted, cancel: cancel}
 	m.mu.Unlock()
-	if err := m.persist(ctx, &accepted); err != nil {
+	claimed, err := m.claimAcceptedRun(ctx, &accepted)
+	if err != nil {
 		cancel()
 		m.mu.Lock()
 		delete(m.runs, runID)
 		m.mu.Unlock()
 		return nil, err
 	}
+	if !claimed {
+		cancel()
+		m.mu.Lock()
+		delete(m.runs, runID)
+		m.mu.Unlock()
+		return cloneRun(&accepted), nil
+	}
 	m.publish(accepted)
 	m.wg.Add(1)
 	go m.execute(runCtx, cancel, req.withRunID(runID))
 	return cloneRun(&accepted), nil
+}
+
+func (m *AsyncRunManager) claimAcceptedRun(ctx context.Context, run *RunDTO) (bool, error) {
+	if m.runStore == nil {
+		return true, nil
+	}
+	snapshot := sessionRunFromDTO(*run)
+	if claimStore, ok := m.runStore.(session.RunClaimStore); ok && m.runEventStore != nil {
+		saved, _, claimed, err := claimStore.ClaimRunWithEvent(ctx, snapshot, session.RunEvent{RunID: snapshot.ID, Type: runEventType(snapshot.Status), At: m.timestamp(), Run: snapshot})
+		if err != nil {
+			return false, err
+		}
+		*run = *runDTOFromSession(saved)
+		return claimed, nil
+	}
+	if err := m.persist(ctx, run); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func sameIdempotencyKey(existing, requested map[string]string) bool {

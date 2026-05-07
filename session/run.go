@@ -66,3 +66,9 @@ type RunEventStore interface {
 type RunSnapshotStore interface {
 	SaveRunWithEvent(ctx context.Context, run Run, event RunEvent) (Run, RunEvent, error)
 }
+
+// RunClaimStore는 run id가 아직 없을 때만 queued snapshot을 삽입해요.
+// 이미 존재하면 기존 run을 반환해서 여러 gateway 프로세스가 같은 idempotent run을 중복 실행하지 않게 해요.
+type RunClaimStore interface {
+	ClaimRunWithEvent(ctx context.Context, run Run, event RunEvent) (Run, RunEvent, bool, error)
+}

@@ -414,6 +414,39 @@ func TestRunSnapshotStorePersistsRunAndEventTogether(t *testing.T) {
 	}
 }
 
+func TestRunClaimStoreDoesNotOverwriteExistingRun(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	run := Run{ID: "run_claim", SessionID: sess.ID, Status: "queued", Prompt: "first", Metadata: map[string]string{"idempotency_key": "idem"}}
+	claimed, event, ok, err := store.ClaimRunWithEvent(ctx, run, RunEvent{RunID: run.ID, Type: "run.queued", Run: run})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || claimed.Prompt != "first" || event.Seq != 1 {
+		t.Fatalf("첫 claim이 이상해요: run=%+v event=%+v ok=%v", claimed, event, ok)
+	}
+	second := run
+	second.Prompt = "second"
+	existing, event, ok, err := store.ClaimRunWithEvent(ctx, second, RunEvent{RunID: second.ID, Type: "run.queued", Run: second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || existing.Prompt != "first" || event.ID != "" {
+		t.Fatalf("기존 run은 덮어쓰면 안 돼요: run=%+v event=%+v ok=%v", existing, event, ok)
+	}
+	events, err := store.ListRunEvents(ctx, RunEventQuery{RunID: run.ID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("claim 실패는 새 event를 남기면 안 돼요: %+v", events)
+	}
+}
+
 func TestCheckpointStoreListsAndLoads(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenSQLite(filepath.Join(t.TempDir(), "state.db"))

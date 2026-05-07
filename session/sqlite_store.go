@@ -793,13 +793,99 @@ func (s *SQLiteStore) SaveRunWithEvent(ctx context.Context, run Run, event RunEv
 	return run, savedEvent, nil
 }
 
+// ClaimRunWithEvent는 run id가 비어 있을 때만 INSERT하고 queued event를 같은 transaction에 남겨요.
+// 이미 같은 id가 있으면 기존 run을 반환하고 claimed=false를 돌려줘요.
+func (s *SQLiteStore) ClaimRunWithEvent(ctx context.Context, run Run, event RunEvent) (Run, RunEvent, bool, error) {
+	normalizeRun(&run)
+	event.Run = run
+	normalizeRunEvent(&event)
+	var savedRun Run
+	var savedEvent RunEvent
+	claimed := false
+	err := retrySQLiteSequence(ctx, func() error {
+		candidate := event
+		candidate.Seq = event.Seq
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		inserted, err := insertRunIfAbsent(ctx, tx, run)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			existing, err := loadRunWithWriter(ctx, tx, run.ID)
+			if err != nil {
+				return err
+			}
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+			savedRun = existing
+			savedEvent = RunEvent{}
+			claimed = false
+			return nil
+		}
+		if err := appendRunEvent(ctx, tx, &candidate); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		savedRun = run
+		savedEvent = candidate
+		claimed = true
+		return nil
+	})
+	if err != nil {
+		return run, event, false, err
+	}
+	return savedRun, savedEvent, claimed, nil
+}
+
 type runWriter interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type runLoader interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type runEventWriter interface {
 	runWriter
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func insertRunIfAbsent(ctx context.Context, writer runWriter, run Run) (bool, error) {
+	metadata, err := json.Marshal(run.Metadata)
+	if err != nil {
+		return false, err
+	}
+	mcpServers, err := json.Marshal(run.MCPServers)
+	if err != nil {
+		return false, err
+	}
+	skills, err := json.Marshal(run.Skills)
+	if err != nil {
+		return false, err
+	}
+	subagents, err := json.Marshal(run.Subagents)
+	if err != nil {
+		return false, err
+	}
+	result, err := writer.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO NOTHING`,
+		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, mcpServers, skills, subagents, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows == 1, nil
 }
 
 func saveRun(ctx context.Context, writer runWriter, run Run) error {
@@ -842,7 +928,11 @@ func saveRun(ctx context.Context, writer runWriter, run Run) error {
 }
 
 func (s *SQLiteStore) LoadRun(ctx context.Context, id string) (Run, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
+	return loadRunWithWriter(ctx, s.db, id)
+}
+
+func loadRunWithWriter(ctx context.Context, reader runLoader, id string) (Run, error) {
+	row := reader.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
 	return scanRun(row)
 }
 

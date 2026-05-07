@@ -320,6 +320,43 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	}
 }
 
+func TestAsyncRunManagerUsesDurableClaimForDuplicateRunID(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	block := make(chan struct{})
+	defer close(block)
+	var starts int32
+	firstManager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		atomic.AddInt32(&starts, 1)
+		<-block
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	}, store)
+	req := RunStartRequest{RunID: "run_idem_durable", SessionID: sess.ID, Prompt: "go", Metadata: map[string]string{IdempotencyMetadataKey: "idem_durable"}}
+	first, err := firstManager.Start(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondManager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		atomic.AddInt32(&starts, 1)
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	}, store)
+	second, err := secondManager.Start(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID || atomic.LoadInt32(&starts) > 1 {
+		t.Fatalf("durable claim이 있으면 두 번째 manager는 실행하지 않아야 해요: first=%+v second=%+v starts=%d", first, second, starts)
+	}
+}
+
 func TestAsyncRunManagerUsesAtomicRunSnapshotStore(t *testing.T) {
 	ctx := context.Background()
 	store := &atomicRunStore{runs: map[string]session.Run{}}
