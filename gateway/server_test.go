@@ -2290,6 +2290,20 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 		t.Fatalf("tool별 workspace 요구 여부를 discovery해야 해요: %+v", listed.Tools)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools/web_fetch", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tool 상세 status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var detail ToolDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Name != "web_fetch" || detail.RequiresWorkspace {
+		t.Fatalf("tool 상세 discovery가 이상해요: %+v", detail)
+	}
+
 	root := t.TempDir()
 	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":"call_1"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))

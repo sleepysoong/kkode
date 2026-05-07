@@ -374,6 +374,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ToolListResponse'
+  /api/v1/tools/{tool}:
+    get:
+      summary: 표준 tool 상세 schema를 반환해요.
+      parameters:
+        - in: path
+          name: tool
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: tool 상세예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tool'
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/tools/call:
     post:
       summary: 표준 tool을 직접 실행해요.

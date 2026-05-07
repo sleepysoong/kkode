@@ -48,6 +48,10 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []str
 		s.listTools(w, r)
 		return
 	}
+	if len(parts) == 2 && r.Method == http.MethodGet {
+		s.getTool(w, r, parts[1])
+		return
+	}
 	if len(parts) == 2 && parts[1] == "call" && r.Method == http.MethodPost {
 		s.callTool(w, r)
 		return
@@ -66,6 +70,18 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toToolDTO(tool))
 	}
 	writeJSON(w, ToolListResponse{Tools: out})
+}
+
+func (s *Server) getTool(w http.ResponseWriter, r *http.Request, name string) {
+	name = strings.TrimSpace(name)
+	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
+	for _, tool := range defs {
+		if tool.Name == name {
+			writeJSON(w, toToolDTO(tool))
+			return
+		}
+	}
+	writeError(w, r, http.StatusNotFound, "tool_not_found", "tool을 찾을 수 없어요")
 }
 
 func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
