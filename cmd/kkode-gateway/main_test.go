@@ -236,7 +236,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := syncRunPreviewer(store)(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}})
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,6 +245,12 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	}
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
+	}
+	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
+		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
+	}
+	if strings.Contains(preview.ProviderRequest.BodyJSON, "secret") || !strings.Contains(preview.ProviderRequest.BodyJSON, "[REDACTED]") {
+		t.Fatalf("provider request preview도 secret을 숨겨야 해요: %s", preview.ProviderRequest.BodyJSON)
 	}
 	headers := preview.MCPServers[0].Config["headers"].(map[string]any)
 	if headers["CONTEXT7_API_KEY"] != "[REDACTED]" {

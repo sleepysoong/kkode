@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -154,6 +155,33 @@ func TestMergeBaseRequestPreservesProviderDefaults(t *testing.T) {
 	}
 	if len(merged.Include) != 2 || merged.Metadata["default"] != "yes" || merged.Metadata["explicit"] != "yes" {
 		t.Fatalf("slice/map 필드 merge가 이상해요: %+v", merged)
+	}
+}
+
+func TestPreviewProviderRequestConvertsAndRedacts(t *testing.T) {
+	preview, err := PreviewProviderRequest(context.Background(), "openai", llm.Request{
+		Model:    "gpt-5-mini",
+		Messages: []llm.Message{llm.UserText("token=abc1234567890secretvalue 를 숨겨요")},
+		Tools:    []llm.Tool{{Name: "file_read", Description: "파일을 읽어요"}},
+	}, false, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Provider != "openai" || preview.Operation != "responses.create" || preview.Model != "gpt-5-mini" {
+		t.Fatalf("provider request preview 기본값이 이상해요: %+v", preview)
+	}
+	if !strings.Contains(preview.BodyJSON, "file_read") || !strings.Contains(preview.BodyJSON, "[REDACTED]") || strings.Contains(preview.BodyJSON, "abc1234567890secretvalue") {
+		t.Fatalf("body preview 변환/마스킹이 이상해요: %s", preview.BodyJSON)
+	}
+}
+
+func TestPreviewProviderRequestSupportsAliasAndRawPayload(t *testing.T) {
+	preview, err := PreviewProviderRequest(context.Background(), "github-copilot", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("안녕")}}, true, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Provider != "copilot" || preview.Operation != "copilot.session.send" || !preview.Stream || !strings.Contains(preview.RawType, "sessionSendPayload") || !strings.Contains(preview.RawJSON, "안녕") {
+		t.Fatalf("alias/raw provider request preview가 이상해요: %+v", preview)
 	}
 }
 

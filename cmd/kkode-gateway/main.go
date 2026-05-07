@@ -84,7 +84,7 @@ func run(args []string) error {
 		RunTimeout:           runManager.RunTimeout(),
 		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
-		RunPreviewer:         syncRunPreviewer(store),
+		RunPreviewer:         syncRunPreviewer(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}),
 		RunValidator:         syncRunValidator(store),
 		RunRuntimeStats:      runManager.RuntimeStats,
 		RunGetter:            runManager.Get,
@@ -295,7 +295,7 @@ func syncRunValidator(store session.Store) gateway.RunValidator {
 	}
 }
 
-func syncRunPreviewer(store session.Store) gateway.RunPreviewer {
+func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer {
 	return func(ctx context.Context, req gateway.RunStartRequest) (*gateway.RunPreviewResponse, error) {
 		sess, err := store.LoadSession(ctx, req.SessionID)
 		if err != nil {
@@ -320,6 +320,19 @@ func syncRunPreviewer(store session.Store) gateway.RunPreviewer {
 		if model == "" && handle.Provider != nil {
 			model = app.DefaultModel(handle.Provider.Name())
 		}
+		ws, _, err := app.NewWorkspace(app.WorkspaceOptions{Root: sess.ProjectRoot})
+		if err != nil {
+			return nil, err
+		}
+		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: handle.BaseRequest, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+		if err != nil {
+			return nil, err
+		}
+		providerReq, _ := ag.Prepare(req.Prompt)
+		providerPreview, err := app.PreviewProviderRequest(ctx, providerName, providerReq, false, 64<<10)
+		if err != nil {
+			return nil, err
+		}
 		return &gateway.RunPreviewResponse{
 			SessionID:         req.SessionID,
 			ProjectRoot:       sess.ProjectRoot,
@@ -330,7 +343,27 @@ func syncRunPreviewer(store session.Store) gateway.RunPreviewer {
 			Subagents:         resourceDTOsForIDs(ctx, store, session.ResourceSubagent, req.Subagents),
 			DefaultMCPServers: defaultMCPDTOs(),
 			BaseRequestTools:  toolNames(handle.BaseRequest.Tools),
+			ProviderRequest:   toProviderRequestPreviewDTO(providerPreview),
 		}, nil
+	}
+}
+
+func toProviderRequestPreviewDTO(preview *app.ProviderRequestPreview) *gateway.ProviderRequestPreviewDTO {
+	if preview == nil {
+		return nil
+	}
+	return &gateway.ProviderRequestPreviewDTO{
+		Provider:      preview.Provider,
+		Operation:     preview.Operation,
+		Model:         preview.Model,
+		Stream:        preview.Stream,
+		BodyJSON:      preview.BodyJSON,
+		BodyTruncated: preview.BodyTruncated,
+		Headers:       preview.Headers,
+		Metadata:      preview.Metadata,
+		RawType:       preview.RawType,
+		RawJSON:       preview.RawJSON,
+		RawTruncated:  preview.RawTruncated,
 	}
 }
 

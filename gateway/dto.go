@@ -151,15 +151,31 @@ type RunDTO struct {
 
 // RunPreviewResponse는 실제 실행 없이 run 조립 결과를 외부 adapter에 보여줘요.
 type RunPreviewResponse struct {
-	SessionID         string        `json:"session_id"`
-	ProjectRoot       string        `json:"project_root,omitempty"`
-	Provider          string        `json:"provider"`
-	Model             string        `json:"model"`
-	MCPServers        []ResourceDTO `json:"mcp_servers,omitempty"`
-	Skills            []ResourceDTO `json:"skills,omitempty"`
-	Subagents         []ResourceDTO `json:"subagents,omitempty"`
-	DefaultMCPServers []ResourceDTO `json:"default_mcp_servers,omitempty"`
-	BaseRequestTools  []string      `json:"base_request_tools,omitempty"`
+	SessionID         string                     `json:"session_id"`
+	ProjectRoot       string                     `json:"project_root,omitempty"`
+	Provider          string                     `json:"provider"`
+	Model             string                     `json:"model"`
+	MCPServers        []ResourceDTO              `json:"mcp_servers,omitempty"`
+	Skills            []ResourceDTO              `json:"skills,omitempty"`
+	Subagents         []ResourceDTO              `json:"subagents,omitempty"`
+	DefaultMCPServers []ResourceDTO              `json:"default_mcp_servers,omitempty"`
+	BaseRequestTools  []string                   `json:"base_request_tools,omitempty"`
+	ProviderRequest   *ProviderRequestPreviewDTO `json:"provider_request,omitempty"`
+}
+
+// ProviderRequestPreviewDTO는 run preview에서 provider API 호출 직전 변환 결과를 보여줘요.
+type ProviderRequestPreviewDTO struct {
+	Provider      string            `json:"provider"`
+	Operation     string            `json:"operation,omitempty"`
+	Model         string            `json:"model,omitempty"`
+	Stream        bool              `json:"stream,omitempty"`
+	BodyJSON      string            `json:"body_json,omitempty"`
+	BodyTruncated bool              `json:"body_truncated,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	RawType       string            `json:"raw_type,omitempty"`
+	RawJSON       string            `json:"raw_json,omitempty"`
+	RawTruncated  bool              `json:"raw_truncated,omitempty"`
 }
 
 // RunListResponse는 background run 목록 응답이에요.

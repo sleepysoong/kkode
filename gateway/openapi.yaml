@@ -2420,6 +2420,48 @@ components:
           type: array
           items:
             type: string
+        provider_request:
+          $ref: '#/components/schemas/ProviderRequestPreview'
+    ProviderRequestPreview:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          description: 변환에 사용된 canonical provider 이름이에요.
+        operation:
+          type: string
+          description: provider/source caller가 받을 operation 이름이에요.
+        model:
+          type: string
+        stream:
+          type: boolean
+          description: streaming 변환 여부예요.
+        body_json:
+          type: string
+          description: provider HTTP/API body를 redaction과 길이 제한 뒤 JSON 문자열로 보여줘요.
+        body_truncated:
+          type: boolean
+          description: body_json이 길이 제한으로 잘렸는지 알려줘요.
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: provider 요청 header preview예요. secret 값은 마스킹해요.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: provider 요청 metadata preview예요. secret 값은 마스킹해요.
+        raw_type:
+          type: string
+          description: CLI/SDK provider가 Raw payload를 쓰는 경우 Go 타입 이름이에요.
+        raw_json:
+          type: string
+          description: Raw payload를 redaction과 길이 제한 뒤 JSON 문자열로 보여줘요.
+        raw_truncated:
+          type: boolean
+          description: raw_json이 길이 제한으로 잘렸는지 알려줘요.
     MCPToolListResponse:
       type: object
       required: [server, tools]
