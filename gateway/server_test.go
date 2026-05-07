@@ -79,7 +79,7 @@ func TestGatewayAPIIndex(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &index); err != nil {
 		t.Fatal(err)
 	}
-	if index.Version != "test" || index.Links["openapi"] != "/api/v1/openapi.yaml" || index.Links["sessions"] != "/api/v1/sessions" || index.Links["session_import"] != "/api/v1/sessions/import" || index.Links["session_export"] == "" || index.Links["session_transcript"] == "" || index.Links["run_transcript"] == "" || index.Links["request_transcript"] == "" {
+	if index.Version != "test" || index.Links["health"] != "/healthz" || index.Links["ready"] != "/readyz" || index.Links["openapi"] != "/api/v1/openapi.yaml" || index.Links["sessions"] != "/api/v1/sessions" || index.Links["session_import"] != "/api/v1/sessions/import" || index.Links["session_export"] == "" || index.Links["session_transcript"] == "" || index.Links["run_transcript"] == "" || index.Links["request_transcript"] == "" {
 		t.Fatalf("API index 응답이 이상해요: %+v", index)
 	}
 }

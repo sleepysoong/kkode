@@ -3,6 +3,7 @@ package gateway
 // DefaultFeatureCatalog는 웹 패널/Discord/Slack adapter가 사용할 수 있는 gateway 기능 표면을 알려줘요.
 func DefaultFeatureCatalog() []FeatureDTO {
 	return []FeatureDTO{
+		{Name: "operations", Status: "implemented", Description: "배포 health/readiness probe와 API bootstrap discovery를 제공해요.", Endpoints: []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
 		{Name: "openapi", Status: "implemented", Description: "외부 adapter와 SDK generator가 현재 gateway OpenAPI 계약을 직접 내려받을 수 있어요.", Endpoints: []string{"GET /api/v1", "GET /api/v1/openapi.yaml"}},
 		{Name: "sessions", Status: "implemented", Description: "session 생성, 목록, 상세, export/import, turn/transcript 조회, compact, fork를 제공해요.", Endpoints: []string{"GET /api/v1/sessions", "POST /api/v1/sessions", "POST /api/v1/sessions/import", "GET /api/v1/sessions/{session_id}", "GET /api/v1/sessions/{session_id}/export", "GET /api/v1/sessions/{session_id}/turns", "GET /api/v1/sessions/{session_id}/turns/{turn_id}", "GET /api/v1/sessions/{session_id}/transcript", "POST /api/v1/sessions/{session_id}/compact", "POST /api/v1/sessions/{session_id}/fork"}},
 		{Name: "session_events", Status: "implemented", Description: "session event JSON replay와 SSE replay를 제공해요.", Endpoints: []string{"GET /api/v1/sessions/{session_id}/events"}},
@@ -27,6 +28,8 @@ func DefaultFeatureCatalog() []FeatureDTO {
 // APIIndexLinks는 adapter bootstrap에 필요한 대표 endpoint link를 한 곳에서 관리해요.
 func APIIndexLinks() map[string]string {
 	return map[string]string{
+		"health":             "/healthz",
+		"ready":              "/readyz",
 		"openapi":            "/api/v1/openapi.yaml",
 		"version":            "/api/v1/version",
 		"capabilities":       "/api/v1/capabilities",
