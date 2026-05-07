@@ -168,6 +168,10 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if missing := s.missingRuntimeWiring(); len(missing) > 0 {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "runtime wiring이 준비되지 않았어요: "+strings.Join(missing, ", "))
+		return
+	}
 	writeJSON(w, map[string]any{"ready": true})
 }
 
@@ -620,30 +624,11 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "store", Status: "unknown", Message: "store ping을 지원하지 않아요"})
 	}
-	if s.cfg.RunStarter == nil {
+	wiringChecks, wiringOK := s.runtimeWiringChecks()
+	if !wiringOK {
 		ok = false
-		checks = append(checks, DiagnosticCheckDTO{Name: "run_starter", Status: "missing"})
-	} else {
-		checks = append(checks, DiagnosticCheckDTO{Name: "run_starter", Status: "ok"})
 	}
-	if s.cfg.RunPreviewer == nil {
-		ok = false
-		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "missing"})
-	} else {
-		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
-	}
-	if s.cfg.RunValidator == nil {
-		ok = false
-		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "missing"})
-	} else {
-		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "ok"})
-	}
-	if s.cfg.ProviderTester == nil {
-		ok = false
-		checks = append(checks, DiagnosticCheckDTO{Name: "provider_tester", Status: "missing"})
-	} else {
-		checks = append(checks, DiagnosticCheckDTO{Name: "provider_tester", Status: "ok"})
-	}
+	checks = append(checks, wiringChecks...)
 	checks = append(checks, s.cfg.DiagnosticChecks...)
 	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}
 	if s.cfg.RunRuntimeStats != nil {
@@ -651,6 +636,42 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 		resp.RunRuntime = &stats
 	}
 	writeJSON(w, resp)
+}
+
+func (s *Server) missingRuntimeWiring() []string {
+	var missing []string
+	if s.cfg.RunStarter == nil {
+		missing = append(missing, "run_starter")
+	}
+	if s.cfg.RunPreviewer == nil {
+		missing = append(missing, "run_previewer")
+	}
+	if s.cfg.RunValidator == nil {
+		missing = append(missing, "run_validator")
+	}
+	if s.cfg.ProviderTester == nil {
+		missing = append(missing, "provider_tester")
+	}
+	return missing
+}
+
+func (s *Server) runtimeWiringChecks() ([]DiagnosticCheckDTO, bool) {
+	missing := map[string]struct{}{}
+	for _, name := range s.missingRuntimeWiring() {
+		missing[name] = struct{}{}
+	}
+	names := []string{"run_starter", "run_previewer", "run_validator", "provider_tester"}
+	checks := make([]DiagnosticCheckDTO, 0, len(names))
+	ok := true
+	for _, name := range names {
+		if _, isMissing := missing[name]; isMissing {
+			ok = false
+			checks = append(checks, DiagnosticCheckDTO{Name: name, Status: "missing"})
+			continue
+		}
+		checks = append(checks, DiagnosticCheckDTO{Name: name, Status: "ok"})
+	}
+	return checks, ok
 }
 
 func runRuntimeStatsDTO(stats RunRuntimeStats) RunRuntimeStatsDTO {

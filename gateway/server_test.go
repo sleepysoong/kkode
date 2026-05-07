@@ -86,7 +86,7 @@ func TestGatewayAPIIndex(t *testing.T) {
 
 func TestGatewayReadyChecksStoreHealth(t *testing.T) {
 	store := openTestStore(t)
-	srv := newTestServer(t, store, "")
+	srv := newReadyTestServer(t, store)
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -101,6 +101,20 @@ func TestGatewayReadyChecksStoreHealth(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("닫힌 store는 ready가 아니어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGatewayReadyRejectsMissingRuntimeWiring(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "run_starter") || !strings.Contains(rec.Body.String(), "provider_tester") {
+		t.Fatalf("runtime wiring 누락은 ready가 아니어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -901,6 +915,31 @@ func openTestStore(t *testing.T) *session.SQLiteStore {
 func newTestServer(t *testing.T, store session.Store, apiKey string) *Server {
 	t.Helper()
 	srv, err := New(Config{Store: store, APIKey: apiKey, Version: "test", Providers: []ProviderDTO{{Name: "openai"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
+}
+
+func newReadyTestServer(t *testing.T, store session.Store) *Server {
+	t.Helper()
+	srv, err := New(Config{
+		Store:     store,
+		Version:   "test",
+		Providers: []ProviderDTO{{Name: "openai"}},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			return &RunDTO{}, nil
+		},
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			return &RunPreviewResponse{}, nil
+		},
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			return nil
+		},
+		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
+			return &ProviderTestResponse{OK: true, Provider: provider}, nil
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
