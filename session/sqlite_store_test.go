@@ -296,6 +296,18 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 		t.Fatalf("request_id run list가 이상해요: %+v", byRequestID)
 	}
 	assertSQLiteIndexExists(t, store, "runs", "idx_runs_request_id_updated")
+	saved.Metadata["idempotency_key"] = "idem_store"
+	if _, err := store.SaveRun(ctx, saved); err != nil {
+		t.Fatal(err)
+	}
+	byIdempotencyKey, err := store.ListRuns(ctx, RunQuery{IdempotencyKey: "idem_store", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byIdempotencyKey) != 1 || byIdempotencyKey[0].ID != "run_1" {
+		t.Fatalf("idempotency_key run list가 이상해요: %+v", byIdempotencyKey)
+	}
+	assertSQLiteIndexExists(t, store, "runs", "idx_runs_idempotency_key_updated")
 }
 
 func assertSQLiteIndexExists(t *testing.T, store *SQLiteStore, table string, indexName string) {

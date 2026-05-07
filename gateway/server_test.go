@@ -411,6 +411,73 @@ func TestGatewayRunValidatorRejectsBeforeStarter(t *testing.T) {
 	}
 }
 
+func TestGatewayRunStartIsIdempotent(t *testing.T) {
+	store := openTestStore(t)
+	started := false
+	var listed RunQuery
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			listed = q
+			if q.IdempotencyKey == "idem_1" {
+				return []RunDTO{{ID: "run_existing", SessionID: q.SessionID, Status: "queued", Metadata: map[string]string{IdempotencyMetadataKey: q.IdempotencyKey}}}, nil
+			}
+			return nil, nil
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			started = true
+			return &RunDTO{ID: "run_new", SessionID: req.SessionID, Status: "queued", Metadata: req.Metadata}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test"}`))
+	req.Header.Set(IdempotencyKeyHeader, "idem_1")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("idempotent 재시도는 기존 run을 200으로 돌려야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var run RunDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
+		t.Fatal(err)
+	}
+	if run.ID != "run_existing" || listed.IdempotencyKey != "idem_1" || listed.SessionID != "sess_1" {
+		t.Fatalf("기존 run 조회가 이상해요: run=%+v query=%+v", run, listed)
+	}
+	if started {
+		t.Fatal("idempotency key로 기존 run을 찾으면 새 run을 시작하면 안 돼요")
+	}
+}
+
+func TestGatewayRunStartStoresIdempotencyKey(t *testing.T) {
+	store := openTestStore(t)
+	var started RunStartRequest
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return nil, nil
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			started = req
+			return &RunDTO{ID: "run_new", SessionID: req.SessionID, Status: "queued", Metadata: req.Metadata}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test","metadata":{"idempotency_key":"body_key"}}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("새 run은 accepted여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if started.Metadata[IdempotencyMetadataKey] != "body_key" {
+		t.Fatalf("idempotency key를 run metadata에 저장해야 해요: %+v", started.Metadata)
+	}
+}
+
 func TestGatewayListsRunsByRequestID(t *testing.T) {
 	store := openTestStore(t)
 	var query RunQuery
@@ -424,13 +491,13 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&limit=5", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&limit=5", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.Limit != 5 {
+	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Limit != 5 {
 		t.Fatalf("run query가 이상해요: %+v", query)
 	}
 	var body RunListResponse

@@ -13,8 +13,14 @@ import (
 // RequestIDHeader는 외부 adapter와 gateway 로그가 같은 요청을 찾을 때 쓰는 공통 header예요.
 const RequestIDHeader = "X-Request-Id"
 
+// IdempotencyKeyHeader는 외부 adapter가 같은 run 생성 요청의 재시도를 묶을 때 쓰는 header예요.
+const IdempotencyKeyHeader = "Idempotency-Key"
+
 // RequestIDMetadataKey는 HTTP 요청과 background run/event를 연결하는 metadata key예요.
 const RequestIDMetadataKey = "request_id"
+
+// IdempotencyMetadataKey는 같은 run 생성 요청을 중복 접수하지 않도록 저장하는 metadata key예요.
+const IdempotencyMetadataKey = "idempotency_key"
 
 type requestIDContextKey struct{}
 
@@ -55,5 +61,18 @@ func withRequestIDMetadata(metadata map[string]string, requestID string) map[str
 		out = map[string]string{}
 	}
 	out[RequestIDMetadataKey] = requestID
+	return out
+}
+
+func withIdempotencyMetadata(metadata map[string]string, idempotencyKey string) map[string]string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return cloneMap(metadata)
+	}
+	out := cloneMap(metadata)
+	if out == nil {
+		out = map[string]string{}
+	}
+	out[IdempotencyMetadataKey] = idempotencyKey
 	return out
 }

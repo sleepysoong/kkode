@@ -850,7 +850,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 50, 200)
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), Limit: limit})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
@@ -873,6 +873,11 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
+	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKeyFromRequest(r, req.Metadata))
+	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
+		writeJSON(w, existing)
+		return
+	}
 	if s.cfg.RunValidator != nil {
 		if err := s.cfg.RunValidator(r.Context(), req); err != nil {
 			writeError(w, r, http.StatusBadRequest, "invalid_run_preflight", err.Error())
@@ -885,6 +890,27 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusAccepted, run)
+}
+
+func idempotencyKeyFromRequest(r *http.Request, metadata map[string]string) string {
+	if r != nil {
+		if key := strings.TrimSpace(r.Header.Get(IdempotencyKeyHeader)); key != "" {
+			return key
+		}
+	}
+	return strings.TrimSpace(metadata[IdempotencyMetadataKey])
+}
+
+func (s *Server) findIdempotentRun(ctx context.Context, req RunStartRequest) *RunDTO {
+	key := strings.TrimSpace(req.Metadata[IdempotencyMetadataKey])
+	if key == "" || s.cfg.RunLister == nil {
+		return nil
+	}
+	runs, err := s.cfg.RunLister(ctx, RunQuery{SessionID: req.SessionID, IdempotencyKey: key, Limit: 1})
+	if err != nil || len(runs) == 0 {
+		return nil
+	}
+	return cloneRun(&runs[0])
 }
 
 func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {

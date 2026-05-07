@@ -1324,6 +1324,11 @@ paths:
             type: string
           description: "`X-Request-Id`에서 run metadata로 전파된 request id로 좁혀요."
         - in: query
+          name: idempotency_key
+          schema:
+            type: string
+          description: "`Idempotency-Key` 또는 metadata.idempotency_key로 저장된 key로 좁혀요."
+        - in: query
           name: limit
           schema:
             type: integer
@@ -1340,7 +1345,13 @@ paths:
           $ref: '#/components/responses/Error'
     post:
       summary: agent background run을 시작해요.
-      description: gateway는 run을 즉시 접수하고 실제 agent 실행은 background RunManager에서 이어가요.
+      description: gateway는 run을 즉시 접수하고 실제 agent 실행은 background RunManager에서 이어가요. `Idempotency-Key` header나 `metadata.idempotency_key`가 같으면 기존 run을 반환해요.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+          description: 같은 run 생성 요청의 재시도를 묶는 key예요.
       requestBody:
         required: true
         content:

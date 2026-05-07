@@ -27,10 +27,11 @@ type Run struct {
 }
 
 type RunQuery struct {
-	SessionID string
-	Status    string
-	RequestID string
-	Limit     int
+	SessionID      string
+	Status         string
+	RequestID      string
+	IdempotencyKey string
+	Limit          int
 }
 
 // RunEvent는 run 상태 변경 snapshot을 durable replay용으로 남기는 레코드예요.
