@@ -21,6 +21,9 @@ type RunStarter func(ctx context.Context, req RunStartRequest) (*RunDTO, error)
 // RunPreviewer는 실제 실행 전에 provider/model/resource 조립 결과를 계산해요.
 type RunPreviewer func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error)
 
+// RunRuntimeStatsGetter는 diagnostics가 process-local run queue 상태를 읽는 경계예요.
+type RunRuntimeStatsGetter func() RunRuntimeStats
+
 // Config는 gateway HTTP server 구성값이에요.
 type Config struct {
 	Store                session.Store
@@ -40,6 +43,7 @@ type Config struct {
 	ResourceStore        session.ResourceStore
 	RunStarter           RunStarter
 	RunPreviewer         RunPreviewer
+	RunRuntimeStats      RunRuntimeStatsGetter
 	RunGetter            RunGetter
 	RunLister            RunLister
 	RunCanceler          RunCanceler
@@ -502,7 +506,27 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
 	}
-	writeJSON(w, DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)})
+	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}
+	if s.cfg.RunRuntimeStats != nil {
+		stats := runRuntimeStatsDTO(s.cfg.RunRuntimeStats())
+		resp.RunRuntime = &stats
+	}
+	writeJSON(w, resp)
+}
+
+func runRuntimeStatsDTO(stats RunRuntimeStats) RunRuntimeStatsDTO {
+	return RunRuntimeStatsDTO{
+		TrackedRuns:       stats.TrackedRuns,
+		ActiveRuns:        stats.ActiveRuns,
+		QueuedRuns:        stats.QueuedRuns,
+		RunningRuns:       stats.RunningRuns,
+		CancellingRuns:    stats.CancellingRuns,
+		TerminalRuns:      stats.TerminalRuns,
+		MaxConcurrentRuns: stats.MaxConcurrentRuns,
+		OccupiedRunSlots:  stats.OccupiedRunSlots,
+		AvailableRunSlots: stats.AvailableRunSlots,
+		RunTimeoutSeconds: durationSeconds(stats.RunTimeout),
+	}
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []string) {

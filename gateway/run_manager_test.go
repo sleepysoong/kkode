@@ -138,6 +138,36 @@ func TestAsyncRunManagerLimitsConcurrentRunningRuns(t *testing.T) {
 	}
 }
 
+func TestAsyncRunManagerReportsRuntimeStats(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan string, 1)
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		started <- req.RunID
+		<-release
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
+	}).SetMaxConcurrentRuns(1).SetRunTimeout(time.Minute)
+	first, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	stats := manager.RuntimeStats()
+	if stats.TrackedRuns != 2 || stats.ActiveRuns != 2 || stats.RunningRuns != 1 || stats.QueuedRuns != 1 || stats.MaxConcurrentRuns != 1 || stats.OccupiedRunSlots != 1 || stats.AvailableRunSlots != 0 || stats.RunTimeout != time.Minute {
+		t.Fatalf("runtime stats가 이상해요: %+v", stats)
+	}
+	close(release)
+	waitForRunStatus(t, manager, first.ID, "completed")
+	waitForRunStatus(t, manager, second.ID, "completed")
+	stats = manager.RuntimeStats()
+	if stats.ActiveRuns != 0 || stats.TerminalRuns != 2 {
+		t.Fatalf("terminal stats가 이상해요: %+v", stats)
+	}
+}
+
 func TestAsyncRunManagerCancelsTimedOutRun(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		<-ctx.Done()

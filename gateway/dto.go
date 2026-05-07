@@ -249,12 +249,27 @@ type DiagnosticsResponse struct {
 	MaxRequestBytes   int64                `json:"max_request_bytes"`
 	MaxConcurrentRuns int                  `json:"max_concurrent_runs,omitempty"`
 	RunTimeoutSeconds int                  `json:"run_timeout_seconds,omitempty"`
+	RunRuntime        *RunRuntimeStatsDTO  `json:"run_runtime,omitempty"`
 }
 
 type DiagnosticCheckDTO struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
+}
+
+// RunRuntimeStatsDTO는 dashboard가 현재 process-local run queue를 그릴 때 쓰는 운영 상태예요.
+type RunRuntimeStatsDTO struct {
+	TrackedRuns       int `json:"tracked_runs"`
+	ActiveRuns        int `json:"active_runs"`
+	QueuedRuns        int `json:"queued_runs"`
+	RunningRuns       int `json:"running_runs"`
+	CancellingRuns    int `json:"cancelling_runs"`
+	TerminalRuns      int `json:"terminal_runs"`
+	MaxConcurrentRuns int `json:"max_concurrent_runs,omitempty"`
+	OccupiedRunSlots  int `json:"occupied_run_slots,omitempty"`
+	AvailableRunSlots int `json:"available_run_slots,omitempty"`
+	RunTimeoutSeconds int `json:"run_timeout_seconds,omitempty"`
 }
 
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.

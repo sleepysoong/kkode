@@ -85,6 +85,7 @@ func run(args []string) error {
 		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
 		RunPreviewer:         syncRunPreviewer(store),
+		RunRuntimeStats:      runManager.RuntimeStats,
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
 		RunCanceler:          runManager.Cancel,

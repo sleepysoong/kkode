@@ -31,6 +31,20 @@ type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 // RunEventLister는 durable run event replay 경계예요.
 type RunEventLister func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error)
 
+// RunRuntimeStats는 현재 gateway 프로세스가 소유한 background run 실행면 상태예요.
+type RunRuntimeStats struct {
+	TrackedRuns       int
+	ActiveRuns        int
+	QueuedRuns        int
+	RunningRuns       int
+	CancellingRuns    int
+	TerminalRuns      int
+	MaxConcurrentRuns int
+	OccupiedRunSlots  int
+	AvailableRunSlots int
+	RunTimeout        time.Duration
+}
+
 // AsyncRunManager는 HTTP 요청과 실제 agent 실행을 분리하는 in-memory background run 관리자예요.
 // run 결과의 원본 상태는 session/event SQLite에 남기고, 이 구조체는 gateway 프로세스 안의 실행 제어면을 맡아요.
 type AsyncRunManager struct {
@@ -118,6 +132,42 @@ func (m *AsyncRunManager) RunTimeout() time.Duration {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.runTimeout
+}
+
+// RuntimeStats는 dashboard/diagnostics가 현재 process-local run queue 상태를 읽게 해요.
+func (m *AsyncRunManager) RuntimeStats() RunRuntimeStats {
+	if m == nil {
+		return RunRuntimeStats{}
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	stats := RunRuntimeStats{
+		TrackedRuns:       len(m.runs),
+		MaxConcurrentRuns: m.maxConcurrent,
+		RunTimeout:        m.runTimeout,
+	}
+	if m.runSlots != nil {
+		stats.OccupiedRunSlots = len(m.runSlots)
+		stats.AvailableRunSlots = cap(m.runSlots) - len(m.runSlots)
+	}
+	for _, managed := range m.runs {
+		switch managed.run.Status {
+		case "queued":
+			stats.QueuedRuns++
+		case "running":
+			stats.RunningRuns++
+		case "cancelling":
+			stats.CancellingRuns++
+		default:
+			if isTerminalRunStatus(managed.run.Status) {
+				stats.TerminalRuns++
+			} else {
+				stats.ActiveRuns++
+			}
+		}
+	}
+	stats.ActiveRuns += stats.QueuedRuns + stats.RunningRuns + stats.CancellingRuns
+	return stats
 }
 
 func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan RunDTO, func()) {

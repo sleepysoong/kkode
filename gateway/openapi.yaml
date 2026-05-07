@@ -1503,6 +1503,8 @@ components:
           type: integer
         run_timeout_seconds:
           type: integer
+        run_runtime:
+          $ref: '#/components/schemas/RunRuntimeStats'
     DiagnosticCheck:
       type: object
       required: [name, status]
@@ -1513,6 +1515,29 @@ components:
           type: string
         message:
           type: string
+    RunRuntimeStats:
+      type: object
+      properties:
+        tracked_runs:
+          type: integer
+        active_runs:
+          type: integer
+        queued_runs:
+          type: integer
+        running_runs:
+          type: integer
+        cancelling_runs:
+          type: integer
+        terminal_runs:
+          type: integer
+        max_concurrent_runs:
+          type: integer
+        occupied_run_slots:
+          type: integer
+        available_run_slots:
+          type: integer
+        run_timeout_seconds:
+          type: integer
     Feature:
       type: object
       required: [name, status]

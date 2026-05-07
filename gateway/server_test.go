@@ -726,6 +726,9 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
 			return &RunPreviewResponse{}, nil
 		},
+		RunRuntimeStats: func() RunRuntimeStats {
+			return RunRuntimeStats{TrackedRuns: 3, ActiveRuns: 2, QueuedRuns: 1, RunningRuns: 1, MaxConcurrentRuns: 2, OccupiedRunSlots: 1, AvailableRunSlots: 1, RunTimeout: time.Minute}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -742,6 +745,9 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	}
 	if !diagnostics.OK || diagnostics.Providers != 1 || diagnostics.DefaultMCPServers != 1 || diagnostics.MaxRequestBytes != 123 || diagnostics.MaxConcurrentRuns != 2 || diagnostics.RunTimeoutSeconds != 60 {
 		t.Fatalf("diagnostics 응답이 이상해요: %+v", diagnostics)
+	}
+	if diagnostics.RunRuntime == nil || diagnostics.RunRuntime.TrackedRuns != 3 || diagnostics.RunRuntime.QueuedRuns != 1 || diagnostics.RunRuntime.RunningRuns != 1 || diagnostics.RunRuntime.AvailableRunSlots != 1 || diagnostics.RunRuntime.RunTimeoutSeconds != 60 {
+		t.Fatalf("runtime diagnostics가 이상해요: %+v", diagnostics.RunRuntime)
 	}
 	var sawStore bool
 	for _, check := range diagnostics.Checks {
