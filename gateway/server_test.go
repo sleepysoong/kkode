@@ -2876,8 +2876,22 @@ func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &glob); err != nil {
 		t.Fatal(err)
 	}
-	if glob.ProjectRoot != root || glob.Pattern != "src/*.go" || len(glob.Paths) != 1 || glob.Paths[0] != "src/a.go" {
+	if glob.ProjectRoot != root || glob.Pattern != "src/*.go" || len(glob.Paths) != 1 || glob.Paths[0] != "src/a.go" || glob.TotalPaths != 1 || glob.Limit != 10 || glob.PathsTruncated {
 		t.Fatalf("glob 결과가 이상해요: %+v", glob)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/glob?project_root="+url.QueryEscape(root)+"&pattern=src/*&limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	glob = FileGlobResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &glob); err != nil {
+		t.Fatal(err)
+	}
+	if len(glob.Paths) != 1 || glob.TotalPaths != 2 || glob.Limit != 1 || !glob.PathsTruncated {
+		t.Fatalf("glob limit metadata가 이상해요: %+v", glob)
 	}
 }
 

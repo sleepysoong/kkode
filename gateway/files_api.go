@@ -35,9 +35,12 @@ type FileContentResponse struct {
 
 // FileGlobResponse는 웹 패널 파일 팔레트가 glob 결과를 바로 쓰게 해요.
 type FileGlobResponse struct {
-	ProjectRoot string   `json:"project_root"`
-	Pattern     string   `json:"pattern"`
-	Paths       []string `json:"paths"`
+	ProjectRoot    string   `json:"project_root"`
+	Pattern        string   `json:"pattern"`
+	Paths          []string `json:"paths"`
+	TotalPaths     int      `json:"total_paths,omitempty"`
+	Limit          int      `json:"limit,omitempty"`
+	PathsTruncated bool     `json:"paths_truncated,omitempty"`
 }
 
 // FileGrepResponse는 웹 패널 검색 결과를 file_grep tool과 같은 의미로 반환해요.
@@ -245,10 +248,12 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 500, 5000)
+	total := len(paths)
+	truncated := total > limit
 	if len(paths) > limit {
 		paths = paths[:limit]
 	}
-	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths})
+	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths, TotalPaths: total, Limit: limit, PathsTruncated: truncated})
 }
 
 func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {

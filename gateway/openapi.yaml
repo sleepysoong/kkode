@@ -2025,6 +2025,15 @@ components:
           type: array
           items:
             type: string
+        total_paths:
+          type: integer
+          description: limit 적용 전 glob 결과 수예요.
+        limit:
+          type: integer
+          description: 이번 응답에 적용한 path 개수 제한이에요.
+        paths_truncated:
+          type: boolean
+          description: limit 때문에 paths가 잘렸는지 알려줘요.
     FileGrepResponse:
       type: object
       required: [project_root, pattern, matches]
