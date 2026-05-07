@@ -305,7 +305,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}})
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
 	}
-	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
+	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
 	streamPreview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}, PreviewStream: true})
@@ -334,13 +334,84 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	}
 }
 
-func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
-	tester := syncProviderTester()
-	resp, err := tester(context.Background(), "openai-compatible", gateway.ProviderTestRequest{Model: "gpt-5-mini", Prompt: "provider preview"})
+func TestSyncRunStarterPassesRunMetadataToProviderRequest(t *testing.T) {
+	requests := make(chan llm.Request, 1)
+	unregister, err := app.RegisterProvider(app.ProviderRegistration{
+		Spec: app.ProviderSpec{
+			Name:         "capture-meta",
+			DefaultModel: "capture-model",
+			Models:       []string{"capture-model"},
+			Local:        true,
+			Conversion: app.ProviderConversionSpec{
+				Operations: []string{"capture.generate"},
+			},
+		},
+		Conversion: func(spec app.ProviderSpec) app.ProviderConversionSet {
+			return app.ProviderConversionSet{RequestConverter: llm.RequestConverterFunc(func(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error) {
+				return llm.ProviderRequest{Operation: "capture.generate", Model: req.Model, Metadata: llm.CloneMetadata(req.Metadata)}, nil
+			})}
+		},
+		Factory: func(root string, opts app.ProviderOptions) (app.ProviderHandle, error) {
+			return app.ProviderHandle{Provider: captureMetadataProvider{requests: requests}, BaseRequest: llm.Request{Metadata: map[string]string{"provider_default": "yes"}}}, nil
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.OK || resp.Provider != "openai" || resp.Model != "gpt-5-mini" || resp.ProviderRequest == nil || resp.ProviderRequest.Operation != "responses.create" || !strings.Contains(resp.ProviderRequest.BodyJSON, "provider preview") {
+	defer unregister()
+
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession(t.TempDir(), "capture-meta", "capture-model", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	run, err := syncRunStarter(store, runOptions{NoWeb: true})(context.Background(), gateway.RunStartRequest{SessionID: sess.ID, Prompt: "metadata run", Metadata: map[string]string{"trace_id": "trace_run"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Metadata["trace_id"] != "trace_run" {
+		t.Fatalf("run metadata도 보존해야 해요: %+v", run.Metadata)
+	}
+	select {
+	case got := <-requests:
+		if got.Metadata["provider_default"] != "yes" || got.Metadata["trace_id"] != "trace_run" {
+			t.Fatalf("run metadata가 provider request까지 전달돼야 해요: %+v", got.Metadata)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("provider 호출이 필요해요")
+	}
+}
+
+type captureMetadataProvider struct {
+	requests chan<- llm.Request
+}
+
+func (p captureMetadataProvider) Name() string { return "capture-meta" }
+
+func (p captureMetadataProvider) Capabilities() llm.Capabilities {
+	return llm.Capabilities{Tools: true}
+}
+
+func (p captureMetadataProvider) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	select {
+	case p.requests <- req:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return llm.TextResponse("capture-meta", req.Model, "ok"), nil
+}
+
+func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
+	tester := syncProviderTester()
+	resp, err := tester(context.Background(), "openai-compatible", gateway.ProviderTestRequest{Model: "gpt-5-mini", Prompt: "provider preview", Metadata: map[string]string{"trace_id": "trace_provider"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.OK || resp.Provider != "openai" || resp.Model != "gpt-5-mini" || resp.ProviderRequest == nil || resp.ProviderRequest.Operation != "responses.create" || resp.ProviderRequest.Metadata["trace_id"] != "trace_provider" || !strings.Contains(resp.ProviderRequest.BodyJSON, "provider preview") || !strings.Contains(resp.ProviderRequest.BodyJSON, "trace_provider") {
 		t.Fatalf("provider tester preview가 이상해요: %+v", resp)
 	}
 	if resp.Live {

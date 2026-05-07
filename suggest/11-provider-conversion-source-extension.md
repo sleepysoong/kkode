@@ -28,6 +28,8 @@ llm.Request
 
 ## 이번에 강화한 부분이에요
 
+Gateway run/test 요청의 `metadata`도 provider `llm.Request.Metadata`까지 전달해요. 그래서 외부 웹 패널이나 Discord adapter가 넣은 `trace_id`, `deployment`, `api_version`, `account_id` 같은 값을 run record, provider metadata, HTTP route template에서 같은 값으로 재사용할 수 있어요.
+
 HTTP JSON route가 고정 path만 지원하면 `/responses` 같은 OpenAI-compatible API에는 충분하지만, 아래 형태의 일반 API에는 부족해요.
 
 ```text

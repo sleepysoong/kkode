@@ -294,12 +294,13 @@ type ProviderListResponse struct {
 
 // ProviderTestRequest는 session 없이 provider 변환/인증/live smoke를 점검할 때 써요.
 type ProviderTestRequest struct {
-	Model           string `json:"model,omitempty"`
-	Prompt          string `json:"prompt,omitempty"`
-	Stream          bool   `json:"stream,omitempty"`
-	Live            bool   `json:"live,omitempty"`
-	MaxPreviewBytes int    `json:"max_preview_bytes,omitempty"`
-	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	Prompt          string            `json:"prompt,omitempty"`
+	Stream          bool              `json:"stream,omitempty"`
+	Live            bool              `json:"live,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
+	MaxPreviewBytes int               `json:"max_preview_bytes,omitempty"`
+	MaxOutputTokens int               `json:"max_output_tokens,omitempty"`
 }
 
 // ProviderTestResultDTO는 provider live smoke 결과를 adapter 친화적으로 요약해요.

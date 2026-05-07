@@ -244,7 +244,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: providerHandle.BaseRequest, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Observer: runEventTraceObserver()})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Observer: runEventTraceObserver()})
 		if err != nil {
 			return nil, err
 		}
@@ -343,7 +343,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
-		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: handle.BaseRequest, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
 		if err != nil {
 			return nil, err
 		}
@@ -388,6 +388,7 @@ func syncProviderTester() gateway.ProviderTester {
 		providerReq := llm.Request{
 			Model:           model,
 			Messages:        []llm.Message{llm.UserText(prompt)},
+			Metadata:        llm.CloneMetadata(req.Metadata),
 			MaxOutputTokens: maxOutputTokens,
 		}
 		preview, err := app.PreviewProviderRequest(ctx, spec.Name, providerReq, req.Stream, req.MaxPreviewBytes)

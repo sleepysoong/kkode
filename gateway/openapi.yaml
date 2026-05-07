@@ -2086,6 +2086,10 @@ components:
           type: boolean
         live:
           type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         max_preview_bytes:
           type: integer
         max_output_tokens:
