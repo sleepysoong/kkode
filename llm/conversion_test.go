@@ -53,6 +53,59 @@ func TestAdaptedProviderRunsStreamingConversionAndCaller(t *testing.T) {
 	}
 }
 
+func TestAdaptedProviderAllowsSplitConverters(t *testing.T) {
+	requestConverter := &splitRequestConverter{}
+	responseConverter := splitResponseConverter{}
+	caller := &fakeCaller{}
+	provider := &AdaptedProvider{
+		ProviderName:         "split-api",
+		RequestConverter:     requestConverter,
+		ResponseConverter:    responseConverter,
+		Caller:               caller,
+		Options:              ConvertOptions{Operation: "custom.create"},
+		ProviderCapabilities: Capabilities{StructuredOutput: true},
+	}
+	resp, err := provider.Generate(context.Background(), Request{Model: "split-model", Messages: []Message{UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caller.got.Operation != "custom.create" || caller.got.Model != "split-model" {
+		t.Fatalf("분리된 request converter 결과가 이상해요: %+v", caller.got)
+	}
+	if !requestConverter.called {
+		t.Fatalf("request converter가 호출돼야 해요")
+	}
+	if resp.Provider != "split-api" || resp.Model != "split-model" || resp.Text != "split-ok" {
+		t.Fatalf("분리된 response converter 결과가 이상해요: %+v", resp)
+	}
+	if !provider.Capabilities().StructuredOutput {
+		t.Fatalf("capability를 그대로 노출해야 해요")
+	}
+}
+
+func TestAdaptedProviderStreamOnlyNeedsRequestConverter(t *testing.T) {
+	requestConverter := &splitRequestConverter{}
+	streamer := &fakeStreamer{}
+	provider := &AdaptedProvider{
+		ProviderName:     "stream-only-api",
+		RequestConverter: requestConverter,
+		Streamer:         streamer,
+		Options:          ConvertOptions{Operation: "custom.create"},
+		StreamOptions:    ConvertOptions{Operation: "custom.stream"},
+	}
+	stream, err := provider.Stream(context.Background(), Request{Model: "stream-model", Messages: []Message{UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if streamer.got.Operation != "custom.stream" || streamer.got.Model != "stream-model" || !streamer.got.Stream {
+		t.Fatalf("stream-only 변환 요청이 이상해요: %+v", streamer.got)
+	}
+	if !requestConverter.called {
+		t.Fatalf("stream에서도 request converter가 호출돼야 해요")
+	}
+}
+
 type fakeConverter struct{}
 
 func (fakeConverter) ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {
@@ -82,4 +135,19 @@ func (f *fakeStreamer) StreamProvider(ctx context.Context, req ProviderRequest) 
 	events <- StreamEvent{Type: StreamEventCompleted}
 	close(events)
 	return NewChannelStream(ctx, events, nil), nil
+}
+
+type splitRequestConverter struct {
+	called bool
+}
+
+func (c *splitRequestConverter) ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {
+	c.called = true
+	return ProviderRequest{Operation: opts.Operation, Model: req.Model, Body: map[string]any{"model": req.Model}, Stream: opts.Stream}, nil
+}
+
+type splitResponseConverter struct{}
+
+func (splitResponseConverter) ConvertResponse(ctx context.Context, result ProviderResult) (*Response, error) {
+	return &Response{Provider: result.Provider, Model: result.Model, Status: "completed", Text: "split-ok"}, nil
 }

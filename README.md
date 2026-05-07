@@ -203,7 +203,7 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요.
+- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요.
 - `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `ToolMiddleware`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.

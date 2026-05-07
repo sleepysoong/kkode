@@ -177,6 +177,8 @@ type AdaptedProvider struct {
     ProviderName         string
     ProviderCapabilities Capabilities
     Converter            Converter
+    RequestConverter     RequestConverter
+    ResponseConverter    ResponseConverter
     Caller               ProviderCaller
     Streamer             ProviderStreamCaller
     Options              ConvertOptions
@@ -184,7 +186,7 @@ type AdaptedProvider struct {
 }
 ```
 
-단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. Streaming 흐름도 같은 converter를 먼저 거쳐 `ProviderStreamCaller`로 들어가요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
+단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. `Converter` 하나로 양방향을 묶어도 되고, `RequestConverter`와 `ResponseConverter`를 따로 꽂아도 돼요. 그래서 OpenAI-compatible request builder와 다른 response parser를 섞거나, SDK/source만 바꾼 provider를 작게 추가할 수 있어요. Streaming 흐름은 request converter만 먼저 거쳐 `ProviderStreamCaller`로 들어가므로, SSE/JSONL/SDK event stream처럼 응답이 event 단위인 provider는 response converter 없이도 stream provider를 구현할 수 있어요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
 
 ### `llm.Response`
 

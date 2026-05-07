@@ -44,7 +44,8 @@ type ResponseConverter interface {
 }
 
 // Converter는 양방향 변환 계약이에요.
-// 새 provider는 보통 Converter와 ProviderCaller만 추가하면 Provider 인터페이스를 얻을 수 있어요.
+// 새 provider는 보통 RequestConverter/ResponseConverter/ProviderCaller를 조합하거나,
+// 한 타입이 양쪽 변환을 모두 처리할 때 이 계약을 그대로 구현하면 돼요.
 type Converter interface {
 	RequestConverter
 	ResponseConverter
@@ -63,15 +64,21 @@ type ProviderStreamCaller interface {
 }
 
 // AdaptedProvider는 "내부 요청 -> 변환 -> source 호출 -> 내부 응답" 흐름을 재사용하는 Provider 구현체예요.
-// provider별 차이는 Converter와 ProviderCaller에만 격리해요.
+// provider별 차이는 converter/caller/streamer에 격리해요.
 type AdaptedProvider struct {
 	ProviderName         string
 	ProviderCapabilities Capabilities
-	Converter            Converter
-	Caller               ProviderCaller
-	Streamer             ProviderStreamCaller
-	Options              ConvertOptions
-	StreamOptions        ConvertOptions
+	// Converter는 기존 양방향 변환기를 위한 편의 필드예요.
+	// 더 확장 가능한 provider는 RequestConverter와 ResponseConverter를 따로 꽂아도 돼요.
+	Converter Converter
+	// RequestConverter는 표준 요청을 provider/source 요청으로 바꾸는 전용 변환기예요.
+	RequestConverter RequestConverter
+	// ResponseConverter는 provider/source 응답을 표준 응답으로 되돌리는 전용 변환기예요.
+	ResponseConverter ResponseConverter
+	Caller            ProviderCaller
+	Streamer          ProviderStreamCaller
+	Options           ConvertOptions
+	StreamOptions     ConvertOptions
 }
 
 func (p *AdaptedProvider) Name() string {
@@ -92,13 +99,18 @@ func (p *AdaptedProvider) Generate(ctx context.Context, req Request) (*Response,
 	if p == nil {
 		return nil, fmt.Errorf("provider adapter가 필요해요")
 	}
-	if p.Converter == nil {
-		return nil, fmt.Errorf("provider converter가 필요해요")
+	requestConverter := p.requestConverter()
+	if requestConverter == nil {
+		return nil, fmt.Errorf("provider request converter가 필요해요")
+	}
+	responseConverter := p.responseConverter()
+	if responseConverter == nil {
+		return nil, fmt.Errorf("provider response converter가 필요해요")
 	}
 	if p.Caller == nil {
 		return nil, fmt.Errorf("provider caller가 필요해요")
 	}
-	preq, err := p.Converter.ConvertRequest(ctx, req, p.Options)
+	preq, err := requestConverter.ConvertRequest(ctx, req, p.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -115,15 +127,16 @@ func (p *AdaptedProvider) Generate(ctx context.Context, req Request) (*Response,
 	if result.Model == "" {
 		result.Model = preq.Model
 	}
-	return p.Converter.ConvertResponse(ctx, result)
+	return responseConverter.ConvertResponse(ctx, result)
 }
 
 func (p *AdaptedProvider) Stream(ctx context.Context, req Request) (EventStream, error) {
 	if p == nil {
 		return nil, fmt.Errorf("provider adapter가 필요해요")
 	}
-	if p.Converter == nil {
-		return nil, fmt.Errorf("provider converter가 필요해요")
+	requestConverter := p.requestConverter()
+	if requestConverter == nil {
+		return nil, fmt.Errorf("provider request converter가 필요해요")
 	}
 	if p.Streamer == nil {
 		return nil, fmt.Errorf("provider stream caller가 필요해요")
@@ -133,7 +146,7 @@ func (p *AdaptedProvider) Stream(ctx context.Context, req Request) (EventStream,
 		opts.Operation = p.Options.Operation
 	}
 	opts.Stream = true
-	preq, err := p.Converter.ConvertRequest(ctx, req, opts)
+	preq, err := requestConverter.ConvertRequest(ctx, req, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -142,4 +155,24 @@ func (p *AdaptedProvider) Stream(ctx context.Context, req Request) (EventStream,
 	}
 	preq.Stream = true
 	return p.Streamer.StreamProvider(ctx, preq)
+}
+
+func (p *AdaptedProvider) requestConverter() RequestConverter {
+	if p == nil {
+		return nil
+	}
+	if p.RequestConverter != nil {
+		return p.RequestConverter
+	}
+	return p.Converter
+}
+
+func (p *AdaptedProvider) responseConverter() ResponseConverter {
+	if p == nil {
+		return nil
+	}
+	if p.ResponseConverter != nil {
+		return p.ResponseConverter
+	}
+	return p.Converter
 }
