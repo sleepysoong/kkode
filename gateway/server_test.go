@@ -218,6 +218,26 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if len(listed.Sessions) != 1 || listed.Sessions[0].ID != created.ID {
 		t.Fatalf("unexpected list: %+v", listed)
 	}
+	if listed.Limit != 10 || listed.ResultTruncated {
+		t.Fatalf("session list metadata가 이상해요: %+v", listed)
+	}
+	extra := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(context.Background(), extra); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = SessionListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || !listed.ResultTruncated || listed.Limit != 1 {
+		t.Fatalf("session list truncation metadata가 이상해요: %+v", listed)
+	}
 }
 
 func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
@@ -1357,6 +1377,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if len(listed.Resources) != 1 || listed.Resources[0].Name != "planner" {
 		t.Fatalf("subagent 목록이 이상해요: %+v", listed)
+	}
+	if listed.Limit == 0 || listed.ResultTruncated {
+		t.Fatalf("resource list metadata가 이상해요: %+v", listed)
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/mcp/servers/"+created.ID, nil)
@@ -2556,6 +2579,9 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	}
 	if len(listed.Checkpoints) != 1 || listed.Checkpoints[0].ID != created.ID {
 		t.Fatalf("checkpoint 목록이 이상해요: %+v", listed)
+	}
+	if listed.Limit == 0 || listed.ResultTruncated {
+		t.Fatalf("checkpoint list metadata가 이상해요: %+v", listed)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints/"+created.ID, nil)

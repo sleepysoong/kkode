@@ -684,16 +684,17 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	limit := queryLimit(r, "limit", 50, 200)
-	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: r.URL.Query().Get("project_root"), Limit: limit})
+	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: r.URL.Query().Get("project_root"), Limit: limit + 1})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_sessions_failed", err.Error())
 		return
 	}
+	sessions, truncated := trimSessionSummaries(sessions, limit)
 	out := make([]SessionDTO, 0, len(sessions))
 	for _, summary := range sessions {
 		out = append(out, toSessionSummaryDTO(summary))
 	}
-	writeJSON(w, SessionListResponse{Sessions: out})
+	writeJSON(w, SessionListResponse{Sessions: out, Limit: limit, ResultTruncated: truncated})
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -1223,6 +1224,30 @@ func trimRuns(runs []RunDTO, limit int) ([]RunDTO, bool) {
 		runs = runs[:limit]
 	}
 	return runs, truncated
+}
+
+func trimSessionSummaries(sessions []session.SessionSummary, limit int) ([]session.SessionSummary, bool) {
+	truncated := len(sessions) > limit
+	if truncated {
+		sessions = sessions[:limit]
+	}
+	return sessions, truncated
+}
+
+func trimResources(resources []session.Resource, limit int) ([]session.Resource, bool) {
+	truncated := len(resources) > limit
+	if truncated {
+		resources = resources[:limit]
+	}
+	return resources, truncated
+}
+
+func trimCheckpoints(checkpoints []session.Checkpoint, limit int) ([]session.Checkpoint, bool) {
+	truncated := len(checkpoints) > limit
+	if truncated {
+		checkpoints = checkpoints[:limit]
+	}
+	return checkpoints, truncated
 }
 
 func trimTurns(turns []TurnDTO, limit int) ([]TurnDTO, bool, int) {

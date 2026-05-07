@@ -2252,6 +2252,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Session'
+        limit:
+          type: integer
+        result_truncated:
+          type: boolean
     SessionExportResponse:
       type: object
       required: [format_version, exported_at, session, counts, turns, events, todos]
@@ -2564,6 +2568,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Checkpoint'
+        limit:
+          type: integer
+        result_truncated:
+          type: boolean
     Checkpoint:
       type: object
       properties:
@@ -3110,6 +3118,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Resource'
+        limit:
+          type: integer
+        result_truncated:
+          type: boolean
     Resource:
       type: object
       required: [name]

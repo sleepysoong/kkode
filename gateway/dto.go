@@ -51,7 +51,9 @@ type SessionDTO struct {
 }
 
 type SessionListResponse struct {
-	Sessions []SessionDTO `json:"sessions"`
+	Sessions        []SessionDTO `json:"sessions"`
+	Limit           int          `json:"limit,omitempty"`
+	ResultTruncated bool         `json:"result_truncated,omitempty"`
 }
 
 // TurnDTO는 웹 패널이 session 대화를 렌더링할 때 쓰는 turn 요약/상세예요.
