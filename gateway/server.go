@@ -653,6 +653,24 @@ func (s *Server) missingRuntimeWiring() []string {
 	if s.cfg.ProviderTester == nil {
 		missing = append(missing, "provider_tester")
 	}
+	if s.cfg.RunGetter == nil {
+		missing = append(missing, "run_getter")
+	}
+	if s.cfg.RunLister == nil {
+		missing = append(missing, "run_lister")
+	}
+	if s.cfg.RunCanceler == nil {
+		missing = append(missing, "run_canceler")
+	}
+	if s.cfg.RunEventLister == nil {
+		missing = append(missing, "run_event_lister")
+	}
+	if s.cfg.RunSubscriber == nil {
+		missing = append(missing, "run_subscriber")
+	}
+	if s.cfg.RunEventSubscriber == nil {
+		missing = append(missing, "run_event_subscriber")
+	}
 	return missing
 }
 
@@ -661,7 +679,7 @@ func runtimeWiringChecks(missingRuntimeWiring []string) ([]DiagnosticCheckDTO, b
 	for _, name := range missingRuntimeWiring {
 		missing[name] = struct{}{}
 	}
-	names := []string{"run_starter", "run_previewer", "run_validator", "provider_tester"}
+	names := []string{"run_starter", "run_previewer", "run_validator", "provider_tester", "run_getter", "run_lister", "run_canceler", "run_event_lister", "run_subscriber", "run_event_subscriber"}
 	checks := make([]DiagnosticCheckDTO, 0, len(names))
 	ok := true
 	for _, name := range names {

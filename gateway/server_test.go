@@ -129,7 +129,7 @@ func TestGatewayReadyRejectsMissingRuntimeWiring(t *testing.T) {
 		name, _ := item.(string)
 		missing[name] = true
 	}
-	if !missing["run_starter"] || !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] {
+	if !missing["run_starter"] || !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] || !missing["run_getter"] || !missing["run_lister"] || !missing["run_canceler"] || !missing["run_event_lister"] || !missing["run_subscriber"] || !missing["run_event_subscriber"] {
 		t.Fatalf("ready 오류 details가 이상해요: %+v", envelope.Error.Details)
 	}
 }
@@ -955,6 +955,28 @@ func newReadyTestServer(t *testing.T, store session.Store) *Server {
 		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
 			return &ProviderTestResponse{OK: true, Provider: provider}, nil
 		},
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID}, nil
+		},
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return nil, nil
+		},
+		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID, Status: "cancelled"}, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			return nil, nil
+		},
+		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
+			ch := make(chan RunDTO)
+			close(ch)
+			return ch, func() {}
+		},
+		RunEventSubscriber: func(ctx context.Context, runID string) (<-chan RunEventDTO, func()) {
+			ch := make(chan RunEventDTO)
+			close(ch)
+			return ch, func() {}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1110,6 +1132,28 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
 			return &ProviderTestResponse{OK: true, Provider: provider}, nil
 		},
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID}, nil
+		},
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return nil, nil
+		},
+		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID, Status: "cancelled"}, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			return nil, nil
+		},
+		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
+			ch := make(chan RunDTO)
+			close(ch)
+			return ch, func() {}
+		},
+		RunEventSubscriber: func(ctx context.Context, runID string) (<-chan RunEventDTO, func()) {
+			ch := make(chan RunEventDTO)
+			close(ch)
+			return ch, func() {}
+		},
 		RunRuntimeStats: func() RunRuntimeStats {
 			return RunRuntimeStats{TrackedRuns: 3, ActiveRuns: 2, QueuedRuns: 1, RunningRuns: 1, MaxConcurrentRuns: 2, OccupiedRunSlots: 1, AvailableRunSlots: 1, RunTimeout: time.Minute}
 		},
@@ -1177,14 +1221,14 @@ func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {
 	if diagnostics.OK {
 		t.Fatalf("runtime wiring이 빠진 diagnostics는 unhealthy여야 해요: %+v", diagnostics)
 	}
-	if len(diagnostics.MissingRuntimeWiring) != 3 {
+	if len(diagnostics.MissingRuntimeWiring) != 9 {
 		t.Fatalf("diagnostics는 missing runtime wiring 목록을 직접 제공해야 해요: %+v", diagnostics)
 	}
 	missing := map[string]bool{}
 	for _, name := range diagnostics.MissingRuntimeWiring {
 		missing[name] = true
 	}
-	if !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] {
+	if !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] || !missing["run_getter"] || !missing["run_lister"] || !missing["run_canceler"] || !missing["run_event_lister"] || !missing["run_subscriber"] || !missing["run_event_subscriber"] {
 		t.Fatalf("빠진 runtime wiring 목록이 필요해요: %+v", diagnostics.MissingRuntimeWiring)
 	}
 }
