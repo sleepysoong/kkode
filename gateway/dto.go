@@ -198,6 +198,17 @@ type ProviderDTO struct {
 	DefaultModel string         `json:"default_model,omitempty"`
 	Capabilities map[string]any `json:"capabilities,omitempty"`
 	AuthStatus   string         `json:"auth_status,omitempty"`
+	Conversion   *ConversionDTO `json:"conversion,omitempty"`
+}
+
+// ConversionDTO는 provider가 표준 요청을 어떤 converter/caller/source로 실행하는지 알려줘요.
+type ConversionDTO struct {
+	RequestConverter  string   `json:"request_converter,omitempty"`
+	ResponseConverter string   `json:"response_converter,omitempty"`
+	Call              string   `json:"call,omitempty"`
+	Stream            string   `json:"stream,omitempty"`
+	Source            string   `json:"source,omitempty"`
+	Operations        []string `json:"operations,omitempty"`
 }
 
 type ProviderListResponse struct {

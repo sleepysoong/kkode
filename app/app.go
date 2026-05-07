@@ -38,6 +38,18 @@ type ProviderSpec struct {
 	AuthEnv      []string
 	Local        bool
 	Capabilities map[string]any
+	Conversion   ProviderConversionSpec
+}
+
+// ProviderConversionSpec은 provider가 표준 요청을 어떤 source 호출로 바꾸는지 설명해요.
+// gateway discovery와 문서가 같은 정보를 쓰도록 registry에 함께 보관해요.
+type ProviderConversionSpec struct {
+	RequestConverter  string
+	ResponseConverter string
+	Call              string
+	Stream            string
+	Source            string
+	Operations        []string
 }
 
 type providerRegistryEntry struct {
@@ -109,26 +121,85 @@ func DefaultModel(provider string) string {
 
 var providerRegistry = []providerRegistryEntry{
 	{
-		Spec: ProviderSpec{Name: "openai", Aliases: []string{"openai-compatible"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"OPENAI_API_KEY"}, Capabilities: openai.DefaultCapabilities().ToMap()},
+		Spec: ProviderSpec{
+			Name:         "openai",
+			Aliases:      []string{"openai-compatible"},
+			DefaultModel: "gpt-5-mini",
+			Models:       []string{"gpt-5-mini"},
+			AuthEnv:      []string{"OPENAI_API_KEY"},
+			Capabilities: openai.DefaultCapabilities().ToMap(),
+			Conversion: ProviderConversionSpec{
+				RequestConverter:  "openai.ResponsesConverter",
+				ResponseConverter: "openai.ResponsesConverter",
+				Call:              "openai.Client.CallProvider",
+				Stream:            "openai.Client.StreamProvider",
+				Source:            "http-json+sse",
+				Operations:        []string{"responses.create"},
+			},
+		},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
 		},
 	},
 	{
-		Spec: ProviderSpec{Name: "omniroute", DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini", "auto"}, AuthEnv: []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"}, Capabilities: omniroute.DefaultCapabilities().ToMap()},
+		Spec: ProviderSpec{
+			Name:         "omniroute",
+			DefaultModel: "gpt-5-mini",
+			Models:       []string{"gpt-5-mini", "auto"},
+			AuthEnv:      []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"},
+			Capabilities: omniroute.DefaultCapabilities().ToMap(),
+			Conversion: ProviderConversionSpec{
+				RequestConverter:  "openai.ResponsesConverter",
+				ResponseConverter: "openai.ResponsesConverter",
+				Call:              "openai.Client.CallProvider via omniroute headers",
+				Stream:            "openai.Client.StreamProvider via omniroute headers",
+				Source:            "http-gateway",
+				Operations:        []string{"responses.create", "omniroute.management", "omniroute.a2a"},
+			},
+		},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
 		},
 	},
 	{
-		Spec: ProviderSpec{Name: "copilot", Aliases: []string{"github-copilot"}, DefaultModel: "gpt-5-mini", Models: []string{"gpt-5-mini"}, AuthEnv: []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}, Capabilities: copilot.DefaultCapabilities().ToMap()},
+		Spec: ProviderSpec{
+			Name:         "copilot",
+			Aliases:      []string{"github-copilot"},
+			DefaultModel: "gpt-5-mini",
+			Models:       []string{"gpt-5-mini"},
+			AuthEnv:      []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"},
+			Capabilities: copilot.DefaultCapabilities().ToMap(),
+			Conversion: ProviderConversionSpec{
+				RequestConverter:  "copilot.SessionConverter",
+				ResponseConverter: "copilot.SessionConverter",
+				Call:              "copilot.Client.CallProvider",
+				Stream:            "copilot.Session.Stream",
+				Source:            "github-copilot-sdk",
+				Operations:        []string{"copilot.session.send"},
+			},
+		},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
 			return ProviderHandle{Provider: client, Close: client.Close}, nil
 		},
 	},
 	{
-		Spec: ProviderSpec{Name: "codex", Aliases: []string{"codexcli", "codex-cli"}, DefaultModel: "gpt-5.3-codex", Models: []string{"gpt-5.3-codex"}, Local: true, Capabilities: codexcli.DefaultCapabilities().ToMap()},
+		Spec: ProviderSpec{
+			Name:         "codex",
+			Aliases:      []string{"codexcli", "codex-cli"},
+			DefaultModel: "gpt-5.3-codex",
+			Models:       []string{"gpt-5.3-codex"},
+			Local:        true,
+			Capabilities: codexcli.DefaultCapabilities().ToMap(),
+			Conversion: ProviderConversionSpec{
+				RequestConverter:  "codexcli.ExecConverter",
+				ResponseConverter: "codexcli.ExecConverter",
+				Call:              "codexcli.Client.CallProvider",
+				Stream:            "codexcli.Client.Stream",
+				Source:            "codex-cli-jsonl",
+				Operations:        []string{"codex.exec"},
+			},
+		},
 		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
 			return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
 		},
@@ -170,6 +241,7 @@ func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
 	spec.Aliases = append([]string(nil), spec.Aliases...)
 	spec.Models = append([]string(nil), spec.Models...)
 	spec.AuthEnv = append([]string(nil), spec.AuthEnv...)
+	spec.Conversion.Operations = append([]string(nil), spec.Conversion.Operations...)
 	if spec.Capabilities != nil {
 		capabilities := make(map[string]any, len(spec.Capabilities))
 		for key, value := range spec.Capabilities {

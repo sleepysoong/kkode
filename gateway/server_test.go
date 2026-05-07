@@ -861,7 +861,7 @@ func TestGatewaySessionTurnsAPI(t *testing.T) {
 func TestGatewayModelsDiscovery(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{Store: store, Providers: []ProviderDTO{
-		{Name: "openai", Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured"},
+		{Name: "openai", Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured", Conversion: &ConversionDTO{RequestConverter: "openai.ResponsesConverter", Call: "openai.Client.CallProvider", Source: "http-json+sse", Operations: []string{"responses.create"}}},
 		{Name: "codex", Models: []string{"gpt-5.3-codex"}, DefaultModel: "gpt-5.3-codex", AuthStatus: "local"},
 	}})
 	if err != nil {
@@ -892,6 +892,20 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	}
 	if listed.Models[0].Capabilities["tools"] != true {
 		t.Fatal("model capability map은 응답마다 방어 복사해야 해요")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var providers ProviderListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatal(err)
+	}
+	if providers.Providers[0].Conversion == nil || providers.Providers[0].Conversion.Source != "http-json+sse" || providers.Providers[0].Conversion.Operations[0] != "responses.create" {
+		t.Fatalf("provider 변환 profile discovery가 필요해요: %+v", providers.Providers[0])
 	}
 }
 

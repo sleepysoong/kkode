@@ -1720,6 +1720,25 @@ components:
           additionalProperties: true
         auth_status:
           type: string
+        conversion:
+          $ref: '#/components/schemas/Conversion'
+    Conversion:
+      type: object
+      properties:
+        request_converter:
+          type: string
+        response_converter:
+          type: string
+        call:
+          type: string
+        stream:
+          type: string
+        source:
+          type: string
+        operations:
+          type: array
+          items:
+            type: string
     ModelListResponse:
       type: object
       required: [models]

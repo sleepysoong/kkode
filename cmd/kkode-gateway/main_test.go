@@ -43,6 +43,18 @@ func TestSplitCSV(t *testing.T) {
 	}
 }
 
+func TestProviderDTOsExposeConversionProfile(t *testing.T) {
+	providers := providerDTOs()
+	if len(providers) == 0 {
+		t.Fatal("provider 목록이 필요해요")
+	}
+	for _, provider := range providers {
+		if provider.Conversion == nil || provider.Conversion.RequestConverter == "" || provider.Conversion.Source == "" {
+			t.Fatalf("%s provider 변환 profile이 gateway discovery에 필요해요: %+v", provider.Name, provider.Conversion)
+		}
+	}
+}
+
 func TestAccessLoggerWritesJSONL(t *testing.T) {
 	var buf bytes.Buffer
 	logger := accessLoggerForFlag(true, &buf)

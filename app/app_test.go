@@ -67,6 +67,7 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	specs[0].Aliases = append(specs[0].Aliases, "mutated")
 	specs[0].Models = append(specs[0].Models, "mutated-model")
 	specs[0].Capabilities["tools"] = false
+	specs[0].Conversion.Operations = append(specs[0].Conversion.Operations, "mutated-operation")
 	fresh := ProviderSpecs()
 	if len(fresh[0].Aliases) > 0 && fresh[0].Aliases[len(fresh[0].Aliases)-1] == "mutated" {
 		t.Fatal("ProviderSpecs는 alias slice를 방어 복사해야 해요")
@@ -76,6 +77,20 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	}
 	if fresh[0].Capabilities["tools"] != true {
 		t.Fatal("ProviderSpecs는 capability map을 방어 복사해야 해요")
+	}
+	if len(fresh[0].Conversion.Operations) > 0 && fresh[0].Conversion.Operations[len(fresh[0].Conversion.Operations)-1] == "mutated-operation" {
+		t.Fatal("ProviderSpecs는 conversion operation slice를 방어 복사해야 해요")
+	}
+}
+
+func TestProviderSpecsExposeConversionProfiles(t *testing.T) {
+	for _, spec := range ProviderSpecs() {
+		if spec.Conversion.RequestConverter == "" || spec.Conversion.Call == "" || spec.Conversion.Source == "" {
+			t.Fatalf("%s provider는 변환 profile을 노출해야 해요: %+v", spec.Name, spec.Conversion)
+		}
+		if len(spec.Conversion.Operations) == 0 {
+			t.Fatalf("%s provider는 operation 힌트를 노출해야 해요", spec.Name)
+		}
 	}
 }
 

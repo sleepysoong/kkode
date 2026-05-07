@@ -373,9 +373,23 @@ func providerDTOs() []gateway.ProviderDTO {
 		if len(models) == 0 && spec.DefaultModel != "" {
 			models = []string{spec.DefaultModel}
 		}
-		out = append(out, gateway.ProviderDTO{Name: spec.Name, Models: models, DefaultModel: spec.DefaultModel, Capabilities: spec.Capabilities, AuthStatus: app.ProviderAuthStatus(spec)})
+		out = append(out, gateway.ProviderDTO{Name: spec.Name, Models: models, DefaultModel: spec.DefaultModel, Capabilities: spec.Capabilities, AuthStatus: app.ProviderAuthStatus(spec), Conversion: conversionDTO(spec.Conversion)})
 	}
 	return out
+}
+
+func conversionDTO(spec app.ProviderConversionSpec) *gateway.ConversionDTO {
+	if spec.RequestConverter == "" && spec.ResponseConverter == "" && spec.Call == "" && spec.Stream == "" && spec.Source == "" && len(spec.Operations) == 0 {
+		return nil
+	}
+	return &gateway.ConversionDTO{
+		RequestConverter:  spec.RequestConverter,
+		ResponseConverter: spec.ResponseConverter,
+		Call:              spec.Call,
+		Stream:            spec.Stream,
+		Source:            spec.Source,
+		Operations:        append([]string(nil), spec.Operations...),
+	}
 }
 
 func defaultMCPDTOs() []gateway.ResourceDTO {
