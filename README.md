@@ -203,7 +203,7 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요.
+- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `ProviderPipeline`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. `ProviderPipeline.Prepare/Call/Decode`를 따로 쓸 수 있어서 preview API, debug UI, 실제 실행이 같은 변환 규칙을 공유해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요.
 - `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `ToolMiddleware`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
@@ -422,6 +422,30 @@ OpenAI live test는 `OPENAI_API_KEY`가 있을 때만 실행해야해요.
 
 ```bash
 OPENAI_API_KEY=... OPENAI_TEST_MODEL=gpt-5-mini go test ./providers/openai -run Live
+```
+
+## Provider 변환 파이프라인 예제
+
+새 API를 붙일 때는 아래처럼 표준 request를 provider 요청으로 바꾸는 converter와 실제 source caller를 분리해요. 실제 앱에서는 `AdaptedProvider`가 이 pipeline을 감싸서 `llm.Provider`로 노출해요.
+
+```go
+pipeline := llm.ProviderPipeline{
+    ProviderName:      "my-gateway",
+    RequestConverter:  openai.ResponsesConverter{ProviderName: "my-gateway"},
+    ResponseConverter: openai.ResponsesConverter{ProviderName: "my-gateway"},
+    Caller:            myCaller, // HTTP API, SDK, CLI, fake source 모두 가능해요.
+    Options:           llm.ConvertOptions{Operation: "responses.create"},
+}
+
+preq, err := pipeline.Prepare(ctx, req) // preview/debug에서 재사용해요.
+if err != nil {
+    return err
+}
+result, err := pipeline.Call(ctx, preq) // 여기만 provider source 경계예요.
+if err != nil {
+    return err
+}
+resp, err := pipeline.Decode(ctx, result)
 ```
 
 ## OpenAI-compatible 예제

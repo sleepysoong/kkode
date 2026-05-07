@@ -31,7 +31,8 @@ kkode/
 │   └── kkode-gateway/                # HTTP gateway API server예요
 ├── llm/                              # provider-neutral core예요
 │   ├── model.go                      # 모델 registry와 pricing 타입이에요
-│   ├── conversion.go                 # 요청/응답 변환과 source 호출 adapter예요
+│   ├── conversion.go                 # provider 변환/호출 인터페이스와 adapter예요
+│   ├── pipeline.go                   # 요청→변환→source 호출→응답 변환 파이프라인이에요
 │   ├── prompt.go                     # 메시지 helper예요
 │   ├── redact.go                     # secret redaction helper예요
 │   ├── router.go                     # provider/model router예요
@@ -173,6 +174,23 @@ type ProviderStreamCaller interface {
     StreamProvider(ctx context.Context, req ProviderRequest) (EventStream, error)
 }
 
+type ProviderPipeline struct {
+    ProviderName      string
+    RequestConverter  RequestConverter
+    ResponseConverter ResponseConverter
+    Caller            ProviderCaller
+    Streamer          ProviderStreamCaller
+    Options           ConvertOptions
+    StreamOptions     ConvertOptions
+}
+
+func (p ProviderPipeline) Prepare(ctx context.Context, req Request) (ProviderRequest, error)
+func (p ProviderPipeline) Call(ctx context.Context, preq ProviderRequest) (ProviderResult, error)
+func (p ProviderPipeline) Decode(ctx context.Context, result ProviderResult) (*Response, error)
+func (p ProviderPipeline) Generate(ctx context.Context, req Request) (*Response, error)
+func (p ProviderPipeline) PrepareStream(ctx context.Context, req Request) (ProviderRequest, error)
+func (p ProviderPipeline) Stream(ctx context.Context, req Request) (EventStream, error)
+
 type AdaptedProvider struct {
     ProviderName         string
     ProviderCapabilities Capabilities
@@ -186,7 +204,9 @@ type AdaptedProvider struct {
 }
 ```
 
-단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. `Converter` 하나로 양방향을 묶어도 되고, `RequestConverter`와 `ResponseConverter`를 따로 꽂아도 돼요. 그래서 OpenAI-compatible request builder와 다른 response parser를 섞거나, SDK/source만 바꾼 provider를 작게 추가할 수 있어요. Streaming 흐름은 request converter만 먼저 거쳐 `ProviderStreamCaller`로 들어가므로, SSE/JSONL/SDK event stream처럼 응답이 event 단위인 provider는 response converter 없이도 stream provider를 구현할 수 있어요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
+단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. 이 흐름은 `ProviderPipeline`이 실제 단계로 나눠서 실행해요. `Prepare`는 변환 preview나 debug UI가 재사용하고, `Call`은 API/SDK/CLI source 경계만 담당하며, `Decode`는 source 결과를 다시 표준 응답으로 맞춰요. 그래서 새 API를 붙일 때 core 타입을 수정하지 않고 converter와 caller만 추가하거나, OpenAI-compatible request builder와 별도 API caller/response parser를 조합하면 돼요. `AdaptedProvider`는 이 pipeline을 감싼 `llm.Provider` 구현체라서 기존 provider는 간단한 struct 조립만 유지해요.
+
+Streaming 흐름은 `PrepareStream → ProviderStreamCaller → EventStream`이에요. SSE/JSONL/SDK event stream처럼 응답이 event 단위인 provider는 response converter 없이도 stream provider를 구현할 수 있어요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
 
 ### `llm.Response`
 

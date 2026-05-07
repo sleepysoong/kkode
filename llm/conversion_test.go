@@ -106,6 +106,63 @@ func TestAdaptedProviderStreamOnlyNeedsRequestConverter(t *testing.T) {
 	}
 }
 
+func TestProviderPipelineExposesPrepareCallDecodeStages(t *testing.T) {
+	requestConverter := &splitRequestConverter{}
+	responseConverter := splitResponseConverter{}
+	caller := &fakeCaller{}
+	pipeline := ProviderPipeline{
+		ProviderName:      "pipeline-api",
+		RequestConverter:  requestConverter,
+		ResponseConverter: responseConverter,
+		Caller:            caller,
+		Options:           ConvertOptions{Operation: "pipeline.create"},
+	}
+	req := Request{Model: "pipeline-model", Messages: []Message{UserText("안녕")}}
+	preq, err := pipeline.Prepare(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preq.Operation != "pipeline.create" || preq.Model != "pipeline-model" || preq.Stream {
+		t.Fatalf("prepare 단계 결과가 이상해요: %+v", preq)
+	}
+	result, err := pipeline.Call(context.Background(), preq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caller.got.Operation != "pipeline.create" {
+		t.Fatalf("caller가 변환 요청을 받아야 해요: %+v", caller.got)
+	}
+	if result.Provider != "pipeline-api" || result.Model != "pipeline-model" {
+		t.Fatalf("call 단계 표준 보정이 이상해요: %+v", result)
+	}
+	resp, err := pipeline.Decode(context.Background(), result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Provider != "pipeline-api" || resp.Model != "pipeline-model" || resp.Text != "split-ok" {
+		t.Fatalf("decode 단계 결과가 이상해요: %+v", resp)
+	}
+	if !requestConverter.called {
+		t.Fatalf("request converter가 호출돼야 해요")
+	}
+}
+
+func TestProviderPipelinePrepareStreamFallsBackToDefaultOperation(t *testing.T) {
+	requestConverter := &splitRequestConverter{}
+	pipeline := ProviderPipeline{
+		ProviderName:     "stream-api",
+		RequestConverter: requestConverter,
+		Options:          ConvertOptions{Operation: "default.create"},
+	}
+	preq, err := pipeline.PrepareStream(context.Background(), Request{Model: "m", Messages: []Message{UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preq.Operation != "default.create" || !preq.Stream {
+		t.Fatalf("stream prepare 기본 operation 보정이 이상해요: %+v", preq)
+	}
+}
+
 type fakeConverter struct{}
 
 func (fakeConverter) ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {

@@ -45,15 +45,20 @@ func PreviewProviderRequest(ctx context.Context, provider string, req llm.Reques
 	if len(spec.Conversion.Operations) > 0 {
 		opts.Operation = spec.Conversion.Operations[0]
 	}
-	preq, err := converter.ConvertRequest(ctx, req, opts)
+	pipeline := llm.ProviderPipeline{
+		ProviderName:     spec.Name,
+		RequestConverter: converter,
+		Options:          opts,
+		StreamOptions:    opts,
+	}
+	var preq llm.ProviderRequest
+	if stream {
+		preq, err = pipeline.PrepareStream(ctx, req)
+	} else {
+		preq, err = pipeline.Prepare(ctx, req)
+	}
 	if err != nil {
 		return nil, err
-	}
-	if preq.Model == "" {
-		preq.Model = req.Model
-	}
-	if stream {
-		preq.Stream = true
 	}
 	limit := normalizePreviewBytes(maxBytes)
 	body, bodyTruncated, err := previewJSON(preq.Body, limit)

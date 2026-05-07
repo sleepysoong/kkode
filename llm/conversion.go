@@ -99,62 +99,14 @@ func (p *AdaptedProvider) Generate(ctx context.Context, req Request) (*Response,
 	if p == nil {
 		return nil, fmt.Errorf("provider adapter가 필요해요")
 	}
-	requestConverter := p.requestConverter()
-	if requestConverter == nil {
-		return nil, fmt.Errorf("provider request converter가 필요해요")
-	}
-	responseConverter := p.responseConverter()
-	if responseConverter == nil {
-		return nil, fmt.Errorf("provider response converter가 필요해요")
-	}
-	if p.Caller == nil {
-		return nil, fmt.Errorf("provider caller가 필요해요")
-	}
-	preq, err := requestConverter.ConvertRequest(ctx, req, p.Options)
-	if err != nil {
-		return nil, err
-	}
-	if preq.Model == "" {
-		preq.Model = req.Model
-	}
-	result, err := p.Caller.CallProvider(ctx, preq)
-	if err != nil {
-		return nil, err
-	}
-	if result.Provider == "" {
-		result.Provider = p.Name()
-	}
-	if result.Model == "" {
-		result.Model = preq.Model
-	}
-	return responseConverter.ConvertResponse(ctx, result)
+	return p.pipeline().Generate(ctx, req)
 }
 
 func (p *AdaptedProvider) Stream(ctx context.Context, req Request) (EventStream, error) {
 	if p == nil {
 		return nil, fmt.Errorf("provider adapter가 필요해요")
 	}
-	requestConverter := p.requestConverter()
-	if requestConverter == nil {
-		return nil, fmt.Errorf("provider request converter가 필요해요")
-	}
-	if p.Streamer == nil {
-		return nil, fmt.Errorf("provider stream caller가 필요해요")
-	}
-	opts := p.StreamOptions
-	if opts.Operation == "" {
-		opts.Operation = p.Options.Operation
-	}
-	opts.Stream = true
-	preq, err := requestConverter.ConvertRequest(ctx, req, opts)
-	if err != nil {
-		return nil, err
-	}
-	if preq.Model == "" {
-		preq.Model = req.Model
-	}
-	preq.Stream = true
-	return p.Streamer.StreamProvider(ctx, preq)
+	return p.pipeline().Stream(ctx, req)
 }
 
 func (p *AdaptedProvider) requestConverter() RequestConverter {
@@ -175,4 +127,16 @@ func (p *AdaptedProvider) responseConverter() ResponseConverter {
 		return p.ResponseConverter
 	}
 	return p.Converter
+}
+
+func (p *AdaptedProvider) pipeline() ProviderPipeline {
+	return ProviderPipeline{
+		ProviderName:      p.Name(),
+		RequestConverter:  p.requestConverter(),
+		ResponseConverter: p.responseConverter(),
+		Caller:            p.Caller,
+		Streamer:          p.Streamer,
+		Options:           p.Options,
+		StreamOptions:     p.StreamOptions,
+	}
 }
