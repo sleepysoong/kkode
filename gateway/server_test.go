@@ -423,7 +423,8 @@ func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
 	req.Header.Set("Origin", "https://panel.example")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" || !strings.Contains(rec.Header().Get("Access-Control-Allow-Headers"), RequestIDHeader) {
+	allowedHeaders := rec.Header().Get("Access-Control-Allow-Headers")
+	if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" || !strings.Contains(allowedHeaders, RequestIDHeader) || !strings.Contains(allowedHeaders, IdempotencyKeyHeader) {
 		t.Fatalf("CORS preflight가 이상해요: status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
 

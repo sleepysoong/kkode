@@ -15,7 +15,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		if allowedCORSOrigin(origins, origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+RequestIDHeader)
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+RequestIDHeader+", "+IdempotencyKeyHeader)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Expose-Headers", RequestIDHeader+", "+IdempotencyReplayHeader)
 		}
