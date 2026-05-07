@@ -447,12 +447,33 @@ if err != nil {
 resp, err := pipeline.Decode(ctx, result)
 ```
 
+OpenAI-compatible HTTP JSON API라면 공통 caller까지 재사용해요. 새 source는 base URL과 operation route만 넣으면 `요청 → OpenAI-compatible 컨버팅 → HTTP JSON 호출 → 표준 응답` 흐름을 그대로 써요.
+
+```go
+caller := httpjson.New(httpjson.Config{
+    ProviderName:     "my-openai-compatible",
+    BaseURL:          "https://api.example.com/v1",
+    APIKey:           os.Getenv("MY_API_KEY"),
+    DefaultOperation: "responses.create",
+    Routes: map[string]httpjson.Route{
+        "responses.create": {Method: http.MethodPost, Path: "/responses"},
+    },
+})
+
+pipeline, err := app.BuildProviderPipeline("openai-compatible", caller, nil)
+if err != nil {
+    return err
+}
+resp, err := pipeline.Generate(ctx, req)
+```
+
 `llm.Provider` 구현체가 필요하면 같은 registry를 이렇게 감싸요.
 
 ```go
 provider, err := app.BuildProviderAdapter("openai", app.ProviderAdapterOptions{
-    Caller:   myCaller,
-    Streamer: myStreamer,
+    Caller:       myCaller,
+    Streamer:     myStreamer,
+    Capabilities: llm.Capabilities{Tools: true, Streaming: true},
 })
 ```
 

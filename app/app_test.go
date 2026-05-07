@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +12,7 @@ import (
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/codexcli"
 	"github.com/sleepysoong/kkode/providers/copilot"
+	"github.com/sleepysoong/kkode/providers/httpjson"
 	"github.com/sleepysoong/kkode/providers/omniroute"
 	"github.com/sleepysoong/kkode/providers/openai"
 	"github.com/sleepysoong/kkode/session"
@@ -226,6 +230,37 @@ func TestBuildProviderPipelineLetsSourceOnlyCallerReuseConversion(t *testing.T) 
 	}
 	if resp.Provider != "openai" || resp.Text != "source-only 응답이에요" {
 		t.Fatalf("source 응답이 표준 응답으로 복원되지 않았어요: %+v", resp)
+	}
+}
+
+func TestBuildProviderPipelineCanUseGenericHTTPJSONCaller(t *testing.T) {
+	var gotPath string
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		_, _ = w.Write([]byte(`{"id":"resp_httpjson","model":"gpt-5-mini","status":"completed","output_text":"httpjson 응답이에요"}`))
+	}))
+	defer server.Close()
+
+	caller := httpjson.New(httpjson.Config{
+		ProviderName:     "custom-openai-compatible",
+		BaseURL:          server.URL + "/v1",
+		HTTPClient:       server.Client(),
+		DefaultOperation: "responses.create",
+		Routes:           map[string]httpjson.Route{"responses.create": {Path: "/responses"}},
+	})
+	pipeline, err := BuildProviderPipeline("openai-compatible", caller, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := pipeline.Generate(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v1/responses" || !strings.Contains(gotBody, "안녕") || resp.Provider != "custom-openai-compatible" || resp.Text != "httpjson 응답이에요" {
+		t.Fatalf("generic HTTP JSON caller 연결이 이상해요: path=%s body=%s resp=%+v", gotPath, gotBody, resp)
 	}
 }
 
