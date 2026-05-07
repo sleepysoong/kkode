@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/httpjson"
 )
 
 const defaultProviderPreviewBytes = 64 << 10
@@ -15,17 +17,29 @@ const defaultProviderPreviewBytes = 64 << 10
 // ProviderRequestPreview는 API 호출 직전 provider/source 요청을 사람이 확인하기 쉬운 형태로 보여줘요.
 // body/raw는 실행에 쓰지 않는 preview 문자열이라서 길이 제한과 secret 마스킹을 적용해요.
 type ProviderRequestPreview struct {
-	Provider      string            `json:"provider"`
-	Operation     string            `json:"operation,omitempty"`
-	Model         string            `json:"model,omitempty"`
-	Stream        bool              `json:"stream,omitempty"`
-	BodyJSON      string            `json:"body_json,omitempty"`
-	BodyTruncated bool              `json:"body_truncated,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
-	RawType       string            `json:"raw_type,omitempty"`
-	RawJSON       string            `json:"raw_json,omitempty"`
-	RawTruncated  bool              `json:"raw_truncated,omitempty"`
+	Provider      string                `json:"provider"`
+	Operation     string                `json:"operation,omitempty"`
+	Model         string                `json:"model,omitempty"`
+	Stream        bool                  `json:"stream,omitempty"`
+	Route         *ProviderRoutePreview `json:"route,omitempty"`
+	BodyJSON      string                `json:"body_json,omitempty"`
+	BodyTruncated bool                  `json:"body_truncated,omitempty"`
+	Headers       map[string]string     `json:"headers,omitempty"`
+	Metadata      map[string]string     `json:"metadata,omitempty"`
+	RawType       string                `json:"raw_type,omitempty"`
+	RawJSON       string                `json:"raw_json,omitempty"`
+	RawTruncated  bool                  `json:"raw_truncated,omitempty"`
+}
+
+// ProviderRoutePreview는 provider request가 어떤 HTTP route로 나갈지 보여줘요.
+type ProviderRoutePreview struct {
+	Operation     string            `json:"operation"`
+	Method        string            `json:"method,omitempty"`
+	Path          string            `json:"path"`
+	Accept        string            `json:"accept,omitempty"`
+	Query         map[string]string `json:"query,omitempty"`
+	ResolvedPath  string            `json:"resolved_path,omitempty"`
+	ResolvedQuery map[string]string `json:"resolved_query,omitempty"`
 }
 
 // PreviewProviderRequest는 표준 llm.Request를 provider별 API/source 요청으로 변환하지만 실제 호출은 하지 않아요.
@@ -53,11 +67,16 @@ func PreviewProviderRequest(ctx context.Context, provider string, req llm.Reques
 	if err != nil {
 		return nil, fmt.Errorf("provider request raw preview failed: %w", err)
 	}
+	route, err := previewProviderRoute(spec.Conversion.Routes, preq)
+	if err != nil {
+		return nil, fmt.Errorf("provider route preview failed: %w", err)
+	}
 	return &ProviderRequestPreview{
 		Provider:      spec.Name,
 		Operation:     preq.Operation,
 		Model:         preq.Model,
 		Stream:        preq.Stream,
+		Route:         route,
 		BodyJSON:      body,
 		BodyTruncated: bodyTruncated,
 		Headers:       redactStringMap(preq.Headers),
@@ -65,6 +84,33 @@ func PreviewProviderRequest(ctx context.Context, provider string, req llm.Reques
 		RawType:       rawType,
 		RawJSON:       raw,
 		RawTruncated:  rawTruncated,
+	}, nil
+}
+
+func previewProviderRoute(routes []ProviderRouteSpec, preq llm.ProviderRequest) (*ProviderRoutePreview, error) {
+	if len(routes) == 0 || strings.TrimSpace(preq.Operation) == "" {
+		return nil, nil
+	}
+	route, ok := httpJSONRoutesFromSpec(routes)[preq.Operation]
+	if !ok {
+		return nil, nil
+	}
+	resolved, err := httpjson.ResolveRoute(route, preq)
+	if err != nil {
+		return nil, err
+	}
+	method := strings.TrimSpace(route.Method)
+	if method == "" {
+		method = http.MethodPost
+	}
+	return &ProviderRoutePreview{
+		Operation:     preq.Operation,
+		Method:        method,
+		Path:          route.Path,
+		Accept:        route.Accept,
+		Query:         cloneStringMap(route.Query),
+		ResolvedPath:  resolved.Path,
+		ResolvedQuery: cloneStringMap(resolved.Query),
 	}, nil
 }
 

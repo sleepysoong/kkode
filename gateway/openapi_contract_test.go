@@ -210,6 +210,7 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "RunStartRequest", dto: RunStartRequest{}},
 		{schema: "RunPreviewResponse", dto: RunPreviewResponse{}},
 		{schema: "ProviderRequestPreview", dto: ProviderRequestPreviewDTO{}},
+		{schema: "ProviderRoutePreview", dto: ProviderRoutePreviewDTO{}},
 		{schema: "RunValidateResponse", dto: RunValidateResponse{}},
 		{schema: "RunListResponse", dto: RunListResponse{}},
 		{schema: "Run", dto: RunDTO{}},

@@ -26,6 +26,12 @@ type Route struct {
 	Query   map[string]string
 }
 
+// ResolvedRoute는 template를 실제 ProviderRequest 값으로 채운 route preview예요.
+type ResolvedRoute struct {
+	Path  string
+	Query map[string]string
+}
+
 // Config는 HTTP JSON caller가 endpoint, 인증, route를 조립할 때 쓰는 설정이에요.
 type Config struct {
 	ProviderName     string
@@ -167,22 +173,18 @@ func (c *Caller) route(operation string) (Route, error) {
 }
 
 func (c *Caller) endpoint(route Route, req llm.ProviderRequest) (string, error) {
-	path := strings.TrimSpace(route.Path)
-	if path == "" {
-		return "", fmt.Errorf("httpjson route path가 필요해요")
-	}
-	expandedPath, err := expandRouteTemplate(path, req, true)
+	resolved, err := ResolveRoute(route, req)
 	if err != nil {
 		return "", err
 	}
-	endpoint := expandedPath
-	if !strings.HasPrefix(expandedPath, "http://") && !strings.HasPrefix(expandedPath, "https://") {
+	endpoint := resolved.Path
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
 		if c.baseURL == "" {
 			return "", fmt.Errorf("httpjson base URL이 필요해요")
 		}
-		endpoint = c.baseURL + "/" + strings.TrimLeft(expandedPath, "/")
+		endpoint = c.baseURL + "/" + strings.TrimLeft(endpoint, "/")
 	}
-	if len(route.Query) == 0 {
+	if len(resolved.Query) == 0 {
 		return endpoint, nil
 	}
 	parsed, err := url.Parse(endpoint)
@@ -190,15 +192,7 @@ func (c *Caller) endpoint(route Route, req llm.ProviderRequest) (string, error) 
 		return "", fmt.Errorf("httpjson endpoint URL이 올바르지 않아요: %w", err)
 	}
 	query := parsed.Query()
-	for key, valueTemplate := range route.Query {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		value, err := expandRouteTemplate(valueTemplate, req, false)
-		if err != nil {
-			return "", err
-		}
+	for key, value := range resolved.Query {
 		query.Set(key, value)
 	}
 	parsed.RawQuery = query.Encode()
@@ -247,6 +241,35 @@ func cloneRoutes(routes map[string]Route) map[string]Route {
 		out[operation] = route
 	}
 	return out
+}
+
+// ResolveRoute는 route template를 ProviderRequest 값으로 확장해요.
+// Caller와 preview API가 같은 template 규칙을 쓰도록 공개해요.
+func ResolveRoute(route Route, req llm.ProviderRequest) (ResolvedRoute, error) {
+	path := strings.TrimSpace(route.Path)
+	if path == "" {
+		return ResolvedRoute{}, fmt.Errorf("httpjson route path가 필요해요")
+	}
+	resolvedPath, err := expandRouteTemplate(path, req, true)
+	if err != nil {
+		return ResolvedRoute{}, err
+	}
+	resolvedQuery := make(map[string]string, len(route.Query))
+	for key, valueTemplate := range route.Query {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value, err := expandRouteTemplate(valueTemplate, req, false)
+		if err != nil {
+			return ResolvedRoute{}, err
+		}
+		resolvedQuery[key] = value
+	}
+	if len(resolvedQuery) == 0 {
+		resolvedQuery = nil
+	}
+	return ResolvedRoute{Path: resolvedPath, Query: resolvedQuery}, nil
 }
 
 func expandRouteTemplate(template string, req llm.ProviderRequest, escapePath bool) (string, error) {

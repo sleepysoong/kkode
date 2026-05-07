@@ -200,17 +200,29 @@ type RunPreviewResponse struct {
 
 // ProviderRequestPreviewDTO는 run preview에서 provider API 호출 직전 변환 결과를 보여줘요.
 type ProviderRequestPreviewDTO struct {
-	Provider      string            `json:"provider"`
-	Operation     string            `json:"operation,omitempty"`
-	Model         string            `json:"model,omitempty"`
-	Stream        bool              `json:"stream,omitempty"`
-	BodyJSON      string            `json:"body_json,omitempty"`
-	BodyTruncated bool              `json:"body_truncated,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
-	RawType       string            `json:"raw_type,omitempty"`
-	RawJSON       string            `json:"raw_json,omitempty"`
-	RawTruncated  bool              `json:"raw_truncated,omitempty"`
+	Provider      string                   `json:"provider"`
+	Operation     string                   `json:"operation,omitempty"`
+	Model         string                   `json:"model,omitempty"`
+	Stream        bool                     `json:"stream,omitempty"`
+	Route         *ProviderRoutePreviewDTO `json:"route,omitempty"`
+	BodyJSON      string                   `json:"body_json,omitempty"`
+	BodyTruncated bool                     `json:"body_truncated,omitempty"`
+	Headers       map[string]string        `json:"headers,omitempty"`
+	Metadata      map[string]string        `json:"metadata,omitempty"`
+	RawType       string                   `json:"raw_type,omitempty"`
+	RawJSON       string                   `json:"raw_json,omitempty"`
+	RawTruncated  bool                     `json:"raw_truncated,omitempty"`
+}
+
+// ProviderRoutePreviewDTO는 변환된 provider 요청이 실제로 매칭한 route를 보여줘요.
+type ProviderRoutePreviewDTO struct {
+	Operation     string            `json:"operation"`
+	Method        string            `json:"method,omitempty"`
+	Path          string            `json:"path"`
+	Accept        string            `json:"accept,omitempty"`
+	Query         map[string]string `json:"query,omitempty"`
+	ResolvedPath  string            `json:"resolved_path,omitempty"`
+	ResolvedQuery map[string]string `json:"resolved_query,omitempty"`
 }
 
 // RunListResponse는 background run 목록 응답이에요.

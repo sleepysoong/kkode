@@ -315,7 +315,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
 	}
-	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
+	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
 	streamPreview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}, PreviewStream: true})
@@ -411,7 +411,7 @@ func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.OK || resp.Provider != "openai" || resp.Model != "gpt-5-mini" || resp.ProviderRequest == nil || resp.ProviderRequest.Operation != "responses.create" || resp.ProviderRequest.Metadata["trace_id"] != "trace_provider" || !strings.Contains(resp.ProviderRequest.BodyJSON, "provider preview") || !strings.Contains(resp.ProviderRequest.BodyJSON, "trace_provider") {
+	if !resp.OK || resp.Provider != "openai" || resp.Model != "gpt-5-mini" || resp.ProviderRequest == nil || resp.ProviderRequest.Operation != "responses.create" || resp.ProviderRequest.Route == nil || resp.ProviderRequest.Route.ResolvedPath != "/responses" || resp.ProviderRequest.Metadata["trace_id"] != "trace_provider" || !strings.Contains(resp.ProviderRequest.BodyJSON, "provider preview") || !strings.Contains(resp.ProviderRequest.BodyJSON, "trace_provider") {
 		t.Fatalf("provider tester preview가 이상해요: %+v", resp)
 	}
 	if resp.Live {

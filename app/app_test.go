@@ -429,6 +429,52 @@ func TestBuildHTTPJSONProviderAdapterUsesRegistryRoutes(t *testing.T) {
 	}
 }
 
+func TestPreviewProviderRequestShowsResolvedHTTPRoute(t *testing.T) {
+	unregister, err := RegisterHTTPJSONProvider(HTTPJSONProviderRegistration{
+		Name:         "preview-route-http",
+		Profile:      "openai-compatible",
+		DefaultModel: "model/with/slash",
+		BaseURL:      "https://preview.example.test/v1",
+		Routes: []ProviderRouteSpec{{
+			Operation: "responses.create",
+			Method:    http.MethodPost,
+			Path:      "/deployments/{model}/responses",
+			Query:     map[string]string{"api-version": "{metadata.api_version}"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	preview, err := PreviewProviderRequest(context.Background(), "preview-route-http", llm.Request{Model: "model/with/slash", Messages: []llm.Message{llm.UserText("route")}, Metadata: map[string]string{"api_version": "2026-05-07"}}, false, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Route == nil || preview.Route.Path != "/deployments/{model}/responses" || preview.Route.ResolvedPath != "/deployments/model%2Fwith%2Fslash/responses" || preview.Route.ResolvedQuery["api-version"] != "2026-05-07" {
+		t.Fatalf("route preview가 template를 확장해야 해요: %+v", preview.Route)
+	}
+}
+
+func TestPreviewProviderRequestFailsWhenRouteTemplateMetadataMissing(t *testing.T) {
+	unregister, err := RegisterHTTPJSONProvider(HTTPJSONProviderRegistration{
+		Name:         "preview-route-missing-http",
+		Profile:      "openai-compatible",
+		DefaultModel: "gpt-5-mini",
+		BaseURL:      "https://preview.example.test/v1",
+		Routes:       []ProviderRouteSpec{{Operation: "responses.create", Path: "/responses", Query: map[string]string{"api-version": "{metadata.api_version}"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	_, err = PreviewProviderRequest(context.Background(), "preview-route-missing-http", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("route")}}, false, 4096)
+	if err == nil || !strings.Contains(err.Error(), "api_version") {
+		t.Fatalf("route template metadata 누락은 preview에서 잡아야 해요: %v", err)
+	}
+}
+
 func TestBuildHTTPJSONProviderAdapterCanDisableStreamingCapability(t *testing.T) {
 	provider, err := BuildHTTPJSONProviderAdapter("openai-compatible", HTTPJSONProviderOptions{
 		ProviderName:     "json-only",

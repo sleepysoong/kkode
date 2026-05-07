@@ -517,6 +517,21 @@ func providerTestResult(resp *llm.Response) *gateway.ProviderTestResultDTO {
 	return result
 }
 
+func toProviderRoutePreviewDTO(route *app.ProviderRoutePreview) *gateway.ProviderRoutePreviewDTO {
+	if route == nil {
+		return nil
+	}
+	return &gateway.ProviderRoutePreviewDTO{
+		Operation:     route.Operation,
+		Method:        route.Method,
+		Path:          route.Path,
+		Accept:        route.Accept,
+		Query:         cloneStringMap(route.Query),
+		ResolvedPath:  route.ResolvedPath,
+		ResolvedQuery: cloneStringMap(route.ResolvedQuery),
+	}
+}
+
 func toProviderRequestPreviewDTO(preview *app.ProviderRequestPreview) *gateway.ProviderRequestPreviewDTO {
 	if preview == nil {
 		return nil
@@ -526,6 +541,7 @@ func toProviderRequestPreviewDTO(preview *app.ProviderRequestPreview) *gateway.P
 		Operation:     preview.Operation,
 		Model:         preview.Model,
 		Stream:        preview.Stream,
+		Route:         toProviderRoutePreviewDTO(preview.Route),
 		BodyJSON:      preview.BodyJSON,
 		BodyTruncated: preview.BodyTruncated,
 		Headers:       preview.Headers,

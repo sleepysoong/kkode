@@ -2981,6 +2981,8 @@ components:
         stream:
           type: boolean
           description: streaming 변환 여부예요.
+        route:
+          $ref: '#/components/schemas/ProviderRoutePreview'
         body_json:
           type: string
           description: provider HTTP/API body를 redaction과 길이 제한 뒤 JSON 문자열로 보여줘요.
@@ -3006,6 +3008,28 @@ components:
         raw_truncated:
           type: boolean
           description: raw_json이 길이 제한으로 잘렸는지 알려줘요.
+    ProviderRoutePreview:
+      type: object
+      required: [operation, path]
+      properties:
+        operation:
+          type: string
+        method:
+          type: string
+        path:
+          type: string
+        accept:
+          type: string
+        query:
+          type: object
+          additionalProperties:
+            type: string
+        resolved_path:
+          type: string
+        resolved_query:
+          type: object
+          additionalProperties:
+            type: string
     MCPToolListResponse:
       type: object
       required: [server, tools]
