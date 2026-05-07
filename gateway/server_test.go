@@ -1098,6 +1098,41 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	}
 }
 
+func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store:      store,
+		Version:    "test",
+		Providers:  []ProviderDTO{{Name: "openai"}},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) { return &RunDTO{}, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var diagnostics DiagnosticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if diagnostics.OK {
+		t.Fatalf("runtime wiring이 빠진 diagnostics는 unhealthy여야 해요: %+v", diagnostics)
+	}
+	missing := map[string]bool{}
+	for _, check := range diagnostics.Checks {
+		if check.Status == "missing" {
+			missing[check.Name] = true
+		}
+	}
+	if !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] {
+		t.Fatalf("빠진 runtime wiring check가 필요해요: %+v", diagnostics.Checks)
+	}
+}
+
 func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)

@@ -627,16 +627,19 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_starter", Status: "ok"})
 	}
 	if s.cfg.RunPreviewer == nil {
+		ok = false
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "missing"})
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
 	}
 	if s.cfg.RunValidator == nil {
+		ok = false
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "missing"})
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "ok"})
 	}
 	if s.cfg.ProviderTester == nil {
+		ok = false
 		checks = append(checks, DiagnosticCheckDTO{Name: "provider_tester", Status: "missing"})
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "provider_tester", Status: "ok"})
