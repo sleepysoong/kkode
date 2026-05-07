@@ -16,6 +16,9 @@ func NewRouter() *Router {
 }
 
 func (r *Router) Register(name string, provider Provider) {
+	if r == nil {
+		return
+	}
 	if r.providers == nil {
 		r.providers = map[string]Provider{}
 	}
@@ -23,6 +26,9 @@ func (r *Router) Register(name string, provider Provider) {
 }
 
 func (r *Router) Alias(prefix, provider string) {
+	if r == nil {
+		return
+	}
 	if r.aliases == nil {
 		r.aliases = map[string]string{}
 	}
@@ -30,16 +36,25 @@ func (r *Router) Alias(prefix, provider string) {
 }
 
 func (r *Router) ProviderFor(model string) (Provider, string, error) {
+	if r == nil {
+		return nil, "", fmt.Errorf("router is nil")
+	}
 	if provider, rest, ok := strings.Cut(model, "/"); ok {
 		if p := r.providers[provider]; p != nil {
 			return p, rest, nil
 		}
 	}
+	bestPrefix := ""
+	bestProvider := ""
 	for prefix, provider := range r.aliases {
-		if strings.HasPrefix(model, prefix) {
-			if p := r.providers[provider]; p != nil {
-				return p, strings.TrimPrefix(model, prefix), nil
-			}
+		if strings.HasPrefix(model, prefix) && len(prefix) > len(bestPrefix) {
+			bestPrefix = prefix
+			bestProvider = provider
+		}
+	}
+	if bestPrefix != "" {
+		if p := r.providers[bestProvider]; p != nil {
+			return p, strings.TrimPrefix(model, bestPrefix), nil
 		}
 	}
 	if p := r.providers["default"]; p != nil {

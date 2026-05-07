@@ -35,12 +35,45 @@ func TestRouterAndUsage(t *testing.T) {
 	}
 }
 
+func TestRouterUsesLongestAliasPrefix(t *testing.T) {
+	shortProvider := namedProvider{name: "short"}
+	longProvider := namedProvider{name: "long"}
+	r := NewRouter()
+	r.Register("short", shortProvider)
+	r.Register("long", longProvider)
+	r.Alias("gpt-", "short")
+	r.Alias("gpt-5-", "long")
+	for i := 0; i < 20; i++ {
+		p, model, err := r.ProviderFor("gpt-5-mini")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Name() != "long" || model != "mini" {
+			t.Fatalf("가장 긴 alias prefix가 이겨야 해요: provider=%s model=%s", p.Name(), model)
+		}
+	}
+	var nilRouter *Router
+	if _, _, err := nilRouter.ProviderFor("gpt-5-mini"); err == nil {
+		t.Fatal("nil router는 명확한 오류를 반환해야 해요")
+	}
+}
+
 type scriptedTextProvider struct{}
 
 func (scriptedTextProvider) Name() string               { return "scripted" }
 func (scriptedTextProvider) Capabilities() Capabilities { return Capabilities{} }
 func (scriptedTextProvider) Generate(ctx context.Context, req Request) (*Response, error) {
 	return &Response{Text: "ok"}, nil
+}
+
+type namedProvider struct{ name string }
+
+func (p namedProvider) Name() string { return p.name }
+func (p namedProvider) Capabilities() Capabilities {
+	return Capabilities{}
+}
+func (p namedProvider) Generate(ctx context.Context, req Request) (*Response, error) {
+	return TextResponse(p.name, req.Model, "ok"), nil
 }
 
 func TestChannelStream(t *testing.T) {
