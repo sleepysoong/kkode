@@ -2098,6 +2098,9 @@ components:
         web_max_bytes:
           type: integer
           format: int64
+        max_output_bytes:
+          type: integer
+          description: tool 응답 output을 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
     ToolCallResponse:
       type: object
       required: [tool]
@@ -2110,6 +2113,12 @@ components:
           type: string
         error:
           type: string
+        output_bytes:
+          type: integer
+          description: 제한 전 output byte 수예요.
+        output_truncated:
+          type: boolean
+          description: max_output_bytes 때문에 output이 잘렸는지 알려줘요.
     SessionCreateRequest:
       type: object
       required: [project_root, provider, model]

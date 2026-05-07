@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 	ktools "github.com/sleepysoong/kkode/tools"
@@ -23,18 +24,21 @@ type ToolListResponse struct {
 }
 
 type ToolCallRequest struct {
-	ProjectRoot string         `json:"project_root"`
-	Tool        string         `json:"tool"`
-	Arguments   map[string]any `json:"arguments,omitempty"`
-	CallID      string         `json:"call_id,omitempty"`
-	WebMaxBytes int64          `json:"web_max_bytes,omitempty"`
+	ProjectRoot    string         `json:"project_root"`
+	Tool           string         `json:"tool"`
+	Arguments      map[string]any `json:"arguments,omitempty"`
+	CallID         string         `json:"call_id,omitempty"`
+	WebMaxBytes    int64          `json:"web_max_bytes,omitempty"`
+	MaxOutputBytes int            `json:"max_output_bytes,omitempty"`
 }
 
 type ToolCallResponse struct {
-	CallID string `json:"call_id,omitempty"`
-	Tool   string `json:"tool"`
-	Output string `json:"output,omitempty"`
-	Error  string `json:"error,omitempty"`
+	CallID          string `json:"call_id,omitempty"`
+	Tool            string `json:"tool"`
+	Output          string `json:"output,omitempty"`
+	Error           string `json:"error,omitempty"`
+	OutputBytes     int    `json:"output_bytes,omitempty"`
+	OutputTruncated bool   `json:"output_truncated,omitempty"`
 }
 
 func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -90,9 +94,34 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
 		return
 	}
-	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: result.Output, Error: result.Error})
+	output, outputBytes, truncated := truncateToolOutput(result.Output, req.MaxOutputBytes)
+	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated})
 }
 
 func toToolDTO(tool llm.Tool) ToolDTO {
 	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, Strict: tool.Strict}
+}
+
+func truncateToolOutput(output string, maxBytes int) (string, int, bool) {
+	outputBytes := len(output)
+	if maxBytes <= 0 || outputBytes <= maxBytes {
+		return output, outputBytes, false
+	}
+	used := 0
+	end := 0
+	for i, r := range output {
+		size := utf8.RuneLen(r)
+		if size < 0 {
+			size = len(string(r))
+		}
+		if used+size > maxBytes {
+			break
+		}
+		used += size
+		end = i + size
+	}
+	if end == 0 && maxBytes > 0 {
+		return "", outputBytes, true
+	}
+	return output[:end], outputBytes, true
 }

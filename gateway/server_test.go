@@ -2081,6 +2081,21 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if string(data) != "hello" {
 		t.Fatalf("file_write가 실행되지 않았어요: %q", data)
 	}
+
+	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md"},"max_output_bytes":2}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.Output != "he" || called.OutputBytes != len("hello") || !called.OutputTruncated {
+		t.Fatalf("tool output 제한 응답이 이상해요: %+v", called)
+	}
 }
 
 func TestGatewayCallsWebFetchTool(t *testing.T) {

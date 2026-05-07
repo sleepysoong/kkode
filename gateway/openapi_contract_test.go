@@ -54,6 +54,7 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		{schema: "RequestCorrelationEventsResponse", dto: RequestCorrelationEventsResponse{}},
 		{schema: "RequestCorrelationTranscriptResponse", dto: RequestCorrelationTranscriptResponse{}},
 		{schema: "ToolCallRequest", dto: ToolCallRequest{}},
+		{schema: "ToolCallResponse", dto: ToolCallResponse{}},
 		{schema: "FileGlobResponse", dto: FileGlobResponse{}},
 		{schema: "FileGrepResponse", dto: FileGrepResponse{}},
 		{schema: "FileGrepMatch", dto: FileGrepMatchDTO{}},
