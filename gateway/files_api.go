@@ -19,9 +19,12 @@ type FileEntryDTO struct {
 }
 
 type FileListResponse struct {
-	ProjectRoot string         `json:"project_root"`
-	Path        string         `json:"path"`
-	Entries     []FileEntryDTO `json:"entries"`
+	ProjectRoot      string         `json:"project_root"`
+	Path             string         `json:"path"`
+	Entries          []FileEntryDTO `json:"entries"`
+	TotalEntries     int            `json:"total_entries,omitempty"`
+	Limit            int            `json:"limit,omitempty"`
+	EntriesTruncated bool           `json:"entries_truncated,omitempty"`
 }
 
 type FileContentResponse struct {
@@ -121,6 +124,12 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "list_files_failed", err.Error())
 		return
 	}
+	limit := queryLimit(r, "limit", 500, 5000)
+	total := len(entries)
+	truncated := total > limit
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
 	out := make([]FileEntryDTO, 0, len(entries))
 	for _, entry := range entries {
 		info, err := entry.Info()
@@ -134,7 +143,7 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, FileEntryDTO{Name: entry.Name(), Path: childRel, Kind: kind, Size: info.Size(), ModTime: info.ModTime().UTC()})
 	}
-	writeJSON(w, FileListResponse{ProjectRoot: projectRoot, Path: filepath.ToSlash(rel), Entries: out})
+	writeJSON(w, FileListResponse{ProjectRoot: projectRoot, Path: filepath.ToSlash(rel), Entries: out, TotalEntries: total, Limit: limit, EntriesTruncated: truncated})
 }
 
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {

@@ -3200,8 +3200,9 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	srv := newTestServer(t, store, "")
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "docs", "a.md"), "one\ntwo\nthree")
+	writeTestFile(t, filepath.Join(root, "docs", "b.md"), "second")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/files?project_root="+root+"&path=docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files?project_root="+root+"&path=docs&limit=1", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3211,7 +3212,7 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Entries) != 1 || listed.Entries[0].Name != "a.md" || listed.Entries[0].Kind != "file" {
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "a.md" || listed.Entries[0].Kind != "file" || listed.TotalEntries != 2 || listed.Limit != 1 || !listed.EntriesTruncated {
 		t.Fatalf("files list가 이상해요: %+v", listed)
 	}
 
