@@ -2333,7 +2333,7 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 
 func TestGatewayPreviewsSubagentManifest(t *testing.T) {
 	store := openTestStore(t)
-	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceSubagent, Name: "planner", Description: "계획 agent예요", Enabled: true, Config: []byte(`{"display_name":"Planner","prompt":"계획을 세워요","tools":["file_read"],"skills":["review"],"mcp_servers":{"fs":"mcp-fs"},"infer":true}`)})
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceSubagent, Name: "planner", Description: "계획 agent예요", Enabled: true, Config: []byte(`{"display_name":"Planner","prompt":"계획을 세워요","tools":["file_read"],"skills":["review"],"mcp_server_ids":["mcp_context7"],"mcp_servers":{"fs":"mcp-fs","context7":{"kind":"http","url":"https://mcp.context7.com/mcp"}},"infer":true}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2348,7 +2348,8 @@ func TestGatewayPreviewsSubagentManifest(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.Subagent.ID != resource.ID || preview.DisplayName != "Planner" || preview.Prompt == "" || len(preview.Tools) != 1 || preview.MCPServers["fs"] != "mcp-fs" || preview.Infer == nil || !*preview.Infer {
+	context7, _ := preview.MCPServers["context7"].(map[string]any)
+	if preview.Subagent.ID != resource.ID || preview.DisplayName != "Planner" || preview.Prompt == "" || len(preview.Tools) != 1 || preview.MCPServers["fs"] != "mcp-fs" || len(preview.MCPServerIDs) != 1 || context7["url"] != "https://mcp.context7.com/mcp" || preview.Infer == nil || !*preview.Infer {
 		t.Fatalf("subagent preview가 이상해요: %+v", preview)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sleepysoong/kkode/gateway"
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -154,7 +155,7 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	subagent, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSubagent, Name: "planner", Enabled: true, Config: []byte(`{"prompt":"계획해요","tools":["file_read"],"skills":["review"]}`)})
+	subagent, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSubagent, Name: "planner", Enabled: true, Config: []byte(`{"prompt":"계획해요","tools":["file_read"],"skills":["review"],"mcp_server_ids":["` + mcp.ID + `"],"mcp_servers":{"context7":{"kind":"http","url":"https://mcp.context7.com/mcp","headers":{"X-Test":"yes"}}}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,6 +165,10 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	}
 	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != "/tmp/skills/review" || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" {
 		t.Fatalf("provider options가 이상해요: %+v", opts)
+	}
+	agent := opts.CustomAgents[0]
+	if agent.MCPServers["filesystem"].Command != "mcp-fs" || agent.MCPServers["context7"].Kind != llm.MCPHTTP || agent.MCPServers["context7"].URL != "https://mcp.context7.com/mcp" {
+		t.Fatalf("subagent MCP 연결이 이상해요: %+v", agent.MCPServers)
 	}
 }
 

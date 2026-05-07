@@ -576,7 +576,7 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 		if err := ensureResourceEnabled(resource); err != nil {
 			return opts, err
 		}
-		agent, err := agentFromResource(resource)
+		agent, err := agentFromResource(ctx, resourceStore, resource)
 		if err != nil {
 			return opts, err
 		}
@@ -615,6 +615,10 @@ func mcpServerFromResource(resource session.Resource) (llm.MCPServer, error) {
 			return llm.MCPServer{}, err
 		}
 	}
+	return mcpServerFromConfig(firstNonEmpty(cfg.Name, resource.Name), cfg), nil
+}
+
+func mcpServerFromConfig(defaultName string, cfg mcpResourceConfig) llm.MCPServer {
 	kind := llm.MCPServerKind(cfg.Kind)
 	if kind == "" {
 		if cfg.URL != "" {
@@ -623,7 +627,7 @@ func mcpServerFromResource(resource session.Resource) (llm.MCPServer, error) {
 			kind = llm.MCPStdio
 		}
 	}
-	return llm.MCPServer{Kind: kind, Name: firstNonEmpty(cfg.Name, resource.Name), Tools: cfg.Tools, Timeout: cfg.Timeout, Command: cfg.Command, Args: cfg.Args, Env: cfg.Env, Cwd: cfg.Cwd, URL: cfg.URL, Headers: cfg.Headers}, nil
+	return llm.MCPServer{Kind: kind, Name: firstNonEmpty(cfg.Name, defaultName), Tools: cfg.Tools, Timeout: cfg.Timeout, Command: cfg.Command, Args: cfg.Args, Env: cfg.Env, Cwd: cfg.Cwd, URL: cfg.URL, Headers: cfg.Headers}
 }
 
 type skillResourceConfig struct {
@@ -638,16 +642,17 @@ func skillDirectoryFromResource(resource session.Resource) string {
 }
 
 type agentResourceConfig struct {
-	DisplayName string            `json:"display_name"`
-	Description string            `json:"description"`
-	Prompt      string            `json:"prompt"`
-	Tools       []string          `json:"tools"`
-	MCPServers  map[string]string `json:"mcp_servers"`
-	Skills      []string          `json:"skills"`
-	Infer       *bool             `json:"infer"`
+	DisplayName  string                     `json:"display_name"`
+	Description  string                     `json:"description"`
+	Prompt       string                     `json:"prompt"`
+	Tools        []string                   `json:"tools"`
+	MCPServers   map[string]json.RawMessage `json:"mcp_servers"`
+	MCPServerIDs []string                   `json:"mcp_server_ids"`
+	Skills       []string                   `json:"skills"`
+	Infer        *bool                      `json:"infer"`
 }
 
-func agentFromResource(resource session.Resource) (llm.Agent, error) {
+func agentFromResource(ctx context.Context, resourceStore session.ResourceStore, resource session.Resource) (llm.Agent, error) {
 	var cfg agentResourceConfig
 	if len(resource.Config) > 0 {
 		if err := json.Unmarshal(resource.Config, &cfg); err != nil {
@@ -655,11 +660,41 @@ func agentFromResource(resource session.Resource) (llm.Agent, error) {
 		}
 	}
 	servers := map[string]llm.MCPServer{}
-	for name, value := range cfg.MCPServers {
-		servers[name] = llm.MCPServer{Name: name, Kind: llm.MCPStdio, Command: value}
+	for _, id := range cfg.MCPServerIDs {
+		linked, err := resourceStore.LoadResource(ctx, session.ResourceMCPServer, id)
+		if err != nil {
+			return llm.Agent{}, err
+		}
+		if err := ensureResourceEnabled(linked); err != nil {
+			return llm.Agent{}, err
+		}
+		server, err := mcpServerFromResource(linked)
+		if err != nil {
+			return llm.Agent{}, err
+		}
+		servers[firstNonEmpty(server.Name, linked.Name)] = server
+	}
+	for name, raw := range cfg.MCPServers {
+		server, err := inlineMCPServerFromRaw(name, raw)
+		if err != nil {
+			return llm.Agent{}, err
+		}
+		servers[firstNonEmpty(server.Name, name)] = server
 	}
 	if len(servers) == 0 {
 		servers = nil
 	}
 	return llm.Agent{Name: resource.ID, DisplayName: firstNonEmpty(cfg.DisplayName, resource.Name), Description: firstNonEmpty(cfg.Description, resource.Description), Prompt: cfg.Prompt, Tools: cfg.Tools, MCPServers: servers, Infer: cfg.Infer, Skills: cfg.Skills}, nil
+}
+
+func inlineMCPServerFromRaw(name string, raw json.RawMessage) (llm.MCPServer, error) {
+	var command string
+	if err := json.Unmarshal(raw, &command); err == nil {
+		return llm.MCPServer{Name: name, Kind: llm.MCPStdio, Command: command}, nil
+	}
+	var cfg mcpResourceConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return llm.MCPServer{}, err
+	}
+	return mcpServerFromConfig(name, cfg), nil
 }
