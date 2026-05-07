@@ -340,6 +340,8 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
+	defer heartbeat.Stop()
 	updates := make(chan RunDTO, len(runs)*2)
 	active := 0
 	activeIDs := map[string]bool{}
@@ -392,6 +394,8 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 		select {
 		case <-r.Context().Done():
 			return
+		case <-heartbeat.C:
+			writeSSEHeartbeat(w, flusher)
 		case run := <-updates:
 			streamSeq++
 			event := RunEventDTO{Seq: streamSeq, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}
@@ -1070,6 +1074,8 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
+	defer heartbeat.Stop()
 	events := s.runEventSnapshot(r, runID, initial)
 	seq := 0
 	lastStatus := initial.Status
@@ -1095,6 +1101,8 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 		select {
 		case <-r.Context().Done():
 			return
+		case <-heartbeat.C:
+			writeSSEHeartbeat(w, flusher)
 		case run, ok := <-ch:
 			if !ok {
 				return
@@ -1105,6 +1113,24 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 				return
 			}
 		}
+	}
+}
+
+func sseHeartbeatInterval(r *http.Request) time.Duration {
+	ms := queryInt(r, "heartbeat_ms", 15000)
+	if ms <= 0 {
+		ms = 15000
+	}
+	if ms < 10 {
+		ms = 10
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+func writeSSEHeartbeat(w http.ResponseWriter, flusher http.Flusher) {
+	fmt.Fprint(w, ": heartbeat\n\n")
+	if flusher != nil {
+		flusher.Flush()
 	}
 }
 

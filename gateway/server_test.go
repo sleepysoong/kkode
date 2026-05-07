@@ -12,12 +12,57 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
+
+// safeResponseRecorder는 스트리밍 핸들러를 테스트할 때 본문을 동시에 읽고 쓰는 레이스를 피하려고 써요.
+type safeResponseRecorder struct {
+	mu  sync.Mutex
+	rec *httptest.ResponseRecorder
+}
+
+func newSafeResponseRecorder() *safeResponseRecorder {
+	return &safeResponseRecorder{rec: httptest.NewRecorder()}
+}
+
+func (r *safeResponseRecorder) Header() http.Header {
+	return r.rec.Header()
+}
+
+func (r *safeResponseRecorder) WriteHeader(statusCode int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rec.WriteHeader(statusCode)
+}
+
+func (r *safeResponseRecorder) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rec.Write(p)
+}
+
+func (r *safeResponseRecorder) Flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rec.Flush()
+}
+
+func (r *safeResponseRecorder) Code() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rec.Code
+}
+
+func (r *safeResponseRecorder) BodyString() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rec.Body.String()
+}
 
 func TestGatewayAPIIndex(t *testing.T) {
 	store := openTestStore(t)
@@ -629,7 +674,7 @@ func TestGatewayStreamsRequestCorrelationEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_stream/events?stream=true", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSafeResponseRecorder()
 	done := make(chan struct{})
 	go func() {
 		srv.ServeHTTP(rec, req)
@@ -643,12 +688,51 @@ func TestGatewayStreamsRequestCorrelationEvents(t *testing.T) {
 		cancel()
 		t.Fatal("request correlation SSE가 종료되지 않았어요")
 	}
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
-		t.Fatalf("unexpected response: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	if rec.Code() != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("unexpected response: %d %s", rec.Code(), rec.Header().Get("Content-Type"))
 	}
-	body := rec.Body.String()
+	body := rec.BodyString()
 	if !strings.Contains(body, "event: run.running") || !strings.Contains(body, "event: run.completed") || !strings.Contains(body, "run_req_stream") {
 		t.Fatalf("request correlation SSE body가 이상해요: %s", body)
+	}
+}
+
+func TestGatewayRequestCorrelationSSESendsHeartbeat(t *testing.T) {
+	store := openTestStore(t)
+	bus := NewRunEventBus()
+	run := RunDTO{ID: "run_req_heartbeat", SessionID: "sess_1", Status: "running", Metadata: map[string]string{RequestIDMetadataKey: "req_heartbeat"}}
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return []RunDTO{run}, nil
+		},
+		RunSubscriber: bus.Subscribe,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_heartbeat/events?stream=true&heartbeat_ms=10", nil).WithContext(ctx)
+	rec := newSafeResponseRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(rec, req)
+		close(done)
+	}()
+	waitForRunSubscription(t, bus, "run_req_heartbeat")
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(rec.BodyString(), ": heartbeat") {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat 테스트 SSE가 종료되지 않았어요")
+	}
+	if !strings.Contains(rec.BodyString(), ": heartbeat") {
+		t.Fatalf("request correlation SSE heartbeat가 필요해요: %s", rec.BodyString())
 	}
 }
 
@@ -1353,6 +1437,46 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "event: run.running") || !strings.Contains(body, "event: run.completed") {
 		t.Fatalf("run SSE body가 이상해요: %s", body)
+	}
+}
+
+func TestGatewayRunSSESendsHeartbeat(t *testing.T) {
+	store := openTestStore(t)
+	bus := NewRunEventBus()
+	run := RunDTO{ID: "run_heartbeat", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"}
+	srv, err := New(Config{
+		Store: store,
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			copy := run
+			return &copy, nil
+		},
+		RunSubscriber: bus.Subscribe,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_heartbeat/events?stream=true&heartbeat_ms=10", nil).WithContext(ctx)
+	rec := newSafeResponseRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(rec, req)
+		close(done)
+	}()
+	waitForRunSubscription(t, bus, "run_heartbeat")
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(rec.BodyString(), ": heartbeat") {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("run heartbeat 테스트 SSE가 종료되지 않았어요")
+	}
+	if !strings.Contains(rec.BodyString(), ": heartbeat") {
+		t.Fatalf("run SSE heartbeat가 필요해요: %s", rec.BodyString())
 	}
 }
 
