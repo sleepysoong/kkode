@@ -622,7 +622,7 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 	if len(features) == 0 {
 		features = DefaultFeatureCatalog()
 	}
-	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: providersForDiscovery(s.cfg.Providers), DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}})
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: providersForDiscovery(s.cfg.Providers), DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout), MaxMCPHTTPResponseBytes: maxMCPHTTPResponseBytes}})
 }
 
 func durationSeconds(d time.Duration) int {

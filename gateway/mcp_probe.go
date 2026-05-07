@@ -16,6 +16,8 @@ import (
 	"github.com/sleepysoong/kkode/session"
 )
 
+const maxMCPHTTPResponseBytes = 8 << 20
+
 // MCPToolDTO는 MCP tools/list 결과를 외부 API에 노출하는 항목이에요.
 type MCPToolDTO struct {
 	Name        string         `json:"name"`
@@ -474,7 +476,7 @@ func postHTTPMCP(ctx context.Context, cfg mcpProbeConfig, payload map[string]any
 	if nextSessionID == "" {
 		nextSessionID = res.Header.Get("MCP-Session-Id")
 	}
-	data, err := io.ReadAll(res.Body)
+	data, err := readLimitedBody(res.Body, maxMCPHTTPResponseBytes)
 	if err != nil {
 		return nil, nextSessionID, err
 	}
@@ -498,8 +500,23 @@ func postHTTPMCP(ctx context.Context, cfg mcpProbeConfig, payload map[string]any
 	return msg, nextSessionID, nil
 }
 
+func readLimitedBody(r io.Reader, maxBytes int) ([]byte, error) {
+	if maxBytes <= 0 {
+		return io.ReadAll(r)
+	}
+	data, err := io.ReadAll(io.LimitReader(r, int64(maxBytes)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxBytes {
+		return nil, fmt.Errorf("HTTP MCP 응답 body가 너무 커요: max_bytes=%d", maxBytes)
+	}
+	return data, nil
+}
+
 func readHTTPSSEMCPResponse(data []byte, id int) (map[string]any, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, 64*1024), maxMCPHTTPResponseBytes)
 	var eventData strings.Builder
 	flush := func() (map[string]any, bool, error) {
 		if eventData.Len() == 0 {

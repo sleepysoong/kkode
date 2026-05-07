@@ -393,9 +393,10 @@ type RunRuntimeStatsDTO struct {
 
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.
 type LimitDTO struct {
-	MaxRequestBytes   int64 `json:"max_request_bytes"`
-	MaxConcurrentRuns int   `json:"max_concurrent_runs,omitempty"`
-	RunTimeoutSeconds int   `json:"run_timeout_seconds,omitempty"`
+	MaxRequestBytes         int64 `json:"max_request_bytes"`
+	MaxConcurrentRuns       int   `json:"max_concurrent_runs,omitempty"`
+	RunTimeoutSeconds       int   `json:"run_timeout_seconds,omitempty"`
+	MaxMCPHTTPResponseBytes int   `json:"max_mcp_http_response_bytes,omitempty"`
 }
 
 func toSessionDTO(sess *session.Session) SessionDTO {

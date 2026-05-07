@@ -1895,6 +1895,8 @@ components:
           type: integer
         run_timeout_seconds:
           type: integer
+        max_mcp_http_response_bytes:
+          type: integer
     DiagnosticsResponse:
       type: object
       required: [ok, version, time, checks, providers, features, default_mcp_servers, max_request_bytes]

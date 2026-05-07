@@ -1119,7 +1119,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	if caps.DefaultMCPServers[0].Name != "context7" || caps.DefaultMCPServers[0].Config["url"] == "" {
@@ -2539,6 +2539,16 @@ func TestGatewayCallsHTTPMCPServerToolJSON(t *testing.T) {
 	first, _ := content[0].(map[string]any)
 	if got.Tool != "http_echo" || first["text"] != "hello" || got.ResultBytes <= 5 || !got.ResultTruncated {
 		t.Fatalf("HTTP MCP tools/call 결과 제한이 이상해요: %+v", got)
+	}
+}
+
+func TestReadLimitedBodyRejectsOversizedHTTPMCPResponse(t *testing.T) {
+	data, err := readLimitedBody(strings.NewReader("12345"), 5)
+	if err != nil || string(data) != "12345" {
+		t.Fatalf("제한 안의 HTTP MCP body는 읽어야 해요: data=%q err=%v", data, err)
+	}
+	if _, err := readLimitedBody(strings.NewReader("123456"), 5); err == nil || !strings.Contains(err.Error(), "너무 커요") {
+		t.Fatalf("제한을 넘는 HTTP MCP body는 거부해야 해요: %v", err)
 	}
 }
 
