@@ -2862,6 +2862,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LSPSymbol'
+        limit:
+          type: integer
+          description: 이번 응답에 적용한 결과 개수 제한이에요.
+        result_truncated:
+          type: boolean
+          description: limit 때문에 결과가 잘렸는지 알려줘요.
     LSPSymbol:
       type: object
       required: [name, kind, file, line, column]
@@ -2887,6 +2893,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LSPSymbol'
+        limit:
+          type: integer
+          description: 이번 응답에 적용한 결과 개수 제한이에요.
+        result_truncated:
+          type: boolean
+          description: limit 때문에 결과가 잘렸는지 알려줘요.
     LSPReferenceListResponse:
       type: object
       required: [references]
@@ -2895,6 +2907,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LSPReference'
+        limit:
+          type: integer
+          description: 이번 응답에 적용한 결과 개수 제한이에요.
+        result_truncated:
+          type: boolean
+          description: limit 때문에 결과가 잘렸는지 알려줘요.
     LSPReference:
       type: object
       required: [name, kind, file, line, column]
@@ -2920,6 +2938,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LSPDiagnostic'
+        limit:
+          type: integer
+          description: 이번 응답에 적용한 결과 개수 제한이에요.
+        result_truncated:
+          type: boolean
+          description: limit 때문에 결과가 잘렸는지 알려줘요.
     LSPDiagnostic:
       type: object
       required: [file, line, column, severity, source, message]

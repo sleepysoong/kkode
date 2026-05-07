@@ -26,11 +26,15 @@ type LSPSymbolDTO struct {
 }
 
 type LSPSymbolListResponse struct {
-	Symbols []LSPSymbolDTO `json:"symbols"`
+	Symbols         []LSPSymbolDTO `json:"symbols"`
+	Limit           int            `json:"limit,omitempty"`
+	ResultTruncated bool           `json:"result_truncated,omitempty"`
 }
 
 type LSPLocationListResponse struct {
-	Locations []LSPSymbolDTO `json:"locations"`
+	Locations       []LSPSymbolDTO `json:"locations"`
+	Limit           int            `json:"limit,omitempty"`
+	ResultTruncated bool           `json:"result_truncated,omitempty"`
 }
 
 type LSPReferenceDTO struct {
@@ -43,7 +47,9 @@ type LSPReferenceDTO struct {
 }
 
 type LSPReferenceListResponse struct {
-	References []LSPReferenceDTO `json:"references"`
+	References      []LSPReferenceDTO `json:"references"`
+	Limit           int               `json:"limit,omitempty"`
+	ResultTruncated bool              `json:"result_truncated,omitempty"`
 }
 
 type LSPDiagnosticDTO struct {
@@ -56,7 +62,9 @@ type LSPDiagnosticDTO struct {
 }
 
 type LSPDiagnosticListResponse struct {
-	Diagnostics []LSPDiagnosticDTO `json:"diagnostics"`
+	Diagnostics     []LSPDiagnosticDTO `json:"diagnostics"`
+	Limit           int                `json:"limit,omitempty"`
+	ResultTruncated bool               `json:"result_truncated,omitempty"`
 }
 
 type LSPHoverResponse struct {
@@ -87,12 +95,13 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 	switch parts[1] {
 	case "symbols":
 		limit := queryLimit(r, "limit", 200, 1000)
-		symbols, err := scanGoSymbols(root, strings.TrimSpace(r.URL.Query().Get("query")), limit)
+		symbols, err := scanGoSymbols(root, strings.TrimSpace(r.URL.Query().Get("query")), limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, "scan_symbols_failed", err.Error())
 			return
 		}
-		writeJSON(w, LSPSymbolListResponse{Symbols: symbols})
+		symbols, truncated := limitLSPSymbols(symbols, limit)
+		writeJSON(w, LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated})
 	case "document-symbols":
 		symbols, err := scanGoDocumentSymbols(root, strings.TrimSpace(r.URL.Query().Get("path")))
 		if err != nil {
@@ -102,27 +111,33 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		writeJSON(w, LSPSymbolListResponse{Symbols: symbols})
 	case "definitions":
 		symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
-		definitions, err := scanGoDefinitions(root, symbol, queryLimit(r, "limit", 50, 200))
+		limit := queryLimit(r, "limit", 50, 200)
+		definitions, err := scanGoDefinitions(root, symbol, limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_definitions_failed", err.Error())
 			return
 		}
-		writeJSON(w, LSPLocationListResponse{Locations: definitions})
+		definitions, truncated := limitLSPSymbols(definitions, limit)
+		writeJSON(w, LSPLocationListResponse{Locations: definitions, Limit: limit, ResultTruncated: truncated})
 	case "references":
 		symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
-		references, err := scanGoReferences(root, symbol, queryLimit(r, "limit", 100, 1000))
+		limit := queryLimit(r, "limit", 100, 1000)
+		references, err := scanGoReferences(root, symbol, limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_references_failed", err.Error())
 			return
 		}
-		writeJSON(w, LSPReferenceListResponse{References: references})
+		references, truncated := limitLSPReferences(references, limit)
+		writeJSON(w, LSPReferenceListResponse{References: references, Limit: limit, ResultTruncated: truncated})
 	case "diagnostics":
-		diagnostics, err := scanGoDiagnostics(root, strings.TrimSpace(r.URL.Query().Get("path")), queryLimit(r, "limit", 200, 1000))
+		limit := queryLimit(r, "limit", 200, 1000)
+		diagnostics, err := scanGoDiagnostics(root, strings.TrimSpace(r.URL.Query().Get("path")), limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_diagnostics_failed", err.Error())
 			return
 		}
-		writeJSON(w, LSPDiagnosticListResponse{Diagnostics: diagnostics})
+		diagnostics, truncated := limitLSPDiagnostics(diagnostics, limit)
+		writeJSON(w, LSPDiagnosticListResponse{Diagnostics: diagnostics, Limit: limit, ResultTruncated: truncated})
 	case "hover":
 		hover, err := scanGoHover(root, strings.TrimSpace(r.URL.Query().Get("symbol")))
 		if err != nil {
@@ -133,6 +148,27 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "lsp endpoint를 찾을 수 없어요")
 	}
+}
+
+func limitLSPSymbols(items []LSPSymbolDTO, limit int) ([]LSPSymbolDTO, bool) {
+	if limit <= 0 || len(items) <= limit {
+		return items, false
+	}
+	return items[:limit], true
+}
+
+func limitLSPReferences(items []LSPReferenceDTO, limit int) ([]LSPReferenceDTO, bool) {
+	if limit <= 0 || len(items) <= limit {
+		return items, false
+	}
+	return items[:limit], true
+}
+
+func limitLSPDiagnostics(items []LSPDiagnosticDTO, limit int) ([]LSPDiagnosticDTO, bool) {
+	if limit <= 0 || len(items) <= limit {
+		return items, false
+	}
+	return items[:limit], true
 }
 
 func scanGoSymbols(root string, query string, limit int) ([]LSPSymbolDTO, error) {

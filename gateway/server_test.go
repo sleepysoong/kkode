@@ -1361,13 +1361,27 @@ func (r *Runner) Run() {}
 `)
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run&limit=1", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
 	var symbols LSPSymbolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &symbols); err != nil {
+		t.Fatal(err)
+	}
+	if len(symbols.Symbols) != 1 || symbols.Limit != 1 || !symbols.ResultTruncated {
+		t.Fatalf("LSP symbol limit metadata가 이상해요: %+v", symbols)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	symbols = LSPSymbolListResponse{}
 	if err := json.Unmarshal(rec.Body.Bytes(), &symbols); err != nil {
 		t.Fatal(err)
 	}
@@ -1416,6 +1430,9 @@ func main() {
 	if len(defs.Locations) != 1 || defs.Locations[0].Name != "Runner" || defs.Locations[0].Kind != "type" {
 		t.Fatalf("definition 결과가 이상해요: %+v", defs)
 	}
+	if defs.Limit != 50 || defs.ResultTruncated {
+		t.Fatalf("definition limit metadata가 이상해요: %+v", defs)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/definitions?project_root="+root+"&symbol=Runner.Run", nil)
 	rec = httptest.NewRecorder()
@@ -1443,6 +1460,9 @@ func main() {
 	}
 	if len(refs.References) < 3 {
 		t.Fatalf("reference 결과가 너무 적어요: %+v", refs)
+	}
+	if refs.Limit != 20 || refs.ResultTruncated {
+		t.Fatalf("reference limit metadata가 이상해요: %+v", refs)
 	}
 	var sawCtor bool
 	for _, ref := range refs.References {
@@ -1484,6 +1504,9 @@ func Broken( {
 	}
 	if len(diagnostics.Diagnostics) == 0 || diagnostics.Diagnostics[0].File != "broken.go" || diagnostics.Diagnostics[0].Severity != "error" {
 		t.Fatalf("diagnostics 결과가 이상해요: %+v", diagnostics)
+	}
+	if diagnostics.Limit != 200 || diagnostics.ResultTruncated {
+		t.Fatalf("diagnostics limit metadata가 이상해요: %+v", diagnostics)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/hover?project_root="+root+"&symbol=Runner.Run", nil)
