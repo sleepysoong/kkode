@@ -519,8 +519,8 @@ func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerNa
 		return
 	}
 	var req ProviderTestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		writeError(w, r, http.StatusBadRequest, "bad_json", "provider test 요청 JSON을 읽지 못했어요")
+	if _, err := decodeOptionalJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
 		return
 	}
 	resp, err := s.cfg.ProviderTester(r.Context(), providerName, req)
@@ -1552,6 +1552,28 @@ func decodeJSON(r *http.Request, out any) error {
 		return err
 	}
 	return nil
+}
+
+func decodeOptionalJSON(r *http.Request, out any) (bool, error) {
+	if r.Body == nil {
+		return false, nil
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(out); err != nil {
+		if err == io.EOF {
+			return false, nil
+		}
+		return false, err
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return true, errors.New("JSON body에는 하나의 값만 있어야 해요")
+		}
+		return true, err
+	}
+	return true, nil
 }
 
 func splitPath(path string) []string {

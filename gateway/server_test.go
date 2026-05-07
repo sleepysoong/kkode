@@ -1495,6 +1495,27 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 		t.Fatalf("provider test 응답이 이상해요: provider=%s resp=%+v", testedProvider, testResp)
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":"gpt-5-mini","unknown":true}`))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("provider test unknown field는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var errBody ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
+		t.Fatal(err)
+	}
+	if errBody.Error.Code != "invalid_json" {
+		t.Fatalf("provider test JSON 오류는 표준 invalid_json이어야 해요: %+v", errBody)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(``))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("provider test 빈 body는 기본 요청으로 처리해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/missing", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
