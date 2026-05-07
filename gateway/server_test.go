@@ -2490,7 +2490,19 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 	if err := store.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_export", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"복구해요"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, session.Run{ID: "run_export", SessionID: sess.ID, Status: "completed", Prompt: "go", Model: "gpt-5-mini"}); err != nil {
+	mcpResource, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp","headers":{"Authorization":"Bearer secret-token"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillResource, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "review", Enabled: true, Config: []byte(`{"path":"/tmp/skills/review"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subagentResource, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSubagent, Name: "planner", Enabled: true, Config: []byte(`{"prompt":"계획해요","mcp_server_ids":["` + mcpResource.ID + `"]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveRun(ctx, session.Run{ID: "run_export", SessionID: sess.ID, Status: "completed", Prompt: "go", Model: "gpt-5-mini", MCPServers: []string{mcpResource.ID}, Skills: []string{skillResource.ID}, Subagents: []string{subagentResource.ID}}); err != nil {
 		t.Fatal(err)
 	}
 	srv, err := New(Config{
@@ -2520,13 +2532,13 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
 		t.Fatal(err)
 	}
-	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || exported.RawSession == nil || exported.RawSession.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 {
+	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || exported.RawSession == nil || exported.RawSession.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 || len(exported.Resources) != 3 {
 		t.Fatalf("session export가 이상해요: %+v", exported)
 	}
-	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Todos != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Runs != 1 {
+	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Todos != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Runs != 1 || exported.Counts.Resources != 3 {
 		t.Fatalf("session export counts가 이상해요: %+v", exported.Counts)
 	}
-	if exported.Turns[0].ResponseText != "ok" || exported.RawSession.Turns[0].Response.Output[0].Content != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Runs[0].ID != "run_export" {
+	if exported.Turns[0].ResponseText != "ok" || exported.RawSession.Turns[0].Response.Output[0].Content != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Runs[0].ID != "run_export" || !hasResourceDTO(exported.Resources, mcpResource.ID) || !hasResourceDTO(exported.Resources, skillResource.ID) || !hasResourceDTO(exported.Resources, subagentResource.ID) {
 		t.Fatalf("session export 상세가 이상해요: %+v", exported)
 	}
 }
@@ -2545,7 +2557,11 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err := sourceStore.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_import", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"옮겨요"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sourceStore.SaveRun(ctx, session.Run{ID: "run_import", SessionID: sess.ID, Status: "completed", Prompt: "go", EventsURL: "/api/v1/sessions/" + sess.ID + "/events"}); err != nil {
+	mcpResource, err := sourceStore.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sourceStore.SaveRun(ctx, session.Run{ID: "run_import", SessionID: sess.ID, Status: "completed", Prompt: "go", MCPServers: []string{mcpResource.ID}, EventsURL: "/api/v1/sessions/" + sess.ID + "/events"}); err != nil {
 		t.Fatal(err)
 	}
 	exported := exportSessionForTest(t, sourceStore, sess.ID)
@@ -2554,7 +2570,7 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := json.Marshal(SessionImportRequest{FormatVersion: exported.FormatVersion, RawSession: exported.RawSession, Checkpoints: exported.Checkpoints, Runs: exported.Runs, NewSessionID: "sess_imported"})
+	body, err := json.Marshal(SessionImportRequest{FormatVersion: exported.FormatVersion, RawSession: exported.RawSession, Checkpoints: exported.Checkpoints, Runs: exported.Runs, Resources: exported.Resources, NewSessionID: "sess_imported"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2569,7 +2585,7 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &imported); err != nil {
 		t.Fatal(err)
 	}
-	if imported.Session.ID != "sess_imported" || !imported.RewrittenSessionID || imported.OriginalSessionID != sess.ID || imported.Counts.Turns != 1 || imported.Counts.Events != 1 || imported.Counts.Checkpoints != 1 || imported.Counts.Runs != 1 {
+	if imported.Session.ID != "sess_imported" || !imported.RewrittenSessionID || imported.OriginalSessionID != sess.ID || imported.Counts.Turns != 1 || imported.Counts.Events != 1 || imported.Counts.Checkpoints != 1 || imported.Counts.Runs != 1 || imported.Counts.Resources != 1 {
 		t.Fatalf("import 응답이 이상해요: %+v", imported)
 	}
 	loaded, err := targetStore.LoadSession(ctx, "sess_imported")
@@ -2587,6 +2603,19 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err != nil || run.SessionID != "sess_imported" || !strings.Contains(run.EventsURL, "sess_imported") {
 		t.Fatalf("import된 run이 이상해요: %+v err=%v", run, err)
 	}
+	loadedResource, err := targetStore.LoadResource(ctx, session.ResourceMCPServer, mcpResource.ID)
+	if err != nil || loadedResource.Name != "context7" {
+		t.Fatalf("import된 resource가 이상해요: %+v err=%v", loadedResource, err)
+	}
+}
+
+func hasResourceDTO(resources []ResourceDTO, id string) bool {
+	for _, resource := range resources {
+		if resource.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGatewayExportsRedactedSessionBundle(t *testing.T) {
@@ -2606,7 +2635,11 @@ func TestGatewayExportsRedactedSessionBundle(t *testing.T) {
 	if err := store.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_redact_export", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"token=abc1234567890secretvalue"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, session.Run{ID: "run_redact_export", SessionID: sess.ID, Status: "completed", Prompt: "run " + secret, Metadata: map[string]string{"token": secret}}); err != nil {
+	resource, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "secret-mcp", Enabled: true, Config: []byte(`{"headers":{"Authorization":"Bearer abc1234567890secretvalue"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveRun(ctx, session.Run{ID: "run_redact_export", SessionID: sess.ID, Status: "completed", Prompt: "run " + secret, MCPServers: []string{resource.ID}, Metadata: map[string]string{"token": secret}}); err != nil {
 		t.Fatal(err)
 	}
 	srv, err := New(Config{
@@ -2640,7 +2673,7 @@ func TestGatewayExportsRedactedSessionBundle(t *testing.T) {
 	if !exported.Redacted || exported.RawSession != nil || !strings.Contains(body, "[REDACTED]") || strings.Contains(body, "abc1234567890secretvalue") {
 		t.Fatalf("redacted export가 이상해요: %s", body)
 	}
-	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Runs != 1 {
+	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Runs != 1 || exported.Counts.Resources != 1 {
 		t.Fatalf("redacted export counts가 이상해요: %+v", exported.Counts)
 	}
 }

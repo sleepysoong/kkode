@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -25,6 +26,7 @@ type SessionExportResponse struct {
 	Todos         []TodoDTO              `json:"todos"`
 	Checkpoints   []CheckpointDTO        `json:"checkpoints,omitempty"`
 	Runs          []RunDTO               `json:"runs,omitempty"`
+	Resources     []ResourceDTO          `json:"resources,omitempty"`
 }
 
 // SessionExportCountsDTO는 export bundle이 잘렸는지 adapter가 빠르게 검증할 때 쓰는 카운트예요.
@@ -34,6 +36,7 @@ type SessionExportCountsDTO struct {
 	Todos       int `json:"todos"`
 	Checkpoints int `json:"checkpoints"`
 	Runs        int `json:"runs"`
+	Resources   int `json:"resources"`
 }
 
 // SessionImportRequest는 export bundle을 다른 gateway/store로 다시 심을 때 쓰는 요청이에요.
@@ -42,6 +45,7 @@ type SessionImportRequest struct {
 	RawSession    *session.Session `json:"raw_session"`
 	Checkpoints   []CheckpointDTO  `json:"checkpoints,omitempty"`
 	Runs          []RunDTO         `json:"runs,omitempty"`
+	Resources     []ResourceDTO    `json:"resources,omitempty"`
 	NewSessionID  string           `json:"new_session_id,omitempty"`
 	Overwrite     bool             `json:"overwrite,omitempty"`
 }
@@ -93,7 +97,13 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		}
 		resp.Runs = runs
 	}
-	resp.Counts = SessionExportCountsDTO{Turns: len(resp.Turns), Events: len(resp.Events), Todos: len(resp.Todos), Checkpoints: len(resp.Checkpoints), Runs: len(resp.Runs)}
+	if resources, err := s.exportReferencedResources(r.Context(), resp.Runs); err != nil {
+		writeError(w, r, http.StatusInternalServerError, "export_resources_failed", err.Error())
+		return
+	} else {
+		resp.Resources = resources
+	}
+	resp.Counts = SessionExportCountsDTO{Turns: len(resp.Turns), Events: len(resp.Events), Todos: len(resp.Todos), Checkpoints: len(resp.Checkpoints), Runs: len(resp.Runs), Resources: len(resp.Resources)}
 	if redacted {
 		redactSessionExport(&resp)
 	}
@@ -152,6 +162,30 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 			counts.Checkpoints++
 		}
 	}
+	if len(req.Resources) > 0 {
+		resourceStore := s.resourceStore()
+		if resourceStore == nil {
+			writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
+			return
+		}
+		for _, item := range req.Resources {
+			kind := session.ResourceKind(strings.TrimSpace(item.Kind))
+			if kind == "" {
+				writeError(w, r, http.StatusBadRequest, "invalid_resource", "import resource kind가 필요해요")
+				return
+			}
+			resource, err := resourceFromDTO(kind, strings.TrimSpace(item.ID), item)
+			if err != nil {
+				writeError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
+				return
+			}
+			if _, err := resourceStore.SaveResource(r.Context(), resource); err != nil {
+				writeError(w, r, http.StatusInternalServerError, "import_resource_failed", err.Error())
+				return
+			}
+			counts.Resources++
+		}
+	}
 	if len(req.Runs) > 0 {
 		runStore, ok := s.cfg.Store.(session.RunStore)
 		if !ok {
@@ -180,6 +214,76 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 		RequestedOverwrite: req.Overwrite,
 	}
 	writeJSONStatus(w, http.StatusCreated, resp)
+}
+
+func (s *Server) exportReferencedResources(ctx context.Context, runs []RunDTO) ([]ResourceDTO, error) {
+	if len(runs) == 0 {
+		return nil, nil
+	}
+	store := s.resourceStore()
+	if store == nil {
+		return nil, nil
+	}
+	type key struct {
+		kind session.ResourceKind
+		id   string
+	}
+	seen := map[key]bool{}
+	var ordered []key
+	add := func(kind session.ResourceKind, id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		k := key{kind: kind, id: id}
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		ordered = append(ordered, k)
+	}
+	for _, run := range runs {
+		for _, id := range run.MCPServers {
+			add(session.ResourceMCPServer, id)
+		}
+		for _, id := range run.Skills {
+			add(session.ResourceSkill, id)
+		}
+		for _, id := range run.Subagents {
+			add(session.ResourceSubagent, id)
+		}
+	}
+	out := make([]ResourceDTO, 0, len(ordered))
+	for i := 0; i < len(ordered); i++ {
+		item := ordered[i]
+		resource, err := store.LoadResource(ctx, item.kind, item.id)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				continue
+			}
+			return nil, err
+		}
+		out = append(out, toResourceDTO(resource))
+		if resource.Kind == session.ResourceSubagent {
+			for _, linkedID := range subagentLinkedMCPServerIDs(resource) {
+				add(session.ResourceMCPServer, linkedID)
+			}
+		}
+	}
+	return out, nil
+}
+
+func subagentLinkedMCPServerIDs(resource session.Resource) []string {
+	var cfg struct {
+		MCPServerIDs []string `json:"mcp_server_ids"`
+	}
+	if len(resource.Config) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(resource.Config, &cfg); err != nil {
+		return nil
+	}
+	return cfg.MCPServerIDs
 }
 
 func rewriteImportedSessionID(sess *session.Session, newID string) {
@@ -254,6 +358,7 @@ func redactSessionExport(resp *SessionExportResponse) {
 		resp.Runs[i].Error = llm.RedactSecrets(resp.Runs[i].Error)
 		resp.Runs[i].Metadata = redactStringMap(resp.Runs[i].Metadata)
 	}
+	resp.Resources = RedactResourceDTOs(resp.Resources)
 }
 
 func redactRawJSON(raw json.RawMessage) json.RawMessage {
