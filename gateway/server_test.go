@@ -386,6 +386,32 @@ func TestGatewayRequiresAPIKeyWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestGatewayVersionUsesTypedDTOAndStableProviderOrder(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store:     store,
+		Version:   "v-test",
+		Commit:    "abc123",
+		Providers: []ProviderDTO{{Name: "omniroute"}, {Name: "copilot"}, {Name: "openai"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var body VersionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Version != "v-test" || body.Commit != "abc123" || strings.Join(body.Providers, ",") != "copilot,omniroute,openai" {
+		t.Fatalf("version DTO가 안정적으로 노출돼야 해요: %+v", body)
+	}
+}
+
 func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{Store: store, Version: "test", APIKey: "secret", CORSOrigins: []string{"https://panel.example"}})

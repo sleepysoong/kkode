@@ -472,6 +472,7 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []s
 	for _, p := range s.cfg.Providers {
 		names = append(names, p.Name)
 	}
+	sort.Strings(names)
 	writeJSON(w, VersionResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Providers: names})
 }
 
