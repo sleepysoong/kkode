@@ -506,7 +506,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 		writeError(w, r, http.StatusNotFound, "not_found", "provider endpoint를 찾을 수 없어요")
 		return
 	}
-	writeJSON(w, ProviderListResponse{Providers: s.cfg.Providers})
+	writeJSON(w, ProviderListResponse{Providers: providersForDiscovery(s.cfg.Providers)})
 }
 
 func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerName string) {
@@ -538,23 +538,54 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []st
 	}
 	providerFilter := strings.TrimSpace(r.URL.Query().Get("provider"))
 	out := []ModelDTO{}
-	for _, provider := range s.cfg.Providers {
+	for _, provider := range providersForDiscovery(s.cfg.Providers) {
 		if providerFilter != "" && !providerMatches(provider, providerFilter) {
 			continue
 		}
-		models := provider.Models
-		if len(models) == 0 && provider.DefaultModel != "" {
-			models = []string{provider.DefaultModel}
-		}
-		for _, model := range models {
-			model = strings.TrimSpace(model)
-			if model == "" {
-				continue
-			}
+		for _, model := range modelNamesForDiscovery(provider) {
 			out = append(out, ModelDTO{ID: model, Provider: provider.Name, DisplayName: model, Default: model == provider.DefaultModel, Capabilities: cloneAnyMap(provider.Capabilities), AuthStatus: provider.AuthStatus})
 		}
 	}
 	writeJSON(w, ModelListResponse{Models: out})
+}
+
+func providersForDiscovery(providers []ProviderDTO) []ProviderDTO {
+	out := append([]ProviderDTO(nil), providers...)
+	sort.SliceStable(out, func(i, j int) bool {
+		left := strings.ToLower(strings.TrimSpace(out[i].Name))
+		right := strings.ToLower(strings.TrimSpace(out[j].Name))
+		if left == right {
+			return out[i].Name < out[j].Name
+		}
+		return left < right
+	})
+	return out
+}
+
+func modelNamesForDiscovery(provider ProviderDTO) []string {
+	models := append([]string(nil), provider.Models...)
+	if len(models) == 0 && provider.DefaultModel != "" {
+		models = []string{provider.DefaultModel}
+	}
+	seen := map[string]bool{}
+	rest := []string{}
+	defaultModel := strings.TrimSpace(provider.DefaultModel)
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" || seen[model] {
+			continue
+		}
+		seen[model] = true
+		if defaultModel != "" && model == defaultModel {
+			continue
+		}
+		rest = append(rest, model)
+	}
+	sort.Strings(rest)
+	if defaultModel != "" && seen[defaultModel] {
+		return append([]string{defaultModel}, rest...)
+	}
+	return rest
 }
 
 func findProvider(providers []ProviderDTO, name string) (ProviderDTO, bool) {
@@ -591,7 +622,7 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 	if len(features) == 0 {
 		features = DefaultFeatureCatalog()
 	}
-	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}})
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: providersForDiscovery(s.cfg.Providers), DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}})
 }
 
 func durationSeconds(d time.Duration) int {

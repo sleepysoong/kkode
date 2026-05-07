@@ -1444,11 +1444,15 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
 		t.Fatal(err)
 	}
-	if providers.Providers[0].Conversion == nil || providers.Providers[0].Conversion.Source != "http-json+sse" || providers.Providers[0].Conversion.Operations[0] != "responses.create" {
-		t.Fatalf("provider 변환 profile discovery가 필요해요: %+v", providers.Providers[0])
+	openaiProvider, ok := findProvider(providers.Providers, "openai")
+	if !ok {
+		t.Fatalf("openai provider discovery가 필요해요: %+v", providers.Providers)
 	}
-	if len(providers.Providers[0].Aliases) != 1 || providers.Providers[0].Aliases[0] != "openai-compatible" {
-		t.Fatalf("provider alias discovery가 필요해요: %+v", providers.Providers[0])
+	if openaiProvider.Conversion == nil || openaiProvider.Conversion.Source != "http-json+sse" || openaiProvider.Conversion.Operations[0] != "responses.create" {
+		t.Fatalf("provider 변환 profile discovery가 필요해요: %+v", openaiProvider)
+	}
+	if len(openaiProvider.Aliases) != 1 || openaiProvider.Aliases[0] != "openai-compatible" {
+		t.Fatalf("provider alias discovery가 필요해요: %+v", openaiProvider)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/openai-compatible", nil)
@@ -1496,6 +1500,63 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("없는 provider는 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGatewayDiscoveryUsesStableProviderAndModelOrder(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{Store: store, Providers: []ProviderDTO{
+		{Name: "zeta", Models: []string{"z-2", "z-1"}, DefaultModel: "z-1"},
+		{Name: "alpha", Models: []string{"alpha-extra", "alpha-default", "alpha-extra"}, DefaultModel: "alpha-default"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var providers ProviderListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &providers); err != nil {
+		t.Fatal(err)
+	}
+	if len(providers.Providers) != 2 || providers.Providers[0].Name != "alpha" || providers.Providers[1].Name != "zeta" {
+		t.Fatalf("provider discovery는 이름순으로 안정적이어야 해요: %+v", providers.Providers)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/models", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var models ModelListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &models); err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, model := range models.Models {
+		got = append(got, model.Provider+"/"+model.ID)
+	}
+	if strings.Join(got, ",") != "alpha/alpha-default,alpha/alpha-extra,zeta/z-1,zeta/z-2" {
+		t.Fatalf("model discovery는 provider 이름순과 default-first 모델순이어야 해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var caps CapabilityResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
+		t.Fatal(err)
+	}
+	if len(caps.Providers) != 2 || caps.Providers[0].Name != "alpha" || caps.Providers[1].Name != "zeta" {
+		t.Fatalf("capabilities provider discovery도 안정적인 순서여야 해요: %+v", caps.Providers)
 	}
 }
 
