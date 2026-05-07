@@ -6,20 +6,23 @@ import (
 	"net/http"
 )
 
-type apiError struct {
+// ErrorDTO는 모든 gateway 실패 응답의 표준 오류 본문이에요.
+// 외부 SDK와 웹/Discord adapter는 code/request_id를 기준으로 재시도와 사용자 메시지를 결정해요.
+type ErrorDTO struct {
 	Code      string         `json:"code"`
 	Message   string         `json:"message"`
 	RequestID string         `json:"request_id,omitempty"`
 	Details   map[string]any `json:"details,omitempty"`
 }
 
-type errorEnvelope struct {
-	Error apiError `json:"error"`
+// ErrorEnvelope는 gateway의 표준 error envelope이에요.
+type ErrorEnvelope struct {
+	Error ErrorDTO `json:"error"`
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	requestID := requestIDFromRequest(r)
-	writeJSONStatus(w, status, errorEnvelope{Error: apiError{Code: code, Message: message, RequestID: requestID}})
+	writeJSONStatus(w, status, ErrorEnvelope{Error: ErrorDTO{Code: code, Message: message, RequestID: requestID}})
 }
 
 func writeJSONDecodeError(w http.ResponseWriter, r *http.Request, err error) {

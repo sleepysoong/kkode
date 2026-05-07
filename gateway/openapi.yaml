@@ -3292,15 +3292,17 @@ components:
       required: [error]
       properties:
         error:
+          $ref: '#/components/schemas/Error'
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        details:
           type: object
-          required: [code, message]
-          properties:
-            code:
-              type: string
-            message:
-              type: string
-            request_id:
-              type: string
-            details:
-              type: object
-              additionalProperties: true
+          additionalProperties: true

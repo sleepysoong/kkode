@@ -116,7 +116,7 @@ func TestGatewayRejectsOversizedRequestBody(t *testing.T) {
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("큰 요청 body는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	var body errorEnvelope
+	var body ErrorEnvelope
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestGatewayRejectsTrailingJSONValue(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("추가 JSON 값은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	var body errorEnvelope
+	var body ErrorEnvelope
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
 	if rec.Header().Get(RequestIDHeader) != "client_req" {
 		t.Fatalf("client request id를 보존해야 해요: %v", rec.Header())
 	}
-	var body errorEnvelope
+	var body ErrorEnvelope
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}

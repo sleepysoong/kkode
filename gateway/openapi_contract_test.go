@@ -33,6 +33,8 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		dto    any
 	}{
 		{schema: "APIIndexResponse", dto: APIIndexResponse{}},
+		{schema: "ErrorEnvelope", dto: ErrorEnvelope{}},
+		{schema: "Error", dto: ErrorDTO{}},
 		{schema: "CapabilityResponse", dto: CapabilityResponse{}},
 		{schema: "DiagnosticsResponse", dto: DiagnosticsResponse{}},
 		{schema: "DiagnosticCheck", dto: DiagnosticCheckDTO{}},
