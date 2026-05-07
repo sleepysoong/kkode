@@ -18,7 +18,7 @@ func DefaultFeatureCatalog() []FeatureDTO {
 		{Name: "subagents", Status: "implemented", Description: "Subagent manifest를 API와 SQLite에 저장하고 custom agent 설정으로 재사용할 수 있어요.", Endpoints: []string{"GET /api/v1/subagents", "POST /api/v1/subagents", "GET /api/v1/subagents/{resource_id}", "PUT /api/v1/subagents/{resource_id}", "DELETE /api/v1/subagents/{resource_id}", "GET /api/v1/subagents/{resource_id}/preview"}},
 		{Name: "lsp", Status: "implemented", Description: "Go source symbol index, definition/reference, diagnostics, hover를 LSP-style API로 조회할 수 있어요.", Endpoints: []string{"GET /api/v1/lsp/symbols", "GET /api/v1/lsp/document-symbols", "GET /api/v1/lsp/definitions", "GET /api/v1/lsp/references", "GET /api/v1/lsp/diagnostics", "GET /api/v1/lsp/hover"}},
 		{Name: "tools", Status: "implemented", Description: "file/shell/web 표준 tool 목록과 직접 실행 API를 제공해요. 권한 프롬프트 없이 바로 실행해요.", Endpoints: []string{"GET /api/v1/tools", "POST /api/v1/tools/call"}},
-		{Name: "files", Status: "implemented", Description: "웹 패널용 파일 목록, 읽기, 쓰기, glob, grep API를 제공해요. 권한 프롬프트 없이 바로 실행해요.", Endpoints: []string{"GET /api/v1/files", "GET /api/v1/files/content", "PUT /api/v1/files/content", "GET /api/v1/files/glob", "GET /api/v1/files/grep"}},
+		{Name: "files", Status: "implemented", Description: "웹 패널용 파일 목록, 읽기, 쓰기, patch, glob, grep API를 제공해요. 권한 프롬프트 없이 바로 실행해요.", Endpoints: []string{"GET /api/v1/files", "GET /api/v1/files/content", "PUT /api/v1/files/content", "POST /api/v1/files/patch", "GET /api/v1/files/glob", "GET /api/v1/files/grep"}},
 		{Name: "git", Status: "implemented", Description: "웹 패널이 변경사항을 렌더링할 수 있게 git status, diff, log를 제공해요.", Endpoints: []string{"GET /api/v1/git/status", "GET /api/v1/git/diff", "GET /api/v1/git/log"}},
 	}
 }

@@ -258,6 +258,25 @@ paths:
                 $ref: '#/components/schemas/FileGlobResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/files/patch:
+    post:
+      summary: apply_patch 형식 patch를 workspace에 적용해요.
+      description: 권한 프롬프트 없이 project_root 기준으로 즉시 적용해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FilePatchRequest'
+      responses:
+        '200':
+          description: patch 적용 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilePatchResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/git/status:
     get:
       summary: workspace git status를 반환해요.
@@ -1825,6 +1844,22 @@ components:
           type: integer
         excerpt:
           type: string
+    FilePatchRequest:
+      type: object
+      required: [project_root, patch_text]
+      properties:
+        project_root:
+          type: string
+        patch_text:
+          type: string
+    FilePatchResponse:
+      type: object
+      required: [project_root, applied]
+      properties:
+        project_root:
+          type: string
+        applied:
+          type: boolean
     FileWriteRequest:
       type: object
       required: [project_root, path, content]

@@ -249,7 +249,7 @@ erDiagram
 - `GET /api/v1/lsp/symbols?project_root=...&query=...`는 files/git API와 같은 workspace root 검증을 거친 뒤 웹 패널 코드 탐색을 위한 Go workspace symbol 검색을 제공해요. `GET /api/v1/lsp/document-symbols?project_root=...&path=...`는 파일 outline을 반환하고, `GET /api/v1/lsp/definitions?symbol=...`와 `GET /api/v1/lsp/references?symbol=...`는 definition/reference 위치를 반환해요. `GET /api/v1/lsp/diagnostics`와 `GET /api/v1/lsp/hover`는 parse diagnostic과 symbol hover 문서를 제공해요.
 - `GET /api/v1/tools`, `POST /api/v1/tools/call`은 웹 패널/Discord adapter가 agent run 없이도 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`를 직접 실행하게 해요. 권한 프롬프트 없이 바로 실행하는 YOLO API예요.
 - `GET /api/v1/git/status`, `/git/diff`, `/git/log`는 웹 패널이 변경 파일, diff, 최근 commit을 바로 렌더링하게 해요.
-- `GET /api/v1/files`, `GET/PUT /api/v1/files/content`, `GET /api/v1/files/glob`, `GET /api/v1/files/grep`는 웹 패널 파일 브라우저용 목록/읽기/쓰기/glob/검색 API예요. 내부적으로 workspace 경계를 재사용해요.
+- `GET /api/v1/files`, `GET/PUT /api/v1/files/content`, `POST /api/v1/files/patch`, `GET /api/v1/files/glob`, `GET /api/v1/files/grep`는 웹 패널 파일 브라우저용 목록/읽기/쓰기/patch/glob/검색 API예요. 내부적으로 workspace 경계를 재사용해요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support

@@ -58,6 +58,16 @@ type FileWriteRequest struct {
 	Content     string `json:"content"`
 }
 
+type FilePatchRequest struct {
+	ProjectRoot string `json:"project_root"`
+	PatchText   string `json:"patch_text"`
+}
+
+type FilePatchResponse struct {
+	ProjectRoot string `json:"project_root"`
+	Applied     bool   `json:"applied"`
+}
+
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		s.listFiles(w, r)
@@ -73,6 +83,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 	}
 	if len(parts) == 2 && parts[1] == "glob" && r.Method == http.MethodGet {
 		s.globFiles(w, r)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "patch" && r.Method == http.MethodPost {
+		s.applyFilePatch(w, r)
 		return
 	}
 	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "content") {
@@ -158,6 +172,28 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content})
+}
+
+func (s *Server) applyFilePatch(w http.ResponseWriter, r *http.Request) {
+	var req FilePatchRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	if strings.TrimSpace(req.PatchText) == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_patch", "patch_text가 필요해요")
+		return
+	}
+	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+		return
+	}
+	if err := ws.ApplyPatch(req.PatchText); err != nil {
+		writeError(w, r, http.StatusBadRequest, "apply_patch_failed", err.Error())
+		return
+	}
+	writeJSON(w, FilePatchResponse{ProjectRoot: projectRoot, Applied: true})
 }
 
 func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {

@@ -2160,6 +2160,44 @@ func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
 	}
 }
 
+func TestGatewayFilesAPIAppliesPatch(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "src", "a.txt"), "one\ntwo\nthree\n")
+	patch := `*** Begin Patch
+*** Update File: src/a.txt
+@@
+ one
+-two
++patched
+ three
+*** End Patch
+`
+	body, err := json.Marshal(FilePatchRequest{ProjectRoot: root, PatchText: patch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files/patch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp FilePatchResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := os.ReadFile(filepath.Join(root, "src", "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Applied || string(updated) != "one\npatched\nthree\n" {
+		t.Fatalf("patch 적용이 이상해요: resp=%+v content=%q", resp, updated)
+	}
+}
+
 func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "web", session.AgentModeBuild)
