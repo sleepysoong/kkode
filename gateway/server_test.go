@@ -2139,6 +2139,27 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	}
 }
 
+func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "src", "a.go"), "package main\n")
+	writeTestFile(t, filepath.Join(root, "src", "b.txt"), "notes\n")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/glob?project_root="+url.QueryEscape(root)+"&pattern=src/*.go&limit=10", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var glob FileGlobResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &glob); err != nil {
+		t.Fatal(err)
+	}
+	if glob.ProjectRoot != root || glob.Pattern != "src/*.go" || len(glob.Paths) != 1 || glob.Paths[0] != "src/a.go" {
+		t.Fatalf("glob 결과가 이상해요: %+v", glob)
+	}
+}
+
 func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "web", session.AgentModeBuild)

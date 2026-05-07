@@ -30,6 +30,13 @@ type FileContentResponse struct {
 	Content     string `json:"content"`
 }
 
+// FileGlobResponse는 웹 패널 파일 팔레트가 glob 결과를 바로 쓰게 해요.
+type FileGlobResponse struct {
+	ProjectRoot string   `json:"project_root"`
+	Pattern     string   `json:"pattern"`
+	Paths       []string `json:"paths"`
+}
+
 // FileGrepResponse는 웹 패널 검색 결과를 file_grep tool과 같은 의미로 반환해요.
 type FileGrepResponse struct {
 	ProjectRoot string             `json:"project_root"`
@@ -62,6 +69,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 	}
 	if len(parts) == 2 && parts[1] == "grep" && r.Method == http.MethodGet {
 		s.grepFiles(w, r)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "glob" && r.Method == http.MethodGet {
+		s.globFiles(w, r)
 		return
 	}
 	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "content") {
@@ -171,6 +182,28 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, FileGrepResponse{ProjectRoot: projectRoot, Pattern: pattern, PathGlob: opts.PathGlob, Regex: opts.Regex, Matches: fileGrepMatchDTOs(matches)})
+}
+
+func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
+	ws, projectRoot, ok := workspaceFromQuery(w, r)
+	if !ok {
+		return
+	}
+	pattern := strings.TrimSpace(r.URL.Query().Get("pattern"))
+	if pattern == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_glob", "pattern이 필요해요")
+		return
+	}
+	paths, err := ws.Glob(pattern)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "glob_files_failed", err.Error())
+		return
+	}
+	limit := queryLimit(r, "limit", 500, 5000)
+	if len(paths) > limit {
+		paths = paths[:limit]
+	}
+	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths})
 }
 
 func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {

@@ -229,6 +229,35 @@ paths:
                 $ref: '#/components/schemas/FileGrepResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/files/glob:
+    get:
+      summary: workspace 파일 경로를 glob 패턴으로 찾아요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pattern
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 500
+            maximum: 5000
+      responses:
+        '200':
+          description: glob 검색 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileGlobResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/git/status:
     get:
       summary: workspace git status를 반환해요.
@@ -1758,6 +1787,18 @@ components:
           type: string
         content:
           type: string
+    FileGlobResponse:
+      type: object
+      required: [project_root, pattern, paths]
+      properties:
+        project_root:
+          type: string
+        pattern:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
     FileGrepResponse:
       type: object
       required: [project_root, pattern, matches]
