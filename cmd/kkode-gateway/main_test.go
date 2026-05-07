@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/app"
 	"github.com/sleepysoong/kkode/gateway"
@@ -326,6 +327,9 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
 	}
+	if len(preview.ContextBlocks) != 1 || !strings.Contains(preview.ContextBlocks[0], "코드를 리뷰해요") || preview.ContextTruncated {
+		t.Fatalf("run preview는 선택된 prompt context를 직접 보여줘야 해요: blocks=%q truncated=%v", preview.ContextBlocks, preview.ContextTruncated)
+	}
 	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "코드를 리뷰해요") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
@@ -342,6 +346,22 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	headers := preview.MCPServers[0].Config["headers"].(map[string]any)
 	if headers["CONTEXT7_API_KEY"] != "[REDACTED]" {
 		t.Fatalf("run preview는 MCP secret header를 숨겨야 해요: %+v", preview.MCPServers[0].Config)
+	}
+}
+
+func TestPreviewContextBlocksRedactsAndTruncatesUTF8(t *testing.T) {
+	blocks, truncated := previewContextBlocks([]string{
+		"token=ghp_123456789012345678901234567890123456\n가나다라마",
+		"두 번째 블록이에요",
+	}, 20)
+	if !truncated {
+		t.Fatal("context preview는 byte 예산을 넘으면 잘림을 알려줘야 해요")
+	}
+	if len(blocks) != 1 || strings.Contains(blocks[0], "ghp_") || !strings.Contains(blocks[0], "[REDACTED]") {
+		t.Fatalf("context preview는 secret을 숨기고 첫 블록을 반환해야 해요: %#v", blocks)
+	}
+	if !utf8.ValidString(blocks[0]) {
+		t.Fatalf("context preview는 UTF-8을 깨면 안 돼요: %q", blocks[0])
 	}
 }
 

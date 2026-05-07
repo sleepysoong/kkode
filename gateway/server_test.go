@@ -1308,7 +1308,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 		Store: store,
 		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
 			gotReq = req
-			return &RunPreviewResponse{SessionID: req.SessionID, Provider: "openai", Model: "gpt-5-mini", BaseRequestTools: []string{"mcp"}}, nil
+			return &RunPreviewResponse{SessionID: req.SessionID, Provider: "openai", Model: "gpt-5-mini", BaseRequestTools: []string{"mcp"}, ContextBlocks: []string{"선택 context예요"}}, nil
 		},
 	})
 	if err != nil {
@@ -1325,7 +1325,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream {
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
 }

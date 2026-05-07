@@ -195,6 +195,8 @@ type RunPreviewResponse struct {
 	Subagents         []ResourceDTO              `json:"subagents,omitempty"`
 	DefaultMCPServers []ResourceDTO              `json:"default_mcp_servers,omitempty"`
 	BaseRequestTools  []string                   `json:"base_request_tools,omitempty"`
+	ContextBlocks     []string                   `json:"context_blocks,omitempty"`
+	ContextTruncated  bool                       `json:"context_truncated,omitempty"`
 	ProviderRequest   *ProviderRequestPreviewDTO `json:"provider_request,omitempty"`
 }
 

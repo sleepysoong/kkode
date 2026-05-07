@@ -2964,6 +2964,14 @@ components:
           type: array
           items:
             type: string
+        context_blocks:
+          type: array
+          items:
+            type: string
+          description: 선택한 Skill/Subagent에서 system prompt에 추가될 secret 마스킹된 컨텍스트예요.
+        context_truncated:
+          type: boolean
+          description: context_blocks가 preview byte 예산 때문에 잘렸는지 알려줘요.
         provider_request:
           $ref: '#/components/schemas/ProviderRequestPreview'
     ProviderRequestPreview:

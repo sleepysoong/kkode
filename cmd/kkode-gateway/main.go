@@ -17,6 +17,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/agent"
 	"github.com/sleepysoong/kkode/app"
@@ -352,6 +353,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
+		contextBlocks, contextTruncated := previewContextBlocks(providerOptions.ContextBlocks, 64<<10)
 		return &gateway.RunPreviewResponse{
 			SessionID:         req.SessionID,
 			ProjectRoot:       sess.ProjectRoot,
@@ -362,6 +364,8 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 			Subagents:         resourceDTOsForIDs(ctx, store, session.ResourceSubagent, req.Subagents),
 			DefaultMCPServers: defaultMCPDTOs(),
 			BaseRequestTools:  toolNames(handle.BaseRequest.Tools),
+			ContextBlocks:     contextBlocks,
+			ContextTruncated:  contextTruncated,
 			ProviderRequest:   toProviderRequestPreviewDTO(providerPreview),
 		}, nil
 	}
@@ -609,6 +613,69 @@ func cloneStringSlice(in []string) []string {
 	out := make([]string, len(in))
 	copy(out, in)
 	return out
+}
+
+func previewContextBlocks(blocks []string, maxBytes int) ([]string, bool) {
+	if len(blocks) == 0 {
+		return nil, false
+	}
+	if maxBytes <= 0 {
+		maxBytes = 64 << 10
+	}
+	out := make([]string, 0, len(blocks))
+	remaining := maxBytes
+	truncated := false
+	for _, block := range blocks {
+		block = strings.TrimSpace(llm.RedactSecrets(block))
+		if block == "" {
+			continue
+		}
+		if remaining <= 0 {
+			truncated = true
+			break
+		}
+		if len(block) > remaining {
+			block = truncateUTF8Bytes(block, remaining)
+			truncated = true
+		}
+		if block != "" {
+			out = append(out, block)
+			remaining -= len(block)
+		}
+		if truncated {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil, truncated
+	}
+	return out, truncated
+}
+
+func truncateUTF8Bytes(text string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	used := 0
+	end := 0
+	for i, r := range text {
+		size := utf8.RuneLen(r)
+		if size < 0 {
+			size = len(string(r))
+		}
+		if used+size > maxBytes {
+			break
+		}
+		used += size
+		end = i + size
+	}
+	if end == 0 {
+		return ""
+	}
+	return text[:end]
 }
 
 func firstNonEmpty(value, fallback string) string {
