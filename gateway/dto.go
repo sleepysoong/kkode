@@ -228,6 +228,7 @@ type RunEventListResponse struct {
 // ProviderDTO는 gateway가 알고 있는 provider capability를 설명해요.
 type ProviderDTO struct {
 	Name         string         `json:"name"`
+	Aliases      []string       `json:"aliases,omitempty"`
 	Models       []string       `json:"models,omitempty"`
 	DefaultModel string         `json:"default_model,omitempty"`
 	Capabilities map[string]any `json:"capabilities,omitempty"`

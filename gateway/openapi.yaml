@@ -84,6 +84,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderListResponse'
+  /api/v1/providers/{provider}:
+    get:
+      summary: provider 이름이나 alias로 provider 상세를 반환해요.
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: provider 상세예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/models:
     get:
       summary: provider별 model catalog를 반환해요.
@@ -1842,6 +1860,10 @@ components:
       properties:
         name:
           type: string
+        aliases:
+          type: array
+          items:
+            type: string
         models:
           type: array
           items:

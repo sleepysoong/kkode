@@ -466,8 +466,21 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []s
 }
 
 func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts []string) {
-	if len(parts) != 1 || r.Method != http.MethodGet {
+	if r.Method != http.MethodGet {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 providers 요청이에요")
+		return
+	}
+	if len(parts) == 2 {
+		provider, ok := findProvider(s.cfg.Providers, parts[1])
+		if !ok {
+			writeError(w, r, http.StatusNotFound, "provider_not_found", "provider를 찾을 수 없어요")
+			return
+		}
+		writeJSON(w, provider)
+		return
+	}
+	if len(parts) != 1 {
+		writeError(w, r, http.StatusNotFound, "not_found", "provider endpoint를 찾을 수 없어요")
 		return
 	}
 	writeJSON(w, ProviderListResponse{Providers: s.cfg.Providers})
@@ -481,7 +494,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []st
 	providerFilter := strings.TrimSpace(r.URL.Query().Get("provider"))
 	out := []ModelDTO{}
 	for _, provider := range s.cfg.Providers {
-		if providerFilter != "" && !strings.EqualFold(provider.Name, providerFilter) {
+		if providerFilter != "" && !providerMatches(provider, providerFilter) {
 			continue
 		}
 		models := provider.Models
@@ -497,6 +510,31 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []st
 		}
 	}
 	writeJSON(w, ModelListResponse{Models: out})
+}
+
+func findProvider(providers []ProviderDTO, name string) (ProviderDTO, bool) {
+	for _, provider := range providers {
+		if providerMatches(provider, name) {
+			return provider, true
+		}
+	}
+	return ProviderDTO{}, false
+}
+
+func providerMatches(provider ProviderDTO, name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	if strings.EqualFold(provider.Name, name) {
+		return true
+	}
+	for _, alias := range provider.Aliases {
+		if strings.EqualFold(alias, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, parts []string) {

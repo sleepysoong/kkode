@@ -1152,7 +1152,7 @@ func TestGatewaySessionTurnsAPI(t *testing.T) {
 func TestGatewayModelsDiscovery(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{Store: store, Providers: []ProviderDTO{
-		{Name: "openai", Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured", Conversion: &ConversionDTO{RequestConverter: "openai.ResponsesConverter", Call: "openai.Client.CallProvider", Source: "http-json+sse", Operations: []string{"responses.create"}}},
+		{Name: "openai", Aliases: []string{"openai-compatible"}, Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured", Conversion: &ConversionDTO{RequestConverter: "openai.ResponsesConverter", Call: "openai.Client.CallProvider", Source: "http-json+sse", Operations: []string{"responses.create"}}},
 		{Name: "codex", Models: []string{"gpt-5.3-codex"}, DefaultModel: "gpt-5.3-codex", AuthStatus: "local"},
 	}})
 	if err != nil {
@@ -1173,6 +1173,19 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	}
 	if listed.Models[0].Provider != "openai" || listed.Models[0].ID != "gpt-5-mini" || !listed.Models[0].Default || listed.Models[0].AuthStatus != "configured" {
 		t.Fatalf("기본 model discovery가 이상해요: %+v", listed.Models[0])
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai-compatible", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alias model status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = ModelListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Models) != 2 || listed.Models[0].Provider != "openai" {
+		t.Fatalf("provider alias로 model을 찾아야 해요: %+v", listed)
 	}
 	listed.Models[0].Capabilities["tools"] = false
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai", nil)
@@ -1197,6 +1210,30 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	}
 	if providers.Providers[0].Conversion == nil || providers.Providers[0].Conversion.Source != "http-json+sse" || providers.Providers[0].Conversion.Operations[0] != "responses.create" {
 		t.Fatalf("provider 변환 profile discovery가 필요해요: %+v", providers.Providers[0])
+	}
+	if len(providers.Providers[0].Aliases) != 1 || providers.Providers[0].Aliases[0] != "openai-compatible" {
+		t.Fatalf("provider alias discovery가 필요해요: %+v", providers.Providers[0])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/openai-compatible", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("provider detail status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var provider ProviderDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &provider); err != nil {
+		t.Fatal(err)
+	}
+	if provider.Name != "openai" || len(provider.Aliases) != 1 || provider.Conversion == nil || provider.Conversion.Source != "http-json+sse" {
+		t.Fatalf("provider 상세 discovery가 이상해요: %+v", provider)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/missing", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("없는 provider는 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

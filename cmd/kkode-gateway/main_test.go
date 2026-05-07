@@ -55,6 +55,9 @@ func TestProviderDTOsExposeConversionProfile(t *testing.T) {
 		if provider.Conversion == nil || provider.Conversion.RequestConverter == "" || provider.Conversion.Source == "" {
 			t.Fatalf("%s provider 변환 profile이 gateway discovery에 필요해요: %+v", provider.Name, provider.Conversion)
 		}
+		if provider.Name == "copilot" && len(provider.Aliases) == 0 {
+			t.Fatalf("마이그레이션 친화 provider alias가 필요해요: %+v", provider)
+		}
 	}
 }
 
