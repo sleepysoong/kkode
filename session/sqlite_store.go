@@ -31,6 +31,11 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 	if err != nil {
 		return nil, err
 	}
+	// SQLite는 writer가 하나라서 database/sql pool을 여러 writer connection으로 열면
+	// 짧은 background run 상태 저장끼리도 SQLITE_BUSY가 날 수 있어요.
+	// gateway API는 비동기 run queue가 상위에서 병렬성을 조절하므로 store connection은 직렬화해요.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	store := &SQLiteStore{db: db}
 	if err := store.migrate(context.Background()); err != nil {
 		_ = db.Close()
@@ -51,6 +56,7 @@ func (s *SQLiteStore) Ping(ctx context.Context) error {
 func (s *SQLiteStore) migrate(ctx context.Context) error {
 	stmts := []string{
 		`PRAGMA journal_mode = WAL;`,
+		`PRAGMA busy_timeout = 5000;`,
 		`PRAGMA foreign_keys = ON;`,
 		`CREATE TABLE IF NOT EXISTS sessions (
 			id TEXT PRIMARY KEY,

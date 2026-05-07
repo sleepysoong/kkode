@@ -2012,8 +2012,77 @@ while True:
 	}
 	content, _ := got.Result["content"].([]any)
 	first, _ := content[0].(map[string]any)
-	if got.Tool != "echo" || first["text"] != "hello kkode" {
+	if got.Tool != "echo" || first["text"] != "hello kkode" || got.ResultBytes == 0 || got.ResultTruncated {
 		t.Fatalf("MCP tools/call 결과가 이상해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/echo/call", bytes.NewBufferString(`{"arguments":{"name":"kkode"},"max_output_bytes":7}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("truncated status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	content, _ = got.Result["content"].([]any)
+	first, _ = content[0].(map[string]any)
+	if first["text"] != "hello k" || got.ResultBytes <= 7 || !got.ResultTruncated {
+		t.Fatalf("MCP tools/call 출력 제한 응답이 이상해요: %+v", got)
+	}
+}
+
+func TestGatewayCallsHTTPMCPServerToolJSON(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+			t.Fatal(err)
+		}
+		switch msg["method"] {
+		case "initialize":
+			w.Header().Set("Mcp-Session-Id", "sess_json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": msg["id"], "result": map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}}})
+		case "notifications/initialized":
+			if r.Header.Get("Mcp-Session-Id") != "sess_json" {
+				t.Fatalf("HTTP MCP session header가 이어져야 해요: %s", r.Header.Get("Mcp-Session-Id"))
+			}
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/call":
+			if r.Header.Get("Mcp-Session-Id") != "sess_json" {
+				t.Fatalf("tools/call도 session header를 이어야 해요: %s", r.Header.Get("Mcp-Session-Id"))
+			}
+			params, _ := msg["params"].(map[string]any)
+			if params["name"] != "http_echo" {
+				t.Fatalf("HTTP MCP tool 이름이 이상해요: %+v", params)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": msg["id"], "result": map[string]any{"content": []any{map[string]any{"type": "text", "text": "hello from http mcp"}}, "isError": false}})
+		default:
+			t.Fatalf("unexpected HTTP MCP method: %v", msg["method"])
+		}
+	}))
+	defer upstream.Close()
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceMCPServer, Name: "http", Enabled: true, Config: []byte(`{"kind":"http","url":"` + upstream.URL + `","timeout":3}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/http_echo/call", bytes.NewBufferString(`{"max_output_bytes":5}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got MCPToolCallResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := got.Result["content"].([]any)
+	first, _ := content[0].(map[string]any)
+	if got.Tool != "http_echo" || first["text"] != "hello" || got.ResultBytes <= 5 || !got.ResultTruncated {
+		t.Fatalf("HTTP MCP tools/call 결과 제한이 이상해요: %+v", got)
 	}
 }
 

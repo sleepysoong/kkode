@@ -89,13 +89,16 @@ type MCPPromptGetResponse struct {
 }
 
 type MCPToolCallRequest struct {
-	Arguments map[string]any `json:"arguments,omitempty"`
+	Arguments      map[string]any `json:"arguments,omitempty"`
+	MaxOutputBytes int            `json:"max_output_bytes,omitempty"`
 }
 
 type MCPToolCallResponse struct {
-	Server ResourceDTO    `json:"server"`
-	Tool   string         `json:"tool"`
-	Result map[string]any `json:"result"`
+	Server          ResourceDTO    `json:"server"`
+	Tool            string         `json:"tool"`
+	Result          map[string]any `json:"result"`
+	ResultBytes     int            `json:"result_bytes,omitempty"`
+	ResultTruncated bool           `json:"result_truncated,omitempty"`
 }
 
 type mcpProbeConfig struct {
@@ -197,7 +200,8 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 			writeError(w, r, http.StatusBadGateway, "mcp_tool_call_failed", err.Error())
 			return
 		}
-		writeJSON(w, MCPToolCallResponse{Server: toResourceDTO(resource), Tool: toolName, Result: result})
+		result, resultBytes, truncated := truncateMCPToolResult(result, req.MaxOutputBytes)
+		writeJSON(w, MCPToolCallResponse{Server: toResourceDTO(resource), Tool: toolName, Result: result, ResultBytes: resultBytes, ResultTruncated: truncated})
 	})
 }
 
@@ -273,6 +277,83 @@ func callMCPTool(ctx context.Context, resource session.Resource, toolName string
 		result = map[string]any{}
 	}
 	return result, nil
+}
+
+func truncateMCPToolResult(result map[string]any, maxBytes int) (map[string]any, int, bool) {
+	data, err := json.Marshal(result)
+	if err != nil {
+		return result, 0, false
+	}
+	resultBytes := len(data)
+	if maxBytes <= 0 || resultBytes <= maxBytes {
+		return result, resultBytes, false
+	}
+	budget := maxBytes
+	copied, truncated := truncateMCPValue(result, "", &budget)
+	out, _ := copied.(map[string]any)
+	if out == nil {
+		out = map[string]any{}
+	}
+	if !truncated {
+		preview, _, _ := truncateToolOutput(string(data), maxBytes)
+		out = map[string]any{
+			"content":          []any{map[string]any{"type": "text", "text": preview}},
+			"_kkode_truncated": true,
+		}
+		truncated = true
+	}
+	return out, resultBytes, truncated
+}
+
+func truncateMCPValue(value any, key string, budget *int) (any, bool) {
+	switch v := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		truncated := false
+		for childKey, child := range v {
+			copied, childTruncated := truncateMCPValue(child, childKey, budget)
+			out[childKey] = copied
+			truncated = truncated || childTruncated
+		}
+		return out, truncated
+	case []any:
+		out := make([]any, len(v))
+		truncated := false
+		for i, child := range v {
+			copied, childTruncated := truncateMCPValue(child, key, budget)
+			out[i] = copied
+			truncated = truncated || childTruncated
+		}
+		return out, truncated
+	case string:
+		if !isMCPOutputField(key) {
+			return v, false
+		}
+		if *budget <= 0 {
+			if v == "" {
+				return v, false
+			}
+			return "", true
+		}
+		out, bytes, truncated := truncateToolOutput(v, *budget)
+		if truncated {
+			*budget = 0
+			return out, true
+		}
+		*budget -= bytes
+		return out, false
+	default:
+		return v, false
+	}
+}
+
+func isMCPOutputField(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "text", "blob", "output":
+		return true
+	default:
+		return false
+	}
 }
 
 func runMCPRequest(ctx context.Context, resource session.Resource, method string, params map[string]any) (map[string]any, error) {

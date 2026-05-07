@@ -2710,6 +2710,9 @@ components:
         arguments:
           type: object
           additionalProperties: true
+        max_output_bytes:
+          type: integer
+          description: MCP tools/call result의 text/blob/output 문자열 payload를 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
     MCPToolCallResponse:
       type: object
       required: [server, tool, result]
@@ -2721,6 +2724,12 @@ components:
         result:
           type: object
           additionalProperties: true
+        result_bytes:
+          type: integer
+          description: 제한 전 MCP result JSON byte 수예요.
+        result_truncated:
+          type: boolean
+          description: max_output_bytes 때문에 MCP result 문자열 payload가 잘렸는지 알려줘요.
     LSPSymbolListResponse:
       type: object
       required: [symbols]
