@@ -1903,10 +1903,13 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
 		t.Fatal(err)
 	}
-	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 {
+	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || exported.RawSession.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 {
 		t.Fatalf("session export가 이상해요: %+v", exported)
 	}
-	if exported.Turns[0].ResponseText != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Runs[0].ID != "run_export" {
+	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Todos != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Runs != 1 {
+		t.Fatalf("session export counts가 이상해요: %+v", exported.Counts)
+	}
+	if exported.Turns[0].ResponseText != "ok" || exported.RawSession.Turns[0].Response.Output[0].Content != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Runs[0].ID != "run_export" {
 		t.Fatalf("session export 상세가 이상해요: %+v", exported)
 	}
 }

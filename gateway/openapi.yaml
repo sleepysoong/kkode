@@ -1833,7 +1833,7 @@ components:
             $ref: '#/components/schemas/Session'
     SessionExportResponse:
       type: object
-      required: [format_version, exported_at, session, turns, events, todos]
+      required: [format_version, exported_at, session, raw_session, counts, turns, events, todos]
       properties:
         format_version:
           type: string
@@ -1842,6 +1842,11 @@ components:
           format: date-time
         session:
           $ref: '#/components/schemas/Session'
+        raw_session:
+          type: object
+          description: import/debug를 위한 원본 session JSON snapshot이에요.
+        counts:
+          $ref: '#/components/schemas/SessionExportCounts'
         turns:
           type: array
           items:
@@ -1862,6 +1867,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Run'
+    SessionExportCounts:
+      type: object
+      required: [turns, events, todos, checkpoints, runs]
+      properties:
+        turns:
+          type: integer
+        events:
+          type: integer
+        todos:
+          type: integer
+        checkpoints:
+          type: integer
+        runs:
+          type: integer
     Session:
       type: object
       required: [id, project_root, provider_name, model, agent_name, mode, turn_count, updated_at]

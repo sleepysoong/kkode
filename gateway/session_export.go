@@ -11,14 +11,25 @@ const sessionExportFormatVersion = "kkode.session.export.v1"
 
 // SessionExportResponse는 session 복구/이관/debug를 위해 관련 상태를 한 번에 묶은 JSON이에요.
 type SessionExportResponse struct {
-	FormatVersion string          `json:"format_version"`
-	ExportedAt    time.Time       `json:"exported_at"`
-	Session       SessionDTO      `json:"session"`
-	Turns         []TurnDTO       `json:"turns"`
-	Events        []EventDTO      `json:"events"`
-	Todos         []TodoDTO       `json:"todos"`
-	Checkpoints   []CheckpointDTO `json:"checkpoints,omitempty"`
-	Runs          []RunDTO        `json:"runs,omitempty"`
+	FormatVersion string                 `json:"format_version"`
+	ExportedAt    time.Time              `json:"exported_at"`
+	Session       SessionDTO             `json:"session"`
+	RawSession    session.Session        `json:"raw_session"`
+	Counts        SessionExportCountsDTO `json:"counts"`
+	Turns         []TurnDTO              `json:"turns"`
+	Events        []EventDTO             `json:"events"`
+	Todos         []TodoDTO              `json:"todos"`
+	Checkpoints   []CheckpointDTO        `json:"checkpoints,omitempty"`
+	Runs          []RunDTO               `json:"runs,omitempty"`
+}
+
+// SessionExportCountsDTO는 export bundle이 잘렸는지 adapter가 빠르게 검증할 때 쓰는 카운트예요.
+type SessionExportCountsDTO struct {
+	Turns       int `json:"turns"`
+	Events      int `json:"events"`
+	Todos       int `json:"todos"`
+	Checkpoints int `json:"checkpoints"`
+	Runs        int `json:"runs"`
 }
 
 func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -35,6 +46,7 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		FormatVersion: sessionExportFormatVersion,
 		ExportedAt:    s.cfg.Now(),
 		Session:       toSessionDTO(sess),
+		RawSession:    *sess,
 		Turns:         exportTurnDTOs(sess),
 		Events:        exportEventDTOs(sess),
 		Todos:         todoDTOs(sess.Todos),
@@ -55,6 +67,7 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		}
 		resp.Runs = runs
 	}
+	resp.Counts = SessionExportCountsDTO{Turns: len(resp.Turns), Events: len(resp.Events), Todos: len(resp.Todos), Checkpoints: len(resp.Checkpoints), Runs: len(resp.Runs)}
 	writeJSON(w, resp)
 }
 
