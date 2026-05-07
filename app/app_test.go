@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/codexcli"
@@ -309,6 +310,13 @@ func TestPreviewProviderRequestConvertsAndRedacts(t *testing.T) {
 	}
 	if !strings.Contains(preview.BodyJSON, "file_read") || !strings.Contains(preview.BodyJSON, "[REDACTED]") || strings.Contains(preview.BodyJSON, "abc1234567890secretvalue") {
 		t.Fatalf("body preview 변환/마스킹이 이상해요: %s", preview.BodyJSON)
+	}
+	body, truncated, err := previewJSON(map[string]any{"text": "가나다라마바사"}, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !truncated || !utf8.ValidString(body) {
+		t.Fatalf("provider body preview는 UTF-8 경계에서 잘려야 해요: truncated=%v body=%q", truncated, body)
 	}
 }
 

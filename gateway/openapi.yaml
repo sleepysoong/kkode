@@ -3085,7 +3085,7 @@ components:
           $ref: '#/components/schemas/ProviderRoutePreview'
         body_json:
           type: string
-          description: provider HTTP/API body를 redaction과 길이 제한 뒤 JSON 문자열로 보여줘요.
+          description: provider HTTP/API body를 redaction과 UTF-8 안전 길이 제한 뒤 JSON 문자열로 보여줘요.
         body_truncated:
           type: boolean
           description: body_json이 길이 제한으로 잘렸는지 알려줘요.
@@ -3104,7 +3104,7 @@ components:
           description: CLI/SDK provider가 Raw payload를 쓰는 경우 Go 타입 이름이에요.
         raw_json:
           type: string
-          description: Raw payload를 redaction과 길이 제한 뒤 JSON 문자열로 보여줘요.
+          description: Raw payload를 redaction과 UTF-8 안전 길이 제한 뒤 JSON 문자열로 보여줘요.
         raw_truncated:
           type: boolean
           description: raw_json이 길이 제한으로 잘렸는지 알려줘요.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/httpjson"
@@ -136,10 +137,21 @@ func previewJSON(value any, maxBytes int) (string, bool, error) {
 	text := string(data)
 	truncated := false
 	if len(text) > maxBytes {
-		text = text[:maxBytes]
+		text = truncateStringUTF8Bytes(text, maxBytes)
 		truncated = true
 	}
 	return text, truncated, nil
+}
+
+func truncateStringUTF8Bytes(text string, maxBytes int) string {
+	if maxBytes <= 0 || len(text) <= maxBytes {
+		return text
+	}
+	end := maxBytes
+	for end > 0 && !utf8.ValidString(text[:end]) {
+		end--
+	}
+	return text[:end]
 }
 
 func normalizePreviewBytes(maxBytes int) int {
