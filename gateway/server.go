@@ -105,7 +105,7 @@ func (s *Server) buildHandler() http.Handler {
 	apiHandler := s.bodyLimitMiddleware(s.withAPIAuth(http.HandlerFunc(s.handleAPI)))
 	mux.Handle("/api/v1", apiHandler)
 	mux.Handle("/api/v1/", apiHandler)
-	return s.requestIDMiddleware(s.accessLogMiddleware(s.recoverMiddleware(s.corsMiddleware(mux))))
+	return s.requestIDMiddleware(s.accessLogMiddleware(s.recoverMiddleware(s.securityHeadersMiddleware(s.corsMiddleware(mux)))))
 }
 
 func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
@@ -121,6 +121,13 @@ func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		next.ServeHTTP(w, r)
 	})
 }

@@ -438,6 +438,17 @@ func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
 	}
 }
 
+func TestGatewaySecurityHeaders(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("보안 header가 필요해요: status=%d headers=%v", rec.Code, rec.Header())
+	}
+}
+
 func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{Store: store, Version: "test", RequestIDGenerator: func() string { return "req_test" }})
