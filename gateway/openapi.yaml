@@ -2439,6 +2439,17 @@ components:
           type: string
         description:
           type: string
+        category:
+          type: string
+          description: adapter UI가 tool을 묶을 수 있는 범주예요. 예: file, shell, web.
+        effects:
+          type: array
+          items:
+            type: string
+          description: 권한 게이트가 아니라 UI 표시용 실행 성격이에요. 예: read, write, execute, network.
+        output_format:
+          type: string
+          description: output 문자열 안에 담긴 대표 형식이에요. 예: text, json.
         parameters:
           type: object
           additionalProperties: true

@@ -2682,6 +2682,9 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if !findTool(listed.Tools, "file_write").RequiresWorkspace || findTool(listed.Tools, "web_fetch").RequiresWorkspace {
 		t.Fatalf("tool별 workspace 요구 여부를 discovery해야 해요: %+v", listed.Tools)
 	}
+	if findTool(listed.Tools, "file_write").Category != "file" || findTool(listed.Tools, "file_write").Effects[0] != "write" || findTool(listed.Tools, "shell_run").Effects[0] != "execute" || findTool(listed.Tools, "web_fetch").OutputFormat != "json" {
+		t.Fatalf("tool별 category/effects/output_format discovery가 필요해요: %+v", listed.Tools)
+	}
 	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
 		t.Fatalf("adapter form 생성을 위한 tool 예제가 필요해요: %+v", listed.Tools)
 	}
@@ -2696,7 +2699,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
 		t.Fatal(err)
 	}
-	if detail.Name != "web_fetch" || detail.RequiresWorkspace || detail.ExampleArguments["url"] == "" {
+	if detail.Name != "web_fetch" || detail.Category != "web" || detail.Effects[0] != "network" || detail.OutputFormat != "json" || detail.RequiresWorkspace || detail.ExampleArguments["url"] == "" {
 		t.Fatalf("tool 상세 discovery가 이상해요: %+v", detail)
 	}
 

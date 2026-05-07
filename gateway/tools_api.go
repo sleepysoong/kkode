@@ -16,6 +16,9 @@ type ToolDTO struct {
 	Kind              string         `json:"kind"`
 	Name              string         `json:"name"`
 	Description       string         `json:"description,omitempty"`
+	Category          string         `json:"category,omitempty"`
+	Effects           []string       `json:"effects,omitempty"`
+	OutputFormat      string         `json:"output_format,omitempty"`
 	Parameters        map[string]any `json:"parameters,omitempty"`
 	ExampleArguments  map[string]any `json:"example_arguments,omitempty"`
 	Strict            *bool          `json:"strict,omitempty"`
@@ -132,7 +135,38 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 }
 
 func toToolDTO(tool llm.Tool) ToolDTO {
-	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, ExampleArguments: toolExampleArguments(tool.Name), Strict: tool.Strict, RequiresWorkspace: toolRequiresWorkspace(tool.Name)}
+	meta := toolMetadata(tool.Name)
+	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Category: meta.Category, Effects: meta.Effects, OutputFormat: meta.OutputFormat, Parameters: tool.Parameters, ExampleArguments: toolExampleArguments(tool.Name), Strict: tool.Strict, RequiresWorkspace: toolRequiresWorkspace(tool.Name)}
+}
+
+type toolMetadataDTO struct {
+	Category     string
+	Effects      []string
+	OutputFormat string
+}
+
+func toolMetadata(name string) toolMetadataDTO {
+	switch strings.TrimSpace(name) {
+	case "file_read", "file_list", "file_glob", "file_grep":
+		return toolMetadataDTO{Category: "file", Effects: []string{"read"}, OutputFormat: toolOutputFormat(name)}
+	case "file_write", "file_edit", "file_apply_patch":
+		return toolMetadataDTO{Category: "file", Effects: []string{"write"}, OutputFormat: "text"}
+	case "shell_run":
+		return toolMetadataDTO{Category: "shell", Effects: []string{"execute"}, OutputFormat: "json"}
+	case "web_fetch":
+		return toolMetadataDTO{Category: "web", Effects: []string{"network"}, OutputFormat: "json"}
+	default:
+		return toolMetadataDTO{OutputFormat: "text"}
+	}
+}
+
+func toolOutputFormat(name string) string {
+	switch strings.TrimSpace(name) {
+	case "file_grep":
+		return "json"
+	default:
+		return "text"
+	}
 }
 
 func toolExampleArguments(name string) map[string]any {
