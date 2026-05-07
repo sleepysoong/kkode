@@ -248,12 +248,13 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 	limit := queryLimit(r, "limit", 50, 200)
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit + 1})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
-	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs})
+	runs, truncated := trimRuns(runs, limit)
+	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs, Limit: limit, ResultTruncated: truncated})
 }
 
 func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -280,12 +281,13 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		s.writeRequestEventsSSE(w, r, runs, limit)
 		return
 	}
-	events, err := s.collectRequestRunEvents(r, runs, limit)
+	events, err := s.collectRequestRunEvents(r, runs, limit+1)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_run_events_failed", err.Error())
 		return
 	}
-	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events})
+	events, truncated, _ := trimRunEvents(events, limit)
+	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events, Limit: limit, ResultTruncated: truncated})
 }
 
 func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int) ([]RunEventDTO, error) {
@@ -754,7 +756,7 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 	limit := queryLimit(r, "limit", 500, 5000)
 	var events []EventDTO
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
-		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit})
+		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
 		if err != nil {
 			writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 			return
@@ -776,16 +778,18 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 				continue
 			}
 			events = append(events, toEventDTO(seq, ev))
-			if len(events) >= limit {
+			if len(events) >= limit+1 {
 				break
 			}
 		}
 	}
 	if wantsSSE(r) {
+		events, _, _ = trimSessionEvents(events, limit)
 		s.writeSSEEvents(w, r, events)
 		return
 	}
-	writeJSON(w, EventListResponse{Events: events})
+	events, truncated, nextAfterSeq := trimSessionEvents(events, limit)
+	writeJSON(w, EventListResponse{Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq})
 }
 
 func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
@@ -824,7 +828,7 @@ func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sess
 func (s *Server) listSessionTurnsFromTimeline(w http.ResponseWriter, r *http.Request, timeline session.TimelineStore, sessionID string) {
 	afterSeq := queryInt(r, "after_seq", 0)
 	limit := queryLimit(r, "limit", 100, 500)
-	records, err := timeline.ListTurns(r.Context(), session.TurnQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit})
+	records, err := timeline.ListTurns(r.Context(), session.TurnQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
@@ -833,7 +837,8 @@ func (s *Server) listSessionTurnsFromTimeline(w http.ResponseWriter, r *http.Req
 	for _, record := range records {
 		out = append(out, toTurnDTO(sessionID, record.Seq, record.Turn))
 	}
-	writeJSON(w, TurnListResponse{Turns: out})
+	out, truncated, nextAfterSeq := trimTurns(out, limit)
+	writeJSON(w, TurnListResponse{Turns: out, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq})
 }
 
 func (s *Server) getSessionTurnFromTimeline(w http.ResponseWriter, r *http.Request, timeline session.TimelineStore, sessionID string, turnID string) {
@@ -859,11 +864,12 @@ func (s *Server) listSessionTurns(w http.ResponseWriter, r *http.Request, sess *
 			continue
 		}
 		out = append(out, toTurnDTO(sess.ID, seq, turn))
-		if len(out) >= limit {
+		if len(out) >= limit+1 {
 			break
 		}
 	}
-	writeJSON(w, TurnListResponse{Turns: out})
+	out, truncated, nextAfterSeq := trimTurns(out, limit)
+	writeJSON(w, TurnListResponse{Turns: out, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq})
 }
 
 func (s *Server) getSessionTurn(w http.ResponseWriter, r *http.Request, sess *session.Session, turnID string) {
@@ -940,12 +946,13 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 50, 200)
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit + 1})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
-	writeJSON(w, RunListResponse{Runs: runs})
+	runs, truncated := trimRuns(runs, limit)
+	writeJSON(w, RunListResponse{Runs: runs, Limit: limit, ResultTruncated: truncated})
 }
 
 func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
@@ -1171,7 +1178,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		return
 	}
 	if !wantsSSE(r) {
-		writeJSON(w, RunEventListResponse{Events: s.runEventSnapshot(r, runID, *run)})
+		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run))
 		return
 	}
 	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe)
@@ -1180,6 +1187,18 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO) []RunEventDTO {
 	afterSeq := queryInt(r, "after_seq", 0)
 	limit := queryLimit(r, "limit", 200, 1000)
+	return s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit)
+}
+
+func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO) RunEventListResponse {
+	afterSeq := queryInt(r, "after_seq", 0)
+	limit := queryLimit(r, "limit", 200, 1000)
+	events := s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit+1)
+	events, truncated, nextAfterSeq := trimRunEvents(events, limit)
+	return RunEventListResponse{Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq}
+}
+
+func (s *Server) runEventSnapshotWithLimit(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) []RunEventDTO {
 	if s.cfg.RunEventLister != nil {
 		events, err := s.cfg.RunEventLister(r.Context(), runID, afterSeq, limit)
 		if err == nil && len(events) > 0 {
@@ -1193,6 +1212,53 @@ func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO
 		return []RunEventDTO{}
 	}
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}}
+}
+
+func trimRuns(runs []RunDTO, limit int) ([]RunDTO, bool) {
+	if limit < 0 {
+		limit = 0
+	}
+	truncated := len(runs) > limit
+	if truncated {
+		runs = runs[:limit]
+	}
+	return runs, truncated
+}
+
+func trimTurns(turns []TurnDTO, limit int) ([]TurnDTO, bool, int) {
+	truncated := len(turns) > limit
+	if truncated {
+		turns = turns[:limit]
+	}
+	next := 0
+	if truncated && len(turns) > 0 {
+		next = turns[len(turns)-1].Seq
+	}
+	return turns, truncated, next
+}
+
+func trimSessionEvents(events []EventDTO, limit int) ([]EventDTO, bool, int) {
+	truncated := len(events) > limit
+	if truncated {
+		events = events[:limit]
+	}
+	next := 0
+	if truncated && len(events) > 0 {
+		next = events[len(events)-1].Seq
+	}
+	return events, truncated, next
+}
+
+func trimRunEvents(events []RunEventDTO, limit int) ([]RunEventDTO, bool, int) {
+	truncated := len(events) > limit
+	if truncated {
+		events = events[:limit]
+	}
+	next := 0
+	if truncated && len(events) > 0 {
+		next = events[len(events)-1].Seq
+	}
+	return events, truncated, next
 }
 
 func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func()) {

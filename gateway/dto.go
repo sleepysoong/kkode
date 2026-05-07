@@ -84,7 +84,10 @@ type UsageDTO struct {
 }
 
 type TurnListResponse struct {
-	Turns []TurnDTO `json:"turns"`
+	Turns           []TurnDTO `json:"turns"`
+	Limit           int       `json:"limit,omitempty"`
+	ResultTruncated bool      `json:"result_truncated,omitempty"`
+	NextAfterSeq    int       `json:"next_after_seq,omitempty"`
 }
 
 // EventDTO는 session event를 API cursor와 함께 표현해요.
@@ -101,7 +104,11 @@ type EventDTO struct {
 }
 
 type EventListResponse struct {
-	Events []EventDTO `json:"events"`
+	Events          []EventDTO `json:"events"`
+	AfterSeq        int        `json:"after_seq,omitempty"`
+	Limit           int        `json:"limit,omitempty"`
+	ResultTruncated bool       `json:"result_truncated,omitempty"`
+	NextAfterSeq    int        `json:"next_after_seq,omitempty"`
 }
 
 // TodoDTO는 웹 패널/Discord status message에서 그대로 보여줄 수 있는 작업 항목이에요.
@@ -194,19 +201,25 @@ type ProviderRequestPreviewDTO struct {
 
 // RunListResponse는 background run 목록 응답이에요.
 type RunListResponse struct {
-	Runs []RunDTO `json:"runs"`
+	Runs            []RunDTO `json:"runs"`
+	Limit           int      `json:"limit,omitempty"`
+	ResultTruncated bool     `json:"result_truncated,omitempty"`
 }
 
 // RequestCorrelationResponse는 외부 요청 ID로 이어진 run들을 한 번에 보여줘요.
 type RequestCorrelationResponse struct {
-	RequestID string   `json:"request_id"`
-	Runs      []RunDTO `json:"runs"`
+	RequestID       string   `json:"request_id"`
+	Runs            []RunDTO `json:"runs"`
+	Limit           int      `json:"limit,omitempty"`
+	ResultTruncated bool     `json:"result_truncated,omitempty"`
 }
 
 // RequestCorrelationEventsResponse는 외부 요청 ID로 이어진 run event들을 한 번에 보여줘요.
 type RequestCorrelationEventsResponse struct {
-	RequestID string        `json:"request_id"`
-	Events    []RunEventDTO `json:"events"`
+	RequestID       string        `json:"request_id"`
+	Events          []RunEventDTO `json:"events"`
+	Limit           int           `json:"limit,omitempty"`
+	ResultTruncated bool          `json:"result_truncated,omitempty"`
 }
 
 // RunEventDTO는 run 상태 변경을 SSE/JSON replay로 표현해요.
@@ -222,7 +235,11 @@ type RunEventDTO struct {
 }
 
 type RunEventListResponse struct {
-	Events []RunEventDTO `json:"events"`
+	Events          []RunEventDTO `json:"events"`
+	AfterSeq        int           `json:"after_seq,omitempty"`
+	Limit           int           `json:"limit,omitempty"`
+	ResultTruncated bool          `json:"result_truncated,omitempty"`
+	NextAfterSeq    int           `json:"next_after_seq,omitempty"`
 }
 
 // ProviderDTO는 gateway가 알고 있는 provider capability를 설명해요.

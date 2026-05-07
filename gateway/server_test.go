@@ -246,6 +246,9 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 	if len(events.Events) != 1 || events.Events[0].Seq != 2 || events.Events[0].Tool != "file_read" {
 		t.Fatalf("unexpected events: %+v", events)
 	}
+	if events.AfterSeq != 1 || events.Limit == 0 || events.ResultTruncated {
+		t.Fatalf("event list metadata가 이상해요: %+v", events)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?stream=true", nil)
 	rec = httptest.NewRecorder()
@@ -280,6 +283,9 @@ func TestGatewayLimitsSessionEvents(t *testing.T) {
 	}
 	if len(events.Events) != 1 || events.Events[0].Seq != 2 || events.Events[0].Type != "two" {
 		t.Fatalf("limited events가 이상해요: %+v", events)
+	}
+	if !events.ResultTruncated || events.NextAfterSeq != 2 || events.Limit != 1 {
+		t.Fatalf("limited event metadata가 이상해요: %+v", events)
 	}
 }
 
@@ -642,7 +648,7 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Limit != 5 {
+	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Limit != 6 {
 		t.Fatalf("run query가 이상해요: %+v", query)
 	}
 	var body RunListResponse
@@ -651,6 +657,9 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	}
 	if len(body.Runs) != 1 || body.Runs[0].Metadata[RequestIDMetadataKey] != "req_filter" {
 		t.Fatalf("run list 응답이 이상해요: %+v", body)
+	}
+	if body.Limit != 5 || body.ResultTruncated {
+		t.Fatalf("run list metadata가 이상해요: %+v", body)
 	}
 }
 
@@ -673,7 +682,7 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.Limit != 7 {
+	if query.RequestID != "req_filter" || query.Limit != 8 {
 		t.Fatalf("request correlation query가 이상해요: %+v", query)
 	}
 	var body RequestCorrelationResponse
@@ -682,6 +691,9 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	}
 	if body.RequestID != "req_filter" || len(body.Runs) != 1 || body.Runs[0].ID != "run_req" {
 		t.Fatalf("request correlation 응답이 이상해요: %+v", body)
+	}
+	if body.Limit != 7 || body.ResultTruncated {
+		t.Fatalf("request correlation metadata가 이상해요: %+v", body)
 	}
 }
 
@@ -721,6 +733,9 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}
 	if body.RequestID != "req_filter" || len(body.Events) != 2 || body.Events[0].Type != "run.queued" || body.Events[1].Type != "run.completed" {
 		t.Fatalf("request correlation event 응답이 이상해요: %+v", body)
+	}
+	if body.Limit != 5 || body.ResultTruncated {
+		t.Fatalf("request correlation event metadata가 이상해요: %+v", body)
 	}
 }
 
@@ -1129,6 +1144,9 @@ func TestGatewaySessionTurnsAPI(t *testing.T) {
 	}
 	if len(listed.Turns) != 1 || listed.Turns[0].Seq != 1 || listed.Turns[0].Prompt != "첫 요청" || listed.Turns[0].ResponseText != "첫 응답" {
 		t.Fatalf("turn 목록이 이상해요: %+v", listed)
+	}
+	if !listed.ResultTruncated || listed.NextAfterSeq != 1 || listed.Limit != 1 {
+		t.Fatalf("turn list metadata가 이상해요: %+v", listed)
 	}
 	if listed.Turns[0].Usage == nil || listed.Turns[0].Usage.TotalTokens != 15 {
 		t.Fatalf("turn usage가 이상해요: %+v", listed.Turns[0])
