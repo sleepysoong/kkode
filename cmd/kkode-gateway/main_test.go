@@ -210,6 +210,14 @@ func TestSyncRunValidatorChecksSessionProviderAndResources(t *testing.T) {
 	if err := validator(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "go", MCPServers: []string{disabled.ID}}); err == nil || !strings.Contains(err.Error(), "비활성화") {
 		t.Fatalf("비활성 resource는 queue 전에 거부해야 해요: %v", err)
 	}
+	missingRoot := session.NewSession(t.TempDir()+"/missing", "openai", "gpt-5-mini", "kkode", session.AgentModeBuild)
+	missingRoot.ID = "sess_missing_root"
+	if err := store.CreateSession(ctx, missingRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := validator(ctx, gateway.RunStartRequest{SessionID: missingRoot.ID, Prompt: "go"}); err == nil || !strings.Contains(err.Error(), "workspace preflight failed") {
+		t.Fatalf("없는 workspace root는 queue 전에 거부해야 해요: %v", err)
+	}
 }
 
 func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {

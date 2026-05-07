@@ -274,8 +274,22 @@ func syncRunValidator(store session.Store) gateway.RunValidator {
 		if _, ok := app.ResolveProviderSpec(providerName); !ok {
 			return fmt.Errorf("unknown provider: %s", providerName)
 		}
-		if _, err := loadProviderOptions(ctx, store, req); err != nil {
+		providerOptions, err := loadProviderOptions(ctx, store, req)
+		if err != nil {
 			return err
+		}
+		if _, absRoot, err := app.NewWorkspace(app.WorkspaceOptions{Root: sess.ProjectRoot}); err != nil {
+			return fmt.Errorf("workspace preflight failed: %w", err)
+		} else {
+			handle, err := app.BuildProviderWithOptions(providerName, absRoot, providerOptions)
+			if err != nil {
+				return fmt.Errorf("provider preflight failed: %w", err)
+			}
+			if handle.Close != nil {
+				if err := handle.Close(); err != nil {
+					return fmt.Errorf("provider preflight close failed: %w", err)
+				}
+			}
 		}
 		return nil
 	}
