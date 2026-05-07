@@ -55,6 +55,22 @@ func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAPIComponentReferencesExist(t *testing.T) {
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	components := readOpenAPIComponentNames(t, text)
+	refRe := regexp.MustCompile(`\$ref:\s*'?#/components/([^/'"]+)/([^'"]+)'?`)
+	for _, match := range refRe.FindAllStringSubmatch(text, -1) {
+		section, name := match[1], match[2]
+		if !components[section][name] {
+			t.Fatalf("OpenAPI component reference가 존재하지 않아요: section=%s name=%s", section, name)
+		}
+	}
+}
+
 type dtoSchemaCase struct {
 	schema string
 	dto    any
@@ -320,6 +336,45 @@ func readOpenAPISchemaProperties(t *testing.T) map[string]map[string]bool {
 		if m := propRe.FindStringSubmatch(line); m != nil {
 			out[current][m[1]] = true
 		}
+	}
+	return out
+}
+
+func readOpenAPIComponentNames(t *testing.T, text string) map[string]map[string]bool {
+	t.Helper()
+	out := map[string]map[string]bool{}
+	sectionRe := regexp.MustCompile(`^  ([A-Za-z0-9_]+):$`)
+	nameRe := regexp.MustCompile(`^    ([A-Za-z0-9_]+):$`)
+	inComponents := false
+	currentSection := ""
+	for _, line := range strings.Split(text, "\n") {
+		if line == "components:" {
+			inComponents = true
+			continue
+		}
+		if !inComponents {
+			continue
+		}
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") {
+			if m := sectionRe.FindStringSubmatch(line); m != nil {
+				currentSection = m[1]
+				if out[currentSection] == nil {
+					out[currentSection] = map[string]bool{}
+				}
+				continue
+			}
+			currentSection = ""
+			continue
+		}
+		if currentSection == "" {
+			continue
+		}
+		if m := nameRe.FindStringSubmatch(line); m != nil {
+			out[currentSection][m[1]] = true
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("OpenAPI components를 읽지 못했어요")
 	}
 	return out
 }
