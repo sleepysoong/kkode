@@ -86,6 +86,20 @@ func TestOpenAPIOperationsExposeSuccessResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAPISuccessResponsesExposeContent(t *testing.T) {
+	responses := readOpenAPIOperationSuccessResponseContent(t)
+	for op, statuses := range responses {
+		for status, hasContent := range statuses {
+			if status == "204" {
+				continue
+			}
+			if !hasContent {
+				t.Fatalf("OpenAPI operation %s의 %s 성공 response에 content schema가 필요해요", op, status)
+			}
+		}
+	}
+}
+
 func TestOpenAPIPathParametersAreDeclared(t *testing.T) {
 	operations := readOpenAPIPathParameterDeclarations(t)
 	for op, contract := range operations {
@@ -400,6 +414,88 @@ func readOpenAPIOperationResponseStatuses(t *testing.T) map[string][]string {
 	}
 	if len(out) == 0 {
 		t.Fatal("OpenAPI operation response를 읽지 못했어요")
+	}
+	return out
+}
+
+func readOpenAPIOperationSuccessResponseContent(t *testing.T) map[string]map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathRe := regexp.MustCompile(`^  (/[^:]+):$`)
+	methodRe := regexp.MustCompile(`^    (get|post|put|delete|patch|options):$`)
+	statusRe := regexp.MustCompile(`^        '?([0-9]{3}|default)'?:`)
+	out := map[string]map[string]bool{}
+	currentPath := ""
+	currentOp := ""
+	currentStatus := ""
+	currentHasContent := false
+	inResponses := false
+	flush := func() {
+		if currentOp == "" || currentStatus == "" || !strings.HasPrefix(currentStatus, "2") {
+			return
+		}
+		if out[currentOp] == nil {
+			out[currentOp] = map[string]bool{}
+		}
+		out[currentOp][currentStatus] = currentHasContent
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "components:" {
+			flush()
+			break
+		}
+		if m := pathRe.FindStringSubmatch(line); m != nil {
+			flush()
+			currentPath = m[1]
+			currentOp = ""
+			currentStatus = ""
+			currentHasContent = false
+			inResponses = false
+			continue
+		}
+		if currentPath == "" {
+			continue
+		}
+		if m := methodRe.FindStringSubmatch(line); m != nil {
+			flush()
+			currentOp = m[1] + " " + currentPath
+			currentStatus = ""
+			currentHasContent = false
+			inResponses = false
+			continue
+		}
+		if currentOp == "" {
+			continue
+		}
+		if strings.TrimSpace(line) == "responses:" {
+			inResponses = true
+			continue
+		}
+		if !inResponses {
+			continue
+		}
+		if m := statusRe.FindStringSubmatch(line); m != nil {
+			flush()
+			currentStatus = m[1]
+			currentHasContent = false
+			continue
+		}
+		if currentStatus != "" && strings.TrimSpace(line) == "content:" {
+			currentHasContent = true
+			continue
+		}
+		if strings.HasPrefix(line, "      ") && !strings.HasPrefix(line, "        ") && strings.TrimSpace(line) != "" {
+			flush()
+			currentStatus = ""
+			currentHasContent = false
+			inResponses = false
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("OpenAPI 2xx response content를 읽지 못했어요")
 	}
 	return out
 }
