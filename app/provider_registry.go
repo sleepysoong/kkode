@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -52,10 +53,10 @@ type ProviderConversionSpec struct {
 // ProviderRouteSpec은 변환 operation이 HTTP source에서 어떤 route로 나가는지 설명해요.
 // secret header 값은 담지 않고, 외부 패널과 테스트가 endpoint 계약만 발견하게 해요.
 type ProviderRouteSpec struct {
-	Operation string
-	Method    string
-	Path      string
-	Accept    string
+	Operation string `json:"operation"`
+	Method    string `json:"method,omitempty"`
+	Path      string `json:"path"`
+	Accept    string `json:"accept,omitempty"`
 }
 
 // ProviderConversionSet은 실제 변환기와 operation 기본값을 묶은 실행형 변환 profile이에요.
@@ -123,26 +124,26 @@ type HTTPJSONProviderOptions struct {
 // HTTPJSONProviderRegistration은 OpenAI-compatible 같은 기존 변환 profile에 HTTP JSON source만 새로 붙이는 등록 단위예요.
 // converter를 새로 만들 필요가 없는 proxy, gateway, 사내 API는 이 구조체만 채우면 discovery와 실행 registry에 함께 등록돼요.
 type HTTPJSONProviderRegistration struct {
-	Name              string
-	Aliases           []string
-	Profile           string
-	DefaultModel      string
-	Models            []string
-	AuthEnv           []string
-	BaseURL           string
-	BaseURLEnv        []string
-	APIKey            string
-	APIKeyEnv         []string
-	Headers           map[string]string
-	AdditionalHeaders map[string]string
-	Routes            []ProviderRouteSpec
-	DefaultOperation  string
-	Capabilities      map[string]any
-	Local             bool
-	DisableStreaming  bool
-	HTTPClient        *http.Client
-	Retry             httpjson.RetryConfig
-	Source            string
+	Name              string               `json:"name"`
+	Aliases           []string             `json:"aliases,omitempty"`
+	Profile           string               `json:"profile,omitempty"`
+	DefaultModel      string               `json:"default_model,omitempty"`
+	Models            []string             `json:"models,omitempty"`
+	AuthEnv           []string             `json:"auth_env,omitempty"`
+	BaseURL           string               `json:"base_url,omitempty"`
+	BaseURLEnv        []string             `json:"base_url_env,omitempty"`
+	APIKey            string               `json:"api_key,omitempty"`
+	APIKeyEnv         []string             `json:"api_key_env,omitempty"`
+	Headers           map[string]string    `json:"headers,omitempty"`
+	AdditionalHeaders map[string]string    `json:"additional_headers,omitempty"`
+	Routes            []ProviderRouteSpec  `json:"routes,omitempty"`
+	DefaultOperation  string               `json:"default_operation,omitempty"`
+	Capabilities      map[string]any       `json:"capabilities,omitempty"`
+	Local             bool                 `json:"local,omitempty"`
+	DisableStreaming  bool                 `json:"disable_streaming,omitempty"`
+	HTTPClient        *http.Client         `json:"-"`
+	Retry             httpjson.RetryConfig `json:"retry,omitempty"`
+	Source            string               `json:"source,omitempty"`
 }
 
 // BuildProvider는 환경변수 기반 provider 생성을 한 곳에서 처리해요.
@@ -296,6 +297,52 @@ func RegisterHTTPJSONProvider(reg HTTPJSONProviderRegistration) (func(), error) 
 		Conversion: providerConversionFromProfile(profile),
 		Factory:    factory,
 	})
+}
+
+// RegisterHTTPJSONProvidersFromEnv는 JSON 환경변수에서 HTTP JSON provider 등록 목록을 읽어요.
+// 배포 환경에서는 KKODE_HTTPJSON_PROVIDERS에 배열이나 단일 객체를 넣어 재컴파일 없이 compatible source를 추가할 수 있어요.
+func RegisterHTTPJSONProvidersFromEnv(key string) (func(), error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return func() {}, nil
+	}
+	unregister, err := RegisterHTTPJSONProvidersFromJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s provider 설정이 올바르지 않아요: %w", key, err)
+	}
+	return unregister, nil
+}
+
+// RegisterHTTPJSONProvidersFromJSON은 HTTP JSON provider 등록 JSON을 registry에 반영해요.
+// 입력은 단일 객체나 배열을 모두 허용하고, 중간 실패 시 이미 등록한 provider를 되돌려요.
+func RegisterHTTPJSONProvidersFromJSON(raw string) (func(), error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return func() {}, nil
+	}
+	regs, err := decodeHTTPJSONProviderRegistrations(raw)
+	if err != nil {
+		return nil, err
+	}
+	unregisters := make([]func(), 0, len(regs))
+	for i, reg := range regs {
+		unregister, err := RegisterHTTPJSONProvider(reg)
+		if err != nil {
+			for j := len(unregisters) - 1; j >= 0; j-- {
+				unregisters[j]()
+			}
+			return nil, fmt.Errorf("HTTP JSON provider 등록 %d(%s) 실패예요: %w", i, strings.TrimSpace(reg.Name), err)
+		}
+		unregisters = append(unregisters, unregister)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			for i := len(unregisters) - 1; i >= 0; i-- {
+				unregisters[i]()
+			}
+		})
+	}, nil
 }
 
 // DefaultModel은 provider별 기본 모델을 정해요.
@@ -660,6 +707,25 @@ func httpJSONProviderSpecFromRegistration(reg HTTPJSONProviderRegistration, prof
 			Routes:            routes,
 		},
 	}
+}
+
+func decodeHTTPJSONProviderRegistrations(raw string) ([]HTTPJSONProviderRegistration, error) {
+	var regs []HTTPJSONProviderRegistration
+	if strings.HasPrefix(raw, "[") {
+		if err := json.Unmarshal([]byte(raw), &regs); err != nil {
+			return nil, err
+		}
+	} else {
+		var reg HTTPJSONProviderRegistration
+		if err := json.Unmarshal([]byte(raw), &reg); err != nil {
+			return nil, err
+		}
+		regs = []HTTPJSONProviderRegistration{reg}
+	}
+	if len(regs) == 0 {
+		return nil, fmt.Errorf("provider 등록 항목이 필요해요")
+	}
+	return regs, nil
 }
 
 func validateProviderRegistration(reg ProviderRegistration) error {

@@ -85,6 +85,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return errors.New("prompt가 필요해요. 인자로 주거나 stdin으로 전달해야해요")
 	}
 
+	unregisterHTTPJSONProviders, err := app.RegisterHTTPJSONProvidersFromEnv("KKODE_HTTPJSON_PROVIDERS")
+	if err != nil {
+		return err
+	}
+	defer unregisterHTTPJSONProviders()
+
 	ws, absRoot, err := app.NewWorkspace(app.WorkspaceOptions{Root: *root})
 	if err != nil {
 		return err

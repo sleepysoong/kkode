@@ -66,6 +66,11 @@ func run(args []string) error {
 	if !isLoopbackListenAddr(*addr) && *apiKey == "" {
 		return fmt.Errorf("remote bind(%s)는 --api-key 또는 --api-key-env가 필요해요", *addr)
 	}
+	unregisterHTTPJSONProviders, err := app.RegisterHTTPJSONProvidersFromEnv("KKODE_HTTPJSON_PROVIDERS")
+	if err != nil {
+		return err
+	}
+	defer unregisterHTTPJSONProviders()
 	store, err := session.OpenSQLite(*statePath)
 	if err != nil {
 		return err

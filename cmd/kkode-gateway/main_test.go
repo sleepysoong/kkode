@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sleepysoong/kkode/app"
 	"github.com/sleepysoong/kkode/gateway"
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
@@ -64,6 +65,27 @@ func TestProviderDTOsExposeConversionProfile(t *testing.T) {
 		if provider.AuthStatus != "local" && len(provider.AuthEnv) == 0 {
 			t.Fatalf("%s provider 설정 UI가 쓸 auth env 힌트가 필요해요: %+v", provider.Name, provider)
 		}
+	}
+}
+
+func TestProviderDTOsIncludeEnvRegisteredHTTPJSONProviders(t *testing.T) {
+	t.Setenv("KKODE_TEST_HTTPJSON_PROVIDERS", `{"name":"gateway-env-http","aliases":["gateway-env-compatible"],"default_model":"env-model","base_url":"https://env.example.test/v1","source":"env-http-json"}`)
+	unregister, err := app.RegisterHTTPJSONProvidersFromEnv("KKODE_TEST_HTTPJSON_PROVIDERS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	providers := providerDTOs()
+	var found gateway.ProviderDTO
+	for _, provider := range providers {
+		if provider.Name == "gateway-env-http" {
+			found = provider
+			break
+		}
+	}
+	if found.Name == "" || found.DefaultModel != "env-model" || found.Conversion == nil || found.Conversion.Source != "env-http-json" || len(found.Aliases) != 1 || found.Aliases[0] != "gateway-env-compatible" {
+		t.Fatalf("env 등록 provider가 gateway discovery에 필요해요: %+v", found)
 	}
 }
 

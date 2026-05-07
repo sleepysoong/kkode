@@ -489,6 +489,61 @@ func TestRegisterHTTPJSONProviderReusesProfileWithOnlySourceConfig(t *testing.T)
 	}
 }
 
+func TestRegisterHTTPJSONProvidersFromJSONAndEnv(t *testing.T) {
+	t.Setenv("CUSTOM_JSON_KEY", "sk-json")
+	raw := `{
+		"name": "registered-json-http",
+		"aliases": ["registered-json-compatible"],
+		"profile": "openai-compatible",
+		"default_model": "json-model",
+		"auth_env": ["CUSTOM_JSON_KEY"],
+		"base_url": "https://json.example.test/v1",
+		"api_key_env": ["CUSTOM_JSON_KEY"],
+		"disable_streaming": true,
+		"source": "json-config"
+	}`
+	unregister, err := RegisterHTTPJSONProvidersFromJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	spec, ok := ResolveProviderSpec("registered-json-compatible")
+	if !ok || spec.Name != "registered-json-http" || spec.DefaultModel != "json-model" || spec.Conversion.Source != "json-config" || spec.Capabilities["streaming"] != false {
+		t.Fatalf("JSON provider 등록이 discovery에 반영돼야 해요: spec=%+v ok=%v", spec, ok)
+	}
+	if ProviderAuthStatus(spec) != "configured" {
+		t.Fatalf("JSON provider auth env가 반영돼야 해요: %+v", spec.AuthEnv)
+	}
+	unregister()
+	if _, ok := ResolveProviderSpec("registered-json-compatible"); ok {
+		t.Fatal("JSON provider unregister가 registry를 되돌려야 해요")
+	}
+
+	t.Setenv("KKODE_TEST_HTTPJSON_PROVIDERS", `[{"name":"registered-env-http","default_model":"env-model","base_url":"https://env.example.test/v1"}]`)
+	unregisterEnv, err := RegisterHTTPJSONProvidersFromEnv("KKODE_TEST_HTTPJSON_PROVIDERS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregisterEnv()
+	if spec, ok := ResolveProviderSpec("registered-env-http"); !ok || spec.DefaultModel != "env-model" {
+		t.Fatalf("env provider 등록이 필요해요: spec=%+v ok=%v", spec, ok)
+	}
+}
+
+func TestRegisterHTTPJSONProvidersFromJSONRollsBackOnFailure(t *testing.T) {
+	_, err := RegisterHTTPJSONProvidersFromJSON(`[
+		{"name":"rollback-http","base_url":"https://rollback.example.test/v1"},
+		{"name":"rollback-http","base_url":"https://duplicate.example.test/v1"}
+	]`)
+	if err == nil {
+		t.Fatal("중복 provider가 있으면 등록이 실패해야 해요")
+	}
+	if _, ok := ResolveProviderSpec("rollback-http"); ok {
+		t.Fatal("부분 등록 실패 시 앞 provider도 되돌려야 해요")
+	}
+}
+
 type sourceOnlyCaller struct {
 	got llm.ProviderRequest
 }
