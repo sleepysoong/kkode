@@ -479,7 +479,7 @@ provider, err := app.BuildProviderAdapter("openai", app.ProviderAdapterOptions{
 })
 ```
 
-OpenAI-compatible HTTP JSON source는 더 짧게 붙일 수도 있어요. registry에 저장된 `/responses` route를 기본값으로 쓰기 때문에 새 API source는 base URL과 인증값만 넘기면 돼요.
+OpenAI-compatible HTTP JSON source는 더 짧게 붙일 수도 있어요. registry에 저장된 `/responses` route를 기본값으로 쓰기 때문에 새 API source는 base URL과 인증값만 넘기면 돼요. source가 SSE를 지원하지 않으면 `DisableStreaming: true`로 `streaming` capability를 끌 수 있어요.
 
 ```go
 provider, err := app.BuildHTTPJSONProviderAdapter("openai-compatible", app.HTTPJSONProviderOptions{

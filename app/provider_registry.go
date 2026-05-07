@@ -209,11 +209,16 @@ func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) 
 	if !opts.DisableStreaming {
 		streamer = caller
 	}
+	caps := opts.Capabilities
+	if caps == (llm.Capabilities{}) && opts.DisableStreaming {
+		caps = capabilitiesFromMap(spec.Capabilities)
+		caps.Streaming = false
+	}
 	return BuildProviderAdapter(profile, ProviderAdapterOptions{
 		ProviderName: providerName,
 		Caller:       caller,
 		Streamer:     streamer,
-		Capabilities: opts.Capabilities,
+		Capabilities: caps,
 	})
 }
 

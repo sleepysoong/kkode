@@ -332,6 +332,24 @@ func TestBuildHTTPJSONProviderAdapterUsesRegistryRoutes(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPJSONProviderAdapterCanDisableStreamingCapability(t *testing.T) {
+	provider, err := BuildHTTPJSONProviderAdapter("openai-compatible", HTTPJSONProviderOptions{
+		ProviderName:     "json-only",
+		BaseURL:          "https://example.test/v1",
+		DisableStreaming: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps := provider.Capabilities()
+	if !caps.Tools || caps.Streaming {
+		t.Fatalf("JSON-only HTTP source는 tools는 유지하되 streaming capability를 끄야 해요: %+v", caps)
+	}
+	if _, err := provider.Stream(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("안녕")}}); err == nil || !strings.Contains(err.Error(), "stream caller") {
+		t.Fatalf("streamer가 없으면 Stream 호출은 명확히 실패해야 해요: %v", err)
+	}
+}
+
 type sourceOnlyCaller struct {
 	got llm.ProviderRequest
 }
