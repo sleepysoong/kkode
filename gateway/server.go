@@ -545,6 +545,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		writeError(w, r, http.StatusNotFound, "not_found", "session endpoint를 찾을 수 없어요")
 		return
 	}
+	if len(parts) == 2 && parts[1] == "import" {
+		s.importSession(w, r)
+		return
+	}
 	sessionID := parts[1]
 	if len(parts) == 2 && r.Method == http.MethodGet {
 		s.getSession(w, r, sessionID)

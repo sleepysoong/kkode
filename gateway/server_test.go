@@ -1914,6 +1914,96 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 	}
 }
 
+func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
+	ctx := context.Background()
+	sourceStore := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("go", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("go")}})
+	turn.Response = llm.TextResponse("openai", "gpt-5-mini", "ok")
+	sess.AppendTurn(turn)
+	sess.AppendEvent(session.Event{ID: "ev_import", SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed", At: time.Now().UTC()})
+	if err := sourceStore.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := sourceStore.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_import", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"옮겨요"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sourceStore.SaveRun(ctx, session.Run{ID: "run_import", SessionID: sess.ID, Status: "completed", Prompt: "go", EventsURL: "/api/v1/sessions/" + sess.ID + "/events"}); err != nil {
+		t.Fatal(err)
+	}
+	exported := exportSessionForTest(t, sourceStore, sess.ID)
+	targetStore := openTestStore(t)
+	target, err := New(Config{Store: targetStore})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(SessionImportRequest{FormatVersion: exported.FormatVersion, RawSession: exported.RawSession, Checkpoints: exported.Checkpoints, Runs: exported.Runs, NewSessionID: "sess_imported"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	target.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var imported SessionImportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &imported); err != nil {
+		t.Fatal(err)
+	}
+	if imported.Session.ID != "sess_imported" || !imported.RewrittenSessionID || imported.OriginalSessionID != sess.ID || imported.Counts.Turns != 1 || imported.Counts.Events != 1 || imported.Counts.Checkpoints != 1 || imported.Counts.Runs != 1 {
+		t.Fatalf("import 응답이 이상해요: %+v", imported)
+	}
+	loaded, err := targetStore.LoadSession(ctx, "sess_imported")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Turns) != 1 || len(loaded.Events) != 1 || loaded.Events[0].SessionID != "sess_imported" {
+		t.Fatalf("import된 session이 이상해요: %+v", loaded)
+	}
+	checkpoint, err := targetStore.LoadCheckpoint(ctx, "sess_imported", "cp_import")
+	if err != nil || checkpoint.SessionID != "sess_imported" {
+		t.Fatalf("import된 checkpoint가 이상해요: %+v err=%v", checkpoint, err)
+	}
+	run, err := targetStore.LoadRun(ctx, "run_import")
+	if err != nil || run.SessionID != "sess_imported" || !strings.Contains(run.EventsURL, "sess_imported") {
+		t.Fatalf("import된 run이 이상해요: %+v err=%v", run, err)
+	}
+}
+
+func exportSessionForTest(t *testing.T, store *session.SQLiteStore, sessionID string) SessionExportResponse {
+	t.Helper()
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			runs, err := store.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Limit: q.Limit})
+			if err != nil {
+				return nil, err
+			}
+			out := make([]RunDTO, 0, len(runs))
+			for _, run := range runs {
+				out = append(out, *runDTOFromSession(run))
+			}
+			return out, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID+"/export", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var exported SessionExportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
+		t.Fatal(err)
+	}
+	return exported
+}
+
 func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")

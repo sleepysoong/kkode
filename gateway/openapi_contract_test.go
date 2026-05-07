@@ -41,6 +41,8 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		{schema: "SessionCreateRequest", dto: SessionCreateRequest{}},
 		{schema: "SessionExportResponse", dto: SessionExportResponse{}},
 		{schema: "SessionExportCounts", dto: SessionExportCountsDTO{}},
+		{schema: "SessionImportRequest", dto: SessionImportRequest{}},
+		{schema: "SessionImportResponse", dto: SessionImportResponse{}},
 		{schema: "RunStartRequest", dto: RunStartRequest{}},
 		{schema: "RunPreviewResponse", dto: RunPreviewResponse{}},
 		{schema: "Run", dto: RunDTO{}},
