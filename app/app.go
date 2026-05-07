@@ -24,6 +24,7 @@ type WorkspaceOptions struct {
 type AgentOptions struct {
 	Model         string
 	Instructions  string
+	ContextBlocks []string
 	BaseRequest   llm.Request
 	MaxIterations int
 	NoWeb         bool
@@ -52,6 +53,7 @@ type ProviderOptions struct {
 	MCPServers       map[string]llm.MCPServer
 	SkillDirectories []string
 	CustomAgents     []llm.Agent
+	ContextBlocks    []string
 }
 
 // NewWorkspace는 root를 절대 경로로 정규화하고 즉시 실행형 workspace를 만들어요.
@@ -84,6 +86,7 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 		Provider:      provider,
 		Model:         opts.Model,
 		Instructions:  opts.Instructions,
+		ContextBlocks: append([]string{}, opts.ContextBlocks...),
 		BaseRequest:   opts.BaseRequest,
 		ToolSet:       toolSet,
 		MaxIterations: opts.MaxIterations,

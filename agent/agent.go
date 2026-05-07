@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ type Config struct {
 	Provider      llm.Provider
 	Model         string
 	Instructions  string
+	ContextBlocks []string
 	BaseRequest   llm.Request
 	ToolSet       llm.ToolSet
 	Tools         []llm.Tool
@@ -160,18 +162,32 @@ func (a *Agent) tools() ([]llm.Tool, llm.ToolRegistry) {
 }
 
 func (a *Agent) instructions(tools []llm.Tool) string {
-	if a.cfg.Instructions != "" {
-		return a.cfg.Instructions
+	base := a.cfg.Instructions
+	if base == "" {
+		toolNames := make([]string, 0, len(tools))
+		for _, tool := range tools {
+			toolNames = append(toolNames, tool.Name)
+		}
+		out, err := prompts.Render(prompts.AgentSystem, map[string]any{"AgentName": a.cfg.Name, "ToolNames": toolNames})
+		if err != nil {
+			out = "너는 Go 바이브코딩 에이전트예요. 요청받은 작업을 바로 수행하고, 최종 답변에는 수행한 작업과 검증 결과를 짧게 정리해요."
+		}
+		base = out
 	}
-	toolNames := make([]string, 0, len(tools))
-	for _, tool := range tools {
-		toolNames = append(toolNames, tool.Name)
+	return appendContextBlocks(base, a.cfg.ContextBlocks)
+}
+
+func appendContextBlocks(base string, blocks []string) string {
+	cleaned := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if text := strings.TrimSpace(block); text != "" {
+			cleaned = append(cleaned, text)
+		}
 	}
-	out, err := prompts.Render(prompts.AgentSystem, map[string]any{"AgentName": a.cfg.Name, "ToolNames": toolNames})
-	if err != nil {
-		return "너는 Go 바이브코딩 에이전트예요. 요청받은 작업을 바로 수행하고, 최종 답변에는 수행한 작업과 검증 결과를 짧게 정리해요."
+	if len(cleaned) == 0 {
+		return base
 	}
-	return out
+	return strings.TrimSpace(base) + "\n\n추가 실행 컨텍스트예요. 아래 Skill/Subagent 지침은 현재 run에서만 적용해요.\n\n" + strings.Join(cleaned, "\n\n---\n\n")
 }
 
 func (a *Agent) traceTools(reg llm.ToolRegistry) llm.ToolRegistry {

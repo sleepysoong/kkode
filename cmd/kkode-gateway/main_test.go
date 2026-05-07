@@ -200,8 +200,11 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != skillDir || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" {
+	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != skillDir || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" || len(opts.ContextBlocks) != 2 {
 		t.Fatalf("provider options가 이상해요: %+v", opts)
+	}
+	if !strings.Contains(opts.ContextBlocks[0], "코드를 리뷰해요") || !strings.Contains(opts.ContextBlocks[1], "계획해요") {
+		t.Fatalf("skill/subagent context block이 필요해요: %+v", opts.ContextBlocks)
 	}
 	agent := opts.CustomAgents[0]
 	if agent.MCPServers["filesystem"].Command != "mcp-fs" || agent.MCPServers["context7"].Kind != llm.MCPHTTP || agent.MCPServers["context7"].URL != "https://mcp.context7.com/mcp" {
@@ -301,11 +304,19 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
+	skillDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# 리뷰 스킬\n\n코드를 리뷰해요.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	mcp, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp","tools":["*"],"headers":{"CONTEXT7_API_KEY":"secret"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}})
+	skill, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "review", Enabled: true, Config: []byte(`{"path":"` + skillDir + `"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +326,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
 	}
-	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
+	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "코드를 리뷰해요") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
 	streamPreview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}, PreviewStream: true})

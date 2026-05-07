@@ -64,6 +64,7 @@ func MergeProviderOptions(defaults ProviderOptions, explicit ProviderOptions) Pr
 	}
 	out.SkillDirectories = append(append([]string{}, defaults.SkillDirectories...), explicit.SkillDirectories...)
 	out.CustomAgents = append(append([]llm.Agent{}, defaults.CustomAgents...), explicit.CustomAgents...)
+	out.ContextBlocks = append(append([]string{}, defaults.ContextBlocks...), explicit.ContextBlocks...)
 	return out
 }
 

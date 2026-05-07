@@ -253,11 +253,14 @@ func TestDefaultProviderOptionsCanDisableMCPDefaults(t *testing.T) {
 
 func TestMergeProviderOptionsLetsExplicitMCPOverrideDefaults(t *testing.T) {
 	merged := MergeProviderOptions(
-		ProviderOptions{MCPServers: map[string]llm.MCPServer{"context7": {Name: "context7", Kind: llm.MCPHTTP, URL: "https://default.test"}}},
-		ProviderOptions{MCPServers: map[string]llm.MCPServer{"context7": {Name: "context7", Kind: llm.MCPStdio, Command: "custom"}}},
+		ProviderOptions{MCPServers: map[string]llm.MCPServer{"context7": {Name: "context7", Kind: llm.MCPHTTP, URL: "https://default.test"}}, ContextBlocks: []string{"default context"}},
+		ProviderOptions{MCPServers: map[string]llm.MCPServer{"context7": {Name: "context7", Kind: llm.MCPStdio, Command: "custom"}}, ContextBlocks: []string{"explicit context"}},
 	)
 	if merged.MCPServers["context7"].Command != "custom" || merged.MCPServers["context7"].URL != "" {
 		t.Fatalf("명시 MCP 설정이 default를 덮어써야 해요: %+v", merged.MCPServers["context7"])
+	}
+	if len(merged.ContextBlocks) != 2 || merged.ContextBlocks[0] != "default context" || merged.ContextBlocks[1] != "explicit context" {
+		t.Fatalf("provider context block도 순서대로 합쳐야 해요: %+v", merged.ContextBlocks)
 	}
 }
 

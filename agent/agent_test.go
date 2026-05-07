@@ -69,6 +69,17 @@ func TestAgentDefaultInstructionsComeFromPromptTemplate(t *testing.T) {
 	}
 }
 
+func TestAgentInstructionsAppendContextBlocks(t *testing.T) {
+	ag, err := New(Config{Provider: &fakeProvider{}, Model: "fake", Instructions: "기본 지침이에요", ContextBlocks: []string{"선택된 Skill이에요: 리뷰", "사용 가능한 Subagent예요: planner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := ag.Prepare("준비해요")
+	if !strings.Contains(req.Instructions, "기본 지침이에요") || !strings.Contains(req.Instructions, "선택된 Skill이에요: 리뷰") || !strings.Contains(req.Instructions, "사용 가능한 Subagent예요: planner") {
+		t.Fatalf("context block이 instructions에 붙어야 해요: %q", req.Instructions)
+	}
+}
+
 func TestGuardrailBlocks(t *testing.T) {
 	ag, err := New(Config{Provider: &fakeProvider{}, Model: "fake", Guardrails: Guardrails{BlockedSubstrings: []string{"password"}}})
 	if err != nil {

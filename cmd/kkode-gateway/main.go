@@ -244,7 +244,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Observer: runEventTraceObserver()})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Observer: runEventTraceObserver()})
 		if err != nil {
 			return nil, err
 		}
@@ -343,7 +343,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
-		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
 		if err != nil {
 			return nil, err
 		}
@@ -751,6 +751,13 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 			return opts, err
 		}
 		opts.SkillDirectories = append(opts.SkillDirectories, dir)
+		block, err := skillContextBlockFromResource(resource, dir)
+		if err != nil {
+			return opts, err
+		}
+		if block != "" {
+			opts.ContextBlocks = append(opts.ContextBlocks, block)
+		}
 	}
 	for _, id := range req.Subagents {
 		resource, err := resourceStore.LoadResource(ctx, session.ResourceSubagent, id)
@@ -765,6 +772,9 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 			return opts, err
 		}
 		opts.CustomAgents = append(opts.CustomAgents, agent)
+		if block := subagentContextBlock(agent); block != "" {
+			opts.ContextBlocks = append(opts.ContextBlocks, block)
+		}
 	}
 	if len(opts.MCPServers) == 0 {
 		opts.MCPServers = nil
@@ -843,6 +853,46 @@ func skillDirectoryFromResource(resource session.Resource) (string, error) {
 	return path, nil
 }
 
+func skillContextBlockFromResource(resource session.Resource, dir string) (string, error) {
+	file := skillContextFileFromResource(resource, dir)
+	if file == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	const maxSkillContextBytes = 32 << 10
+	truncated := false
+	if len(data) > maxSkillContextBytes {
+		data = data[:maxSkillContextBytes]
+		truncated = true
+	}
+	text := strings.TrimSpace(llm.RedactSecrets(string(data)))
+	if text == "" {
+		return "", nil
+	}
+	parts := []string{"선택된 Skill이에요: " + firstNonEmpty(resource.Name, resource.ID), "경로: " + dir, text}
+	if truncated {
+		parts = append(parts, "[skill 내용이 길어서 일부만 포함했어요]")
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
+func skillContextFileFromResource(resource session.Resource, dir string) string {
+	var cfg skillResourceConfig
+	if len(resource.Config) > 0 {
+		_ = json.Unmarshal(resource.Config, &cfg)
+	}
+	path := strings.TrimSpace(firstNonEmpty(cfg.Path, cfg.Directory))
+	if path != "" {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path
+		}
+	}
+	return firstExistingSkillFile(dir)
+}
+
 func firstExistingSkillFile(dir string) string {
 	for _, name := range []string{"SKILL.md", "README.md", "skill.md"} {
 		path := filepath.Join(dir, name)
@@ -897,6 +947,35 @@ func agentFromResource(ctx context.Context, resourceStore session.ResourceStore,
 		servers = nil
 	}
 	return llm.Agent{Name: resource.ID, DisplayName: firstNonEmpty(cfg.DisplayName, resource.Name), Description: firstNonEmpty(cfg.Description, resource.Description), Prompt: cfg.Prompt, Tools: cfg.Tools, MCPServers: servers, Infer: cfg.Infer, Skills: cfg.Skills}, nil
+}
+
+func subagentContextBlock(agent llm.Agent) string {
+	name := firstNonEmpty(agent.DisplayName, agent.Name)
+	if strings.TrimSpace(name) == "" && strings.TrimSpace(agent.Prompt) == "" {
+		return ""
+	}
+	parts := []string{"사용 가능한 Subagent예요: " + firstNonEmpty(name, agent.Name)}
+	if agent.Description != "" {
+		parts = append(parts, "설명: "+agent.Description)
+	}
+	if agent.Prompt != "" {
+		parts = append(parts, "지침:\n"+agent.Prompt)
+	}
+	if len(agent.Tools) > 0 {
+		parts = append(parts, "허용 tool: "+strings.Join(agent.Tools, ", "))
+	}
+	if len(agent.Skills) > 0 {
+		parts = append(parts, "연결 skill: "+strings.Join(agent.Skills, ", "))
+	}
+	if len(agent.MCPServers) > 0 {
+		names := make([]string, 0, len(agent.MCPServers))
+		for serverName := range agent.MCPServers {
+			names = append(names, serverName)
+		}
+		sort.Strings(names)
+		parts = append(parts, "연결 MCP: "+strings.Join(names, ", "))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func inlineMCPServerFromRaw(name string, raw json.RawMessage) (llm.MCPServer, error) {
