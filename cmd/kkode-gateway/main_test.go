@@ -457,6 +457,63 @@ func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
 	}
 }
 
+func TestSyncProviderTesterAppliesLiveTimeout(t *testing.T) {
+	unregister, err := app.RegisterProvider(app.ProviderRegistration{
+		Spec: app.ProviderSpec{
+			Name:         "slow-provider-test",
+			DefaultModel: "slow-model",
+			Models:       []string{"slow-model"},
+			Local:        true,
+			Conversion: app.ProviderConversionSpec{
+				Operations: []string{"slow.generate"},
+			},
+		},
+		Conversion: func(spec app.ProviderSpec) app.ProviderConversionSet {
+			return app.ProviderConversionSet{
+				RequestConverter: llm.RequestConverterFunc(func(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error) {
+					return llm.ProviderRequest{Operation: "slow.generate", Model: req.Model, Body: map[string]any{"input": req.Messages[0].Content}}, nil
+				}),
+				Options: llm.ConvertOptions{Operation: "slow.generate"},
+			}
+		},
+		Factory: func(root string, opts app.ProviderOptions) (app.ProviderHandle, error) {
+			return app.ProviderHandle{Provider: slowProviderTest{}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	resp, err := syncProviderTester()(context.Background(), "slow-provider-test", gateway.ProviderTestRequest{Live: true, TimeoutMS: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.OK || !resp.Live || !strings.Contains(resp.Message, "context deadline exceeded") {
+		t.Fatalf("provider live smoke timeout이 적용돼야 해요: %+v", resp)
+	}
+	if _, err := providerTestTimeout(-1); err == nil {
+		t.Fatal("음수 provider test timeout은 거부해야 해요")
+	}
+}
+
+type slowProviderTest struct{}
+
+func (slowProviderTest) Name() string { return "slow-provider-test" }
+
+func (slowProviderTest) Capabilities() llm.Capabilities {
+	return llm.Capabilities{}
+}
+
+func (slowProviderTest) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	select {
+	case <-time.After(time.Second):
+		return llm.TextResponse("slow-provider-test", req.Model, "late"), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 func TestDefaultMCPDTOsAreStableAndRedacted(t *testing.T) {
 	t.Setenv("KKODE_SERENA_COMMAND", "uvx")
 	t.Setenv("CONTEXT7_API_KEY", "secret")

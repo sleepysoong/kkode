@@ -321,6 +321,7 @@ type ProviderTestRequest struct {
 	Metadata        map[string]string `json:"metadata,omitempty"`
 	MaxPreviewBytes int               `json:"max_preview_bytes,omitempty"`
 	MaxOutputTokens int               `json:"max_output_tokens,omitempty"`
+	TimeoutMS       int               `json:"timeout_ms,omitempty"`
 }
 
 // ProviderTestResultDTO는 provider live smoke 결과를 adapter 친화적으로 요약해요.

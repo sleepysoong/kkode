@@ -418,7 +418,11 @@ func syncProviderTester() gateway.ProviderTester {
 			return out, nil
 		}
 
-		liveCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		timeout, err := providerTestTimeout(req.TimeoutMS)
+		if err != nil {
+			return nil, err
+		}
+		liveCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		handle, err := app.BuildProviderWithOptions(spec.Name, ".", app.ProviderOptions{})
 		if err != nil {
@@ -455,6 +459,16 @@ func syncProviderTester() gateway.ProviderTester {
 		out.Message = "provider live test가 성공했어요"
 		return out, nil
 	}
+}
+
+func providerTestTimeout(timeoutMS int) (time.Duration, error) {
+	if timeoutMS < 0 {
+		return 0, fmt.Errorf("timeout_ms는 0 이상이어야 해요")
+	}
+	if timeoutMS == 0 {
+		return 60 * time.Second, nil
+	}
+	return time.Duration(timeoutMS) * time.Millisecond, nil
 }
 
 func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Request) (*gateway.ProviderTestResultDTO, error) {
