@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/providers/httpjson"
 	"github.com/sleepysoong/kkode/providers/internal/httptransport"
 )
 
@@ -35,6 +34,7 @@ type Client struct {
 	headers      map[string]string
 	retry        RetryConfig
 	providerName string
+	caller       *httpjson.Caller
 }
 
 func New(cfg Config) *Client {
@@ -48,7 +48,18 @@ func New(cfg Config) *Client {
 	if providerName == "" {
 		providerName = "openai-compatible"
 	}
-	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: httptransport.CloneHeaders(cfg.Headers), retry: retry, providerName: providerName}
+	headers := httptransport.CloneHeaders(cfg.Headers)
+	caller := httpjson.New(httpjson.Config{
+		ProviderName:     providerName,
+		BaseURL:          base,
+		APIKey:           cfg.APIKey,
+		HTTPClient:       hc,
+		Headers:          headers,
+		Retry:            retry,
+		DefaultOperation: responsesOperation,
+		Routes:           map[string]httpjson.Route{responsesOperation: {Path: "/responses"}},
+	})
+	return &Client{baseURL: base, apiKey: cfg.APIKey, httpClient: hc, headers: headers, retry: retry, providerName: providerName, caller: caller}
 }
 
 func (c *Client) Name() string { return c.providerName }
@@ -89,31 +100,10 @@ func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 	if req.Operation != "" && req.Operation != responsesOperation {
 		return llm.ProviderResult{}, fmt.Errorf("지원하지 않는 OpenAI-compatible operation이에요: %s", req.Operation)
 	}
-	u, err := url.JoinPath(c.baseURL, "responses")
-	if err != nil {
-		return llm.ProviderResult{}, err
+	if c == nil || c.caller == nil {
+		return llm.ProviderResult{}, errors.New("OpenAI-compatible HTTP JSON caller가 필요해요")
 	}
-	headers := httptransport.CloneHeaders(c.headers)
-	for k, v := range req.Headers {
-		headers[k] = v
-	}
-	hreq, payload, err := httptransport.NewJSONRequest(ctx, http.MethodPost, u, c.apiKey, headers, req.Body, "")
-	if err != nil {
-		return llm.ProviderResult{}, err
-	}
-	res, err := c.do(hreq, payload)
-	if err != nil {
-		return llm.ProviderResult{}, err
-	}
-	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		return llm.ProviderResult{}, err
-	}
-	if !httptransport.IsSuccessStatus(res.StatusCode) {
-		return llm.ProviderResult{}, httptransport.ErrorFromResponse("openai-compatible responses API", res, data)
-	}
-	return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Body: data, Headers: res.Header}, nil
+	return c.caller.CallProvider(ctx, req)
 }
 
 func BuildResponsesRequest(req llm.Request) (map[string]any, error) {

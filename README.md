@@ -447,7 +447,7 @@ if err != nil {
 resp, err := pipeline.Decode(ctx, result)
 ```
 
-OpenAI-compatible HTTP JSON API라면 공통 caller까지 재사용해요. 새 source는 base URL과 operation route만 넣으면 `요청 → OpenAI-compatible 컨버팅 → HTTP JSON 호출 → 표준 응답` 흐름을 그대로 써요.
+OpenAI-compatible HTTP JSON API라면 기본 OpenAI-compatible client도 쓰는 공통 caller를 재사용해요. 새 source는 base URL과 operation route만 넣으면 `요청 → OpenAI-compatible 컨버팅 → HTTP JSON 호출 → 표준 응답` 흐름을 그대로 써요.
 
 ```go
 caller := httpjson.New(httpjson.Config{
