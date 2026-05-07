@@ -113,8 +113,24 @@ func TestGatewayReadyRejectsMissingRuntimeWiring(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "run_starter") || !strings.Contains(rec.Body.String(), "provider_tester") {
+	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("runtime wiring 누락은 ready가 아니어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var envelope ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	rawMissing, ok := envelope.Error.Details["missing_runtime_wiring"].([]any)
+	if !ok {
+		t.Fatalf("ready 오류 details에 missing_runtime_wiring이 필요해요: %+v", envelope.Error)
+	}
+	missing := map[string]bool{}
+	for _, item := range rawMissing {
+		name, _ := item.(string)
+		missing[name] = true
+	}
+	if !missing["run_starter"] || !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] {
+		t.Fatalf("ready 오류 details가 이상해요: %+v", envelope.Error.Details)
 	}
 }
 

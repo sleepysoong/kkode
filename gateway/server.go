@@ -169,7 +169,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if missing := s.missingRuntimeWiring(); len(missing) > 0 {
-		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "runtime wiring이 준비되지 않았어요: "+strings.Join(missing, ", "))
+		writeErrorDetails(w, r, http.StatusServiceUnavailable, "not_ready", "runtime wiring이 준비되지 않았어요", map[string]any{"missing_runtime_wiring": missing})
 		return
 	}
 	writeJSON(w, map[string]any{"ready": true})

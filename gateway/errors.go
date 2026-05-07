@@ -21,8 +21,12 @@ type ErrorEnvelope struct {
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	writeErrorDetails(w, r, status, code, message, nil)
+}
+
+func writeErrorDetails(w http.ResponseWriter, r *http.Request, status int, code, message string, details map[string]any) {
 	requestID := requestIDFromRequest(r)
-	writeJSONStatus(w, status, ErrorEnvelope{Error: ErrorDTO{Code: code, Message: message, RequestID: requestID}})
+	writeJSONStatus(w, status, ErrorEnvelope{Error: ErrorDTO{Code: code, Message: message, RequestID: requestID, Details: details}})
 }
 
 func writeJSONDecodeError(w http.ResponseWriter, r *http.Request, err error) {
