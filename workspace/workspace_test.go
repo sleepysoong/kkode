@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 )
@@ -101,8 +102,18 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	if err != nil || part != "two needle" {
 		t.Fatalf("part=%q err=%v", part, err)
 	}
+	if err := w.WriteFile("src/utf8.txt", "가나다라마"); err != nil {
+		t.Fatal(err)
+	}
+	part, err = w.ReadFileRange("src/utf8.txt", ReadOptions{MaxBytes: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if part != "가" || !utf8.ValidString(part) {
+		t.Fatalf("max_bytes는 UTF-8 문자를 중간에서 자르면 안 돼요: %q", part)
+	}
 	glob, err := w.Glob("src/*.txt")
-	if err != nil || len(glob) != 1 || glob[0] != "src/a.txt" {
+	if err != nil || len(glob) != 2 || glob[0] != "src/a.txt" || glob[1] != "src/utf8.txt" {
 		t.Fatalf("glob=%#v err=%v", glob, err)
 	}
 	matches, err := w.Grep("needle", GrepOptions{PathGlob: "src/**"})

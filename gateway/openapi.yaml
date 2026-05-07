@@ -2326,6 +2326,7 @@ components:
           type: string
         content:
           type: string
+          description: max_bytes가 있으면 UTF-8 문자 경계를 보존해서 잘린 파일 내용이에요.
         content_bytes:
           type: integer
           description: 응답 content의 byte 수예요.

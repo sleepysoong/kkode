@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 )
@@ -115,7 +116,7 @@ func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error) 
 		return "", err
 	}
 	if opts.MaxBytes > 0 && len(b) > opts.MaxBytes {
-		b = b[:opts.MaxBytes]
+		b = truncateUTF8Bytes(b, opts.MaxBytes)
 	}
 	text := string(b)
 	if opts.OffsetLine > 0 || opts.LimitLines > 0 {
@@ -131,6 +132,17 @@ func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error) 
 		text = strings.Join(lines[start:end], "\n")
 	}
 	return text, nil
+}
+
+func truncateUTF8Bytes(b []byte, maxBytes int) []byte {
+	if maxBytes <= 0 || len(b) <= maxBytes {
+		return b
+	}
+	end := maxBytes
+	for end > 0 && !utf8.Valid(b[:end]) {
+		end--
+	}
+	return b[:end]
 }
 
 func (w *Workspace) WriteFile(rel, content string) error {
