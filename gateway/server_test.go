@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
@@ -2668,6 +2669,21 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	}
 	if len(log.Commits) != 1 || log.Commits[0].Subject != "initial" {
 		t.Fatalf("git log 응답이 이상해요: %+v", log)
+	}
+}
+
+func TestBoundedBufferPreservesUTF8(t *testing.T) {
+	var buf boundedBuffer
+	buf.max = 4
+	written, err := buf.Write([]byte("가나다"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != len([]byte("가나다")) || !buf.truncated {
+		t.Fatalf("bounded buffer write 결과가 이상해요: written=%d truncated=%v", written, buf.truncated)
+	}
+	if got := buf.String(); got != "가" || !utf8.ValidString(got) {
+		t.Fatalf("bounded buffer는 UTF-8 문자를 중간에서 반환하면 안 돼요: %q", got)
 	}
 }
 

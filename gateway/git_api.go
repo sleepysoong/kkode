@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 type GitStatusEntryDTO struct {
@@ -215,5 +216,13 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *boundedBuffer) String() string {
-	return b.buf.String()
+	data := b.buf.Bytes()
+	if utf8.Valid(data) {
+		return string(data)
+	}
+	end := len(data)
+	for end > 0 && !utf8.Valid(data[:end]) {
+		end--
+	}
+	return string(data[:end])
 }
