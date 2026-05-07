@@ -63,6 +63,50 @@ type ProviderStreamCaller interface {
 	StreamProvider(ctx context.Context, req ProviderRequest) (EventStream, error)
 }
 
+// RequestConverterFunc는 함수 하나를 RequestConverter로 써요.
+// 작은 provider plugin이나 테스트 source는 struct를 만들지 않고 변환 함수를 바로 꽂을 수 있어요.
+type RequestConverterFunc func(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error)
+
+func (f RequestConverterFunc) ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {
+	if f == nil {
+		return ProviderRequest{}, fmt.Errorf("provider request converter 함수가 필요해요")
+	}
+	return f(ctx, req, opts)
+}
+
+// ResponseConverterFunc는 함수 하나를 ResponseConverter로 써요.
+// provider별 응답 parser가 작을 때 재사용 pipeline에 바로 연결하기 좋아요.
+type ResponseConverterFunc func(ctx context.Context, result ProviderResult) (*Response, error)
+
+func (f ResponseConverterFunc) ConvertResponse(ctx context.Context, result ProviderResult) (*Response, error) {
+	if f == nil {
+		return nil, fmt.Errorf("provider response converter 함수가 필요해요")
+	}
+	return f(ctx, result)
+}
+
+// ProviderCallerFunc는 함수 하나를 ProviderCaller로 써요.
+// HTTP API, SDK, CLI, in-memory fake source를 같은 호출 경계에 맞출 때 boilerplate를 줄여요.
+type ProviderCallerFunc func(ctx context.Context, req ProviderRequest) (ProviderResult, error)
+
+func (f ProviderCallerFunc) CallProvider(ctx context.Context, req ProviderRequest) (ProviderResult, error) {
+	if f == nil {
+		return ProviderResult{}, fmt.Errorf("provider caller 함수가 필요해요")
+	}
+	return f(ctx, req)
+}
+
+// ProviderStreamCallerFunc는 함수 하나를 ProviderStreamCaller로 써요.
+// SSE/JSONL/SDK event stream source를 표준 EventStream으로 감싸기 위한 얇은 adapter예요.
+type ProviderStreamCallerFunc func(ctx context.Context, req ProviderRequest) (EventStream, error)
+
+func (f ProviderStreamCallerFunc) StreamProvider(ctx context.Context, req ProviderRequest) (EventStream, error) {
+	if f == nil {
+		return nil, fmt.Errorf("provider stream caller 함수가 필요해요")
+	}
+	return f(ctx, req)
+}
+
 // AdaptedProvider는 "내부 요청 -> 변환 -> source 호출 -> 내부 응답" 흐름을 재사용하는 Provider 구현체예요.
 // provider별 차이는 converter/caller/streamer에 격리해요.
 type AdaptedProvider struct {

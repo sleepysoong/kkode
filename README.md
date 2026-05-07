@@ -447,6 +447,33 @@ if err != nil {
 resp, err := pipeline.Decode(ctx, result)
 ```
 
+provider source가 작으면 별도 struct 없이 함수 adapter로도 붙일 수 있어요. 이렇게 하면 나중에 어떤 API든 `RequestConverterFunc`, `ProviderCallerFunc`, `ResponseConverterFunc` 세 함수만 추가해서 같은 파이프라인을 재사용해요.
+
+```go
+pipeline := llm.ProviderPipeline{
+    ProviderName: "my-api",
+    RequestConverter: llm.RequestConverterFunc(func(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error) {
+        return llm.ProviderRequest{
+            Operation: opts.Operation,
+            Model:     req.Model,
+            Body:      map[string]any{"model": req.Model, "messages": req.Messages},
+        }, nil
+    }),
+    Caller: llm.ProviderCallerFunc(func(ctx context.Context, preq llm.ProviderRequest) (llm.ProviderResult, error) {
+        // 여기에서만 실제 API/SDK/CLI 호출을 해요.
+        data, err := callMyAPI(ctx, preq.Body)
+        if err != nil {
+            return llm.ProviderResult{}, err
+        }
+        return llm.ProviderResult{Provider: "my-api", Model: preq.Model, Body: data}, nil
+    }),
+    ResponseConverter: llm.ResponseConverterFunc(func(ctx context.Context, result llm.ProviderResult) (*llm.Response, error) {
+        return parseMyAPIResponse(result.Body, result.Provider, result.Model)
+    }),
+    Options: llm.ConvertOptions{Operation: "my-api.generate"},
+}
+```
+
 OpenAI-compatible HTTP JSON API라면 기본 OpenAI-compatible client도 쓰는 공통 caller를 재사용해요. 새 source는 base URL과 operation route만 넣으면 `요청 → OpenAI-compatible 컨버팅 → HTTP JSON 호출 → 표준 응답` 흐름을 그대로 써요.
 
 ```go

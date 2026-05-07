@@ -163,6 +163,35 @@ func TestProviderPipelinePrepareStreamFallsBackToDefaultOperation(t *testing.T) 
 	}
 }
 
+func TestProviderPipelineAcceptsFunctionAdapters(t *testing.T) {
+	var converted ProviderRequest
+	pipeline := ProviderPipeline{
+		ProviderName: "func-api",
+		RequestConverter: RequestConverterFunc(func(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {
+			return ProviderRequest{Operation: opts.Operation, Model: req.Model, Body: map[string]any{"input": req.Messages[0].Content}}, nil
+		}),
+		Caller: ProviderCallerFunc(func(ctx context.Context, req ProviderRequest) (ProviderResult, error) {
+			converted = req
+			return ProviderResult{Body: []byte(`func source raw`)}, nil
+		}),
+		ResponseConverter: ResponseConverterFunc(func(ctx context.Context, result ProviderResult) (*Response, error) {
+			return &Response{Provider: result.Provider, Model: result.Model, Status: "completed", Text: string(result.Body)}, nil
+		}),
+		Options: ConvertOptions{Operation: "func.create"},
+	}
+
+	resp, err := pipeline.Generate(context.Background(), Request{Model: "func-model", Messages: []Message{UserText("함수형 source")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if converted.Operation != "func.create" || converted.Model != "func-model" {
+		t.Fatalf("함수 adapter가 변환 요청을 source에 넘겨야 해요: %+v", converted)
+	}
+	if resp.Provider != "func-api" || resp.Model != "func-model" || resp.Text != "func source raw" {
+		t.Fatalf("함수 adapter 응답 정규화가 이상해요: %+v", resp)
+	}
+}
+
 type fakeConverter struct{}
 
 func (fakeConverter) ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {
