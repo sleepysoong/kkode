@@ -480,6 +480,23 @@ func TestRunEventBusPublishesRunUpdates(t *testing.T) {
 	}
 }
 
+func TestRunEventBusPublishesProgressEvents(t *testing.T) {
+	bus := NewRunEventBus()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, unsubscribe := bus.SubscribeEvents(ctx, "run_1")
+	defer unsubscribe()
+	bus.PublishEvent(RunEventDTO{Type: "tool.completed", Tool: "file_read", Run: RunDTO{ID: "run_1", Status: "running"}})
+	select {
+	case event := <-ch:
+		if event.Type != "tool.completed" || event.Tool != "file_read" || event.Run.ID != "run_1" {
+			t.Fatalf("progress event가 이상해요: %+v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("progress event를 받지 못했어요")
+	}
+}
+
 func TestRunEventBusPreservesTerminalUpdateWhenSubscriberBufferIsFull(t *testing.T) {
 	bus := NewRunEventBus()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -541,6 +558,43 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	}
 	if len(afterFirst) == 0 || afterFirst[0].Seq <= 1 {
 		t.Fatalf("restart 후 after_seq replay가 이상해요: %+v", afterFirst)
+	}
+}
+
+func TestAsyncRunManagerRecordsProgressEventsFromRunContext(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		if ok := ReportRunEvent(ctx, RunEventDTO{Type: "tool.completed", Tool: "file_read", Message: "token=abc1234567890secretvalue"}); !ok {
+			t.Fatal("run context에 progress reporter가 필요해요")
+		}
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
+	}, store)
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRunStatus(t, manager, run.ID, "completed")
+	replay := waitForRunEventType(t, manager, run.ID, "run.completed")
+	var sawTrace bool
+	for _, event := range replay {
+		if event.Type == "tool.completed" && event.Tool == "file_read" {
+			sawTrace = true
+			if event.Run.ID != run.ID || event.Message != "token=abc1234567890secretvalue" {
+				t.Fatalf("progress event replay가 이상해요: %+v", event)
+			}
+		}
+	}
+	if !sawTrace {
+		t.Fatalf("agent/tool progress event가 durable run event에 필요해요: %+v", replay)
 	}
 }
 

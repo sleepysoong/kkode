@@ -197,10 +197,14 @@ type RequestCorrelationEventsResponse struct {
 
 // RunEventDTO는 run 상태 변경을 SSE/JSON replay로 표현해요.
 type RunEventDTO struct {
-	Seq  int       `json:"seq"`
-	At   time.Time `json:"at,omitempty"`
-	Type string    `json:"type"`
-	Run  RunDTO    `json:"run"`
+	Seq     int             `json:"seq"`
+	At      time.Time       `json:"at,omitempty"`
+	Type    string          `json:"type"`
+	Tool    string          `json:"tool,omitempty"`
+	Message string          `json:"message,omitempty"`
+	Error   string          `json:"error,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+	Run     RunDTO          `json:"run"`
 }
 
 type RunEventListResponse struct {

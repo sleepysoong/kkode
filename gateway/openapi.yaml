@@ -2867,6 +2867,17 @@ components:
           format: date-time
         type:
           type: string
+        tool:
+          type: string
+          description: tool trace event이면 tool 이름이에요.
+        message:
+          type: string
+          description: agent/tool progress message예요. gateway observer는 secret 값을 마스킹해요.
+        error:
+          type: string
+          description: agent/tool progress error예요.
+        payload:
+          description: 확장 progress payload예요.
         run:
           $ref: '#/components/schemas/Run'
     Run:

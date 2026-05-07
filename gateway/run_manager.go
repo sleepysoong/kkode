@@ -178,6 +178,13 @@ func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan R
 	return m.eventBus.Subscribe(ctx, runID)
 }
 
+func (m *AsyncRunManager) SubscribeEvents(ctx context.Context, runID string) (<-chan RunEventDTO, func()) {
+	if m == nil || m.eventBus == nil {
+		return NewRunEventBus().SubscribeEvents(ctx, runID)
+	}
+	return m.eventBus.SubscribeEvents(ctx, runID)
+}
+
 // RecoverStaleRuns는 gateway 재시작으로 소유자가 사라진 queued/running/cancelling run을 failed로 닫아요.
 // 외부 패널이 영원히 도는 run을 보지 않도록 서버 시작 시 한 번 호출하면 돼요.
 func (m *AsyncRunManager) RecoverStaleRuns(ctx context.Context) error {
@@ -471,6 +478,9 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		run.Status = "running"
 		run.StartedAt = m.timestamp()
 	})
+	runCtx = WithRunEventReporter(runCtx, func(ctx context.Context, event RunEventDTO) {
+		m.recordProgressEvent(ctx, req.RunID, event)
+	})
 	result, err := m.starter(runCtx, req)
 	m.update(req.RunID, func(run *RunDTO) {
 		if result != nil {
@@ -614,6 +624,38 @@ func (m *AsyncRunManager) recordEvent(ctx context.Context, run *RunDTO) error {
 	return err
 }
 
+func (m *AsyncRunManager) recordProgressEvent(ctx context.Context, runID string, event RunEventDTO) {
+	if m == nil || m.runEventStore == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(event.Type) == "" {
+		return
+	}
+	m.mu.RLock()
+	managed, ok := m.runs[runID]
+	if !ok {
+		m.mu.RUnlock()
+		return
+	}
+	run := *cloneRun(&managed.run)
+	m.mu.RUnlock()
+	if event.At.IsZero() {
+		event.At = m.timestamp()
+	}
+	event.Run = run
+	saved, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{
+		RunID:   runID,
+		Type:    event.Type,
+		At:      event.At,
+		Tool:    event.Tool,
+		Message: event.Message,
+		Error:   event.Error,
+		Payload: append([]byte(nil), event.Payload...),
+		Run:     sessionRunFromDTO(run),
+	})
+	if err == nil && m.eventBus != nil {
+		event.Seq = saved.Seq
+		m.eventBus.PublishEvent(event)
+	}
+}
+
 func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
 	if m == nil {
 		return nil, errors.New("run manager가 필요해요")
@@ -625,7 +667,7 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 		}
 		out := make([]RunEventDTO, 0, len(events))
 		for _, event := range events {
-			out = append(out, RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Run: *runDTOFromSession(event.Run)})
+			out = append(out, RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Tool: event.Tool, Message: event.Message, Error: event.Error, Payload: append([]byte(nil), event.Payload...), Run: *runDTOFromSession(event.Run)})
 		}
 		return out, nil
 	}

@@ -1480,6 +1480,45 @@ func TestGatewayRunSSESendsHeartbeat(t *testing.T) {
 	}
 }
 
+func TestGatewayRunSSEStreamsProgressEvents(t *testing.T) {
+	store := openTestStore(t)
+	bus := NewRunEventBus()
+	run := RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"}
+	srv, err := New(Config{
+		Store: store,
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			copy := run
+			return &copy, nil
+		},
+		RunEventSubscriber: bus.SubscribeEvents,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_progress/events?stream=true", nil).WithContext(ctx)
+	rec := newSafeResponseRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.ServeHTTP(rec, req)
+		close(done)
+	}()
+	waitForRunEventSubscription(t, bus, "run_progress")
+	bus.PublishEvent(RunEventDTO{Seq: 2, At: time.Now().UTC(), Type: "tool.completed", Tool: "file_read", Message: "ok", Run: run})
+	bus.PublishEvent(RunEventDTO{Seq: 3, At: time.Now().UTC(), Type: "run.completed", Run: RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "completed"}})
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("progress SSE가 종료되지 않았어요")
+	}
+	body := rec.BodyString()
+	if !strings.Contains(body, "event: tool.completed") || !strings.Contains(body, `"tool":"file_read"`) || !strings.Contains(body, `"message":"ok"`) {
+		t.Fatalf("run progress SSE body가 이상해요: %s", body)
+	}
+}
+
 func TestGatewayRunSSECatchesUpdateDuringReplay(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
@@ -1537,6 +1576,21 @@ func waitForRunSubscription(t *testing.T, bus *RunEventBus, runID string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("run SSE 구독이 준비되지 않았어요")
+}
+
+func waitForRunEventSubscription(t *testing.T, bus *RunEventBus, runID string) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		bus.mu.Lock()
+		count := len(bus.eventSubscribers[runID])
+		bus.mu.Unlock()
+		if count > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("run event SSE 구독이 준비되지 않았어요")
 }
 
 func TestGatewayRetriesRun(t *testing.T) {

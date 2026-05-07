@@ -54,6 +54,7 @@ type Config struct {
 	RunCanceler          RunCanceler
 	RunEventLister       RunEventLister
 	RunSubscriber        RunEventSubscriber
+	RunEventSubscriber   RunEventStreamSubscriber
 	Now                  func() time.Time
 }
 
@@ -342,10 +343,37 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 	flusher, _ := w.(http.Flusher)
 	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
 	defer heartbeat.Stop()
-	updates := make(chan RunDTO, len(runs)*2)
+	updates := make(chan RunEventDTO, len(runs)*2)
 	active := 0
 	activeIDs := map[string]bool{}
-	if s.cfg.RunSubscriber != nil {
+	if s.cfg.RunEventSubscriber != nil {
+		for _, run := range runs {
+			if isTerminalRunStatus(run.Status) {
+				continue
+			}
+			ch, unsubscribe := s.cfg.RunEventSubscriber(r.Context(), run.ID)
+			defer unsubscribe()
+			active++
+			activeIDs[run.ID] = true
+			go func(ch <-chan RunEventDTO) {
+				for {
+					select {
+					case <-r.Context().Done():
+						return
+					case event, ok := <-ch:
+						if !ok {
+							return
+						}
+						select {
+						case <-r.Context().Done():
+							return
+						case updates <- event:
+						}
+					}
+				}
+			}(ch)
+		}
+	} else if s.cfg.RunSubscriber != nil {
 		for _, run := range runs {
 			if isTerminalRunStatus(run.Status) {
 				continue
@@ -366,7 +394,7 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 						select {
 						case <-r.Context().Done():
 							return
-						case updates <- run:
+						case updates <- RunEventDTO{Type: runEventType(run.Status), Run: run}:
 						}
 					}
 				}
@@ -396,12 +424,17 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 			return
 		case <-heartbeat.C:
 			writeSSEHeartbeat(w, flusher)
-		case run := <-updates:
+		case event := <-updates:
 			streamSeq++
-			event := RunEventDTO{Seq: streamSeq, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}
+			if event.Seq <= 0 {
+				event.Seq = streamSeq
+			}
+			if event.At.IsZero() {
+				event.At = s.cfg.Now()
+			}
 			writeSSEFrame(w, flusher, streamSeq, event.Type, event)
-			if isTerminalRunStatus(run.Status) {
-				terminal[run.ID] = true
+			if isTerminalRunStatus(event.Run.Status) {
+				terminal[event.Run.ID] = true
 			}
 		}
 	}
@@ -1029,8 +1062,11 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		return
 	}
 	var live <-chan RunDTO
+	var liveEvents <-chan RunEventDTO
 	var unsubscribe func()
-	if wantsSSE(r) && s.cfg.RunSubscriber != nil {
+	if wantsSSE(r) && s.cfg.RunEventSubscriber != nil {
+		liveEvents, unsubscribe = s.cfg.RunEventSubscriber(r.Context(), runID)
+	} else if wantsSSE(r) && s.cfg.RunSubscriber != nil {
 		live, unsubscribe = s.cfg.RunSubscriber(r.Context(), runID)
 	}
 	run, err := s.cfg.RunGetter(r.Context(), runID)
@@ -1045,7 +1081,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		writeJSON(w, RunEventListResponse{Events: s.runEventSnapshot(r, runID, *run)})
 		return
 	}
-	s.writeRunSSE(w, r, runID, *run, live, unsubscribe)
+	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe)
 }
 
 func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO) []RunEventDTO {
@@ -1066,7 +1102,7 @@ func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}}
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, unsubscribe func()) {
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func()) {
 	if unsubscribe != nil {
 		defer unsubscribe()
 	}
@@ -1088,8 +1124,41 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 		seq = 1
 		writeRunSSEEvent(w, flusher, RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(initial.Status), Run: initial})
 	}
-	if isTerminalRunStatus(lastStatus) || s.cfg.RunSubscriber == nil {
+	if isTerminalRunStatus(lastStatus) || (s.cfg.RunSubscriber == nil && s.cfg.RunEventSubscriber == nil) {
 		return
+	}
+	if s.cfg.RunEventSubscriber != nil {
+		ch := liveEvents
+		if ch == nil {
+			var localUnsubscribe func()
+			ch, localUnsubscribe = s.cfg.RunEventSubscriber(r.Context(), initial.ID)
+			defer localUnsubscribe()
+		}
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-heartbeat.C:
+				writeSSEHeartbeat(w, flusher)
+			case event, ok := <-ch:
+				if !ok {
+					return
+				}
+				if event.Seq <= seq {
+					seq++
+					event.Seq = seq
+				} else {
+					seq = event.Seq
+				}
+				if event.At.IsZero() {
+					event.At = s.cfg.Now()
+				}
+				writeRunSSEEvent(w, flusher, event)
+				if isTerminalRunStatus(event.Run.Status) {
+					return
+				}
+			}
+		}
 	}
 	ch := live
 	if ch == nil {

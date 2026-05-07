@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -36,12 +37,16 @@ type RunQuery struct {
 
 // RunEvent는 run 상태 변경 snapshot을 durable replay용으로 남기는 레코드예요.
 type RunEvent struct {
-	ID    string    `json:"id"`
-	RunID string    `json:"run_id"`
-	Seq   int       `json:"seq"`
-	Type  string    `json:"type"`
-	At    time.Time `json:"at"`
-	Run   Run       `json:"run"`
+	ID      string          `json:"id"`
+	RunID   string          `json:"run_id"`
+	Seq     int             `json:"seq"`
+	Type    string          `json:"type"`
+	At      time.Time       `json:"at"`
+	Tool    string          `json:"tool,omitempty"`
+	Message string          `json:"message,omitempty"`
+	Error   string          `json:"error,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+	Run     Run             `json:"run"`
 }
 
 type RunEventQuery struct {

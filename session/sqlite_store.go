@@ -121,9 +121,17 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			seq INTEGER NOT NULL,
 			at TEXT NOT NULL,
 			type TEXT NOT NULL,
+			tool TEXT NOT NULL DEFAULT '',
+			message TEXT NOT NULL DEFAULT '',
+			error TEXT NOT NULL DEFAULT '',
+			payload_json BLOB,
 			run_json BLOB NOT NULL,
 			UNIQUE(run_id, seq)
 		);`,
+		`ALTER TABLE run_events ADD COLUMN tool TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE run_events ADD COLUMN message TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE run_events ADD COLUMN error TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE run_events ADD COLUMN payload_json BLOB;`,
 		`CREATE INDEX IF NOT EXISTS idx_run_events_run_seq ON run_events(run_id, seq);`,
 		`CREATE TABLE IF NOT EXISTS todos (
 			id TEXT NOT NULL,
@@ -1017,7 +1025,7 @@ func appendRunEvent(ctx context.Context, writer runEventWriter, event *RunEvent)
 			return err
 		}
 	}
-	_, err = writer.ExecContext(ctx, `INSERT INTO run_events (id, run_id, seq, at, type, run_json) VALUES (?, ?, ?, ?, ?, ?)`, event.ID, event.RunID, event.Seq, formatTime(event.At), event.Type, runJSON)
+	_, err = writer.ExecContext(ctx, `INSERT INTO run_events (id, run_id, seq, at, type, tool, message, error, payload_json, run_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, event.ID, event.RunID, event.Seq, formatTime(event.At), event.Type, event.Tool, event.Message, event.Error, []byte(event.Payload), runJSON)
 	return err
 }
 
@@ -1026,7 +1034,7 @@ func (s *SQLiteStore) ListRunEvents(ctx context.Context, q RunEventQuery) ([]Run
 	if limit <= 0 {
 		limit = 200
 	}
-	query := `SELECT id, run_id, seq, at, type, run_json FROM run_events WHERE run_id = ?`
+	query := `SELECT id, run_id, seq, at, type, tool, message, error, payload_json, run_json FROM run_events WHERE run_id = ?`
 	args := []any{q.RunID}
 	if q.AfterSeq > 0 {
 		query += ` AND seq > ?`
@@ -1058,10 +1066,14 @@ func scanRunEvent(scanner runEventScanner) (RunEvent, error) {
 	var event RunEvent
 	var at string
 	var runJSON []byte
-	if err := scanner.Scan(&event.ID, &event.RunID, &event.Seq, &at, &event.Type, &runJSON); err != nil {
+	var payload []byte
+	if err := scanner.Scan(&event.ID, &event.RunID, &event.Seq, &at, &event.Type, &event.Tool, &event.Message, &event.Error, &payload, &runJSON); err != nil {
 		return RunEvent{}, err
 	}
 	event.At = parseTime(at)
+	if len(payload) > 0 {
+		event.Payload = append(json.RawMessage(nil), payload...)
+	}
 	if len(runJSON) > 0 {
 		if err := json.Unmarshal(runJSON, &event.Run); err != nil {
 			return RunEvent{}, err

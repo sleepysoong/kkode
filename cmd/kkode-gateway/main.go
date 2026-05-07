@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sleepysoong/kkode/agent"
 	"github.com/sleepysoong/kkode/app"
 	"github.com/sleepysoong/kkode/gateway"
 	"github.com/sleepysoong/kkode/llm"
@@ -92,6 +93,7 @@ func run(args []string) error {
 		RunCanceler:          runManager.Cancel,
 		RunEventLister:       runManager.Events,
 		RunSubscriber:        runManager.Subscribe,
+		RunEventSubscriber:   runManager.SubscribeEvents,
 		Providers:            providerDTOs(),
 		DefaultMCPServers:    defaultMCPDTOs(),
 		ResourceStore:        store,
@@ -234,7 +236,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: providerHandle.BaseRequest, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, BaseRequest: providerHandle.BaseRequest, MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Observer: runEventTraceObserver()})
 		if err != nil {
 			return nil, err
 		}
@@ -259,6 +261,18 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		}
 		return run, nil
 	}
+}
+
+func runEventTraceObserver() agent.Observer {
+	return agent.ObserverFunc(func(ctx context.Context, event agent.TraceEvent) {
+		gateway.ReportRunEvent(ctx, gateway.RunEventDTO{
+			At:      event.At,
+			Type:    event.Type,
+			Tool:    event.Tool,
+			Message: llm.RedactSecrets(event.Message),
+			Error:   llm.RedactSecrets(event.Error),
+		})
+	})
 }
 
 func syncRunValidator(store session.Store) gateway.RunValidator {
