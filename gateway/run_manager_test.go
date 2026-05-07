@@ -138,6 +138,24 @@ func TestAsyncRunManagerLimitsConcurrentRunningRuns(t *testing.T) {
 	}
 }
 
+func TestAsyncRunManagerCancelsTimedOutRun(t *testing.T) {
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}).SetRunTimeout(10 * time.Millisecond)
+	run, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "timeout"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelled := waitForRunStatus(t, manager, run.ID, "cancelled")
+	if !strings.Contains(cancelled.Error, "deadline") {
+		t.Fatalf("timeout 이유가 남아야 해요: %+v", cancelled)
+	}
+	if manager.RunTimeout() != 10*time.Millisecond {
+		t.Fatalf("run timeout이 유지돼야 해요: %s", manager.RunTimeout())
+	}
+}
+
 func TestAsyncRunManagerShutdownCancelsActiveRuns(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		<-ctx.Done()

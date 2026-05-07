@@ -248,6 +248,7 @@ type DiagnosticsResponse struct {
 	DefaultMCPServers int                  `json:"default_mcp_servers"`
 	MaxRequestBytes   int64                `json:"max_request_bytes"`
 	MaxConcurrentRuns int                  `json:"max_concurrent_runs,omitempty"`
+	RunTimeoutSeconds int                  `json:"run_timeout_seconds,omitempty"`
 }
 
 type DiagnosticCheckDTO struct {
@@ -260,6 +261,7 @@ type DiagnosticCheckDTO struct {
 type LimitDTO struct {
 	MaxRequestBytes   int64 `json:"max_request_bytes"`
 	MaxConcurrentRuns int   `json:"max_concurrent_runs,omitempty"`
+	RunTimeoutSeconds int   `json:"run_timeout_seconds,omitempty"`
 }
 
 func toSessionDTO(sess *session.Session) SessionDTO {

@@ -41,6 +41,7 @@ type AsyncRunManager struct {
 	now           func() time.Time
 	runSlots      chan struct{}
 	maxConcurrent int
+	runTimeout    time.Duration
 
 	mu   sync.RWMutex
 	runs map[string]*managedRun
@@ -96,6 +97,27 @@ func (m *AsyncRunManager) MaxConcurrentRuns() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.maxConcurrent
+}
+
+// SetRunTimeout은 running 상태로 들어간 background run의 최대 실행 시간을 제한해요.
+// 0 이하이면 timeout 없이 provider/tool context에 맡겨요.
+func (m *AsyncRunManager) SetRunTimeout(timeout time.Duration) *AsyncRunManager {
+	if m == nil {
+		return m
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.runTimeout = timeout
+	return m
+}
+
+func (m *AsyncRunManager) RunTimeout() time.Duration {
+	if m == nil {
+		return 0
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.runTimeout
 }
 
 func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -340,11 +362,13 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		return
 	}
 	defer release()
+	runCtx, timeoutCancel := m.withRunTimeout(ctx)
+	defer timeoutCancel()
 	m.update(req.RunID, func(run *RunDTO) {
 		run.Status = "running"
 		run.StartedAt = m.timestamp()
 	})
-	result, err := m.starter(ctx, req)
+	result, err := m.starter(runCtx, req)
 	m.update(req.RunID, func(run *RunDTO) {
 		if result != nil {
 			if result.ID == "" {
@@ -394,7 +418,7 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		}
 		if err != nil {
 			run.Error = err.Error()
-			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || runCtx.Err() != nil {
 				run.Status = "cancelled"
 			} else {
 				run.Status = "failed"
@@ -405,6 +429,19 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 			run.Status = "completed"
 		}
 	})
+}
+
+func (m *AsyncRunManager) withRunTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m == nil {
+		return ctx, func() {}
+	}
+	m.mu.RLock()
+	timeout := m.runTimeout
+	m.mu.RUnlock()
+	if timeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (m *AsyncRunManager) acquireRunSlot(ctx context.Context) (func(), bool) {

@@ -1471,6 +1471,8 @@ components:
           format: int64
         max_concurrent_runs:
           type: integer
+        run_timeout_seconds:
+          type: integer
     DiagnosticsResponse:
       type: object
       required: [ok, version, time, checks, providers, features, default_mcp_servers, max_request_bytes]
@@ -1498,6 +1500,8 @@ components:
           type: integer
           format: int64
         max_concurrent_runs:
+          type: integer
+        run_timeout_seconds:
           type: integer
     DiagnosticCheck:
       type: object

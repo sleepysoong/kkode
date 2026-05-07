@@ -32,6 +32,7 @@ type Config struct {
 	RequestIDGenerator   func() string
 	MaxRequestBytes      int64
 	MaxConcurrentRuns    int
+	RunTimeout           time.Duration
 	AccessLogger         AccessLogger
 	Providers            []ProviderDTO
 	DefaultMCPServers    []ResourceDTO
@@ -456,7 +457,14 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 	if len(features) == 0 {
 		features = DefaultFeatureCatalog()
 	}
-	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns}})
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}})
+}
+
+func durationSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+	return int((d + time.Second - 1) / time.Second)
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -494,7 +502,7 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
 	}
-	writeJSON(w, DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns})
+	writeJSON(w, DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)})
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []string) {
