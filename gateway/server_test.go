@@ -433,7 +433,8 @@ func TestGatewayCORSPreflightAndHeaders(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer secret")
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" {
+	exposed := rec.Header().Get("Access-Control-Expose-Headers")
+	if rec.Code != http.StatusOK || rec.Header().Get("Access-Control-Allow-Origin") != "https://panel.example" || !strings.Contains(exposed, RequestIDHeader) || !strings.Contains(exposed, IdempotencyReplayHeader) {
 		t.Fatalf("CORS response header가 필요해요: status=%d headers=%v", rec.Code, rec.Header())
 	}
 }

@@ -17,6 +17,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+RequestIDHeader)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", RequestIDHeader+", "+IdempotencyReplayHeader)
 		}
 		if r.Method == http.MethodOptions && origin != "" {
 			w.WriteHeader(http.StatusNoContent)
