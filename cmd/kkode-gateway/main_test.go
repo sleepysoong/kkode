@@ -197,14 +197,14 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts, err := loadProviderOptions(ctx, store, gateway.RunStartRequest{MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}, Subagents: []string{subagent.ID}})
+	opts, err := loadProviderOptions(ctx, store, gateway.RunStartRequest{MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}, Subagents: []string{subagent.ID}, ContextBlocks: []string{"임시 지시 token=ghp_123456789012345678901234567890123456"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != skillDir || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" || len(opts.ContextBlocks) != 2 {
+	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != skillDir || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" || len(opts.ContextBlocks) != 3 {
 		t.Fatalf("provider options가 이상해요: %+v", opts)
 	}
-	if !strings.Contains(opts.ContextBlocks[0], "코드를 리뷰해요") || !strings.Contains(opts.ContextBlocks[1], "계획해요") {
+	if !strings.Contains(opts.ContextBlocks[0], "요청 추가 컨텍스트") || !strings.Contains(opts.ContextBlocks[0], "[REDACTED]") || strings.Contains(opts.ContextBlocks[0], "ghp_") || !strings.Contains(opts.ContextBlocks[1], "코드를 리뷰해요") || !strings.Contains(opts.ContextBlocks[2], "계획해요") {
 		t.Fatalf("skill/subagent context block이 필요해요: %+v", opts.ContextBlocks)
 	}
 	agent := opts.CustomAgents[0]
@@ -317,7 +317,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}})
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}, ContextBlocks: []string{"Discord thread summary예요"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,10 +327,10 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
 	}
-	if len(preview.ContextBlocks) != 1 || !strings.Contains(preview.ContextBlocks[0], "코드를 리뷰해요") || preview.ContextTruncated {
+	if len(preview.ContextBlocks) != 2 || !strings.Contains(preview.ContextBlocks[0], "Discord thread summary") || !strings.Contains(preview.ContextBlocks[1], "코드를 리뷰해요") || preview.ContextTruncated {
 		t.Fatalf("run preview는 선택된 prompt context를 직접 보여줘야 해요: blocks=%q truncated=%v", preview.ContextBlocks, preview.ContextTruncated)
 	}
-	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "코드를 리뷰해요") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
+	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "Discord thread summary") || !strings.Contains(preview.ProviderRequest.BodyJSON, "코드를 리뷰해요") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
 	streamPreview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}, PreviewStream: true})
@@ -352,6 +352,10 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 func TestPreviewContextBlocksRedactsAndTruncatesUTF8(t *testing.T) {
 	if runPreviewBytes(0) != 64<<10 || runPreviewBytes(123) != 123 {
 		t.Fatal("run preview byte 예산 기본값/override가 이상해요")
+	}
+	requestBlocks := requestContextBlocks([]string{"   ", "token=ghp_123456789012345678901234567890123456\n요청 컨텍스트예요"})
+	if len(requestBlocks) != 1 || strings.Contains(requestBlocks[0], "ghp_") || !strings.Contains(requestBlocks[0], "[REDACTED]") || !strings.Contains(requestBlocks[0], "요청 추가 컨텍스트") {
+		t.Fatalf("요청 context block 정규화가 이상해요: %#v", requestBlocks)
 	}
 	blocks, truncated := previewContextBlocks([]string{
 		"token=ghp_123456789012345678901234567890123456\n가나다라마",

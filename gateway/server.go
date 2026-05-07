@@ -1267,7 +1267,7 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 	}
 	metadata["retried_from"] = original.ID
 	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
-	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents)}
+	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
 	if s.cfg.RunValidator != nil {
 		if err := s.cfg.RunValidator(r.Context(), req); err != nil {
 			writeError(w, r, http.StatusBadRequest, "invalid_run_preflight", err.Error())

@@ -2900,6 +2900,11 @@ components:
           description: run에 연결할 subagent resource id 목록이에요.
           items:
             type: string
+        context_blocks:
+          type: array
+          description: 저장 resource 없이 이번 run에만 system prompt로 추가할 provider-neutral 컨텍스트예요.
+          items:
+            type: string
         preview_stream:
           type: boolean
           default: false
@@ -3565,6 +3570,11 @@ components:
             type: string
         subagents:
           type: array
+          items:
+            type: string
+        context_blocks:
+          type: array
+          description: 실행 당시 요청에 포함된 임시 prompt context예요.
           items:
             type: string
         events_url:

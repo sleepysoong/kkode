@@ -148,6 +148,8 @@ type RunStartRequest struct {
 	MCPServers []string          `json:"mcp_servers,omitempty"`
 	Skills     []string          `json:"skills,omitempty"`
 	Subagents  []string          `json:"subagents,omitempty"`
+	// ContextBlocks는 저장 resource 없이 이번 run에만 추가할 provider-neutral prompt context예요.
+	ContextBlocks []string `json:"context_blocks,omitempty"`
 	// PreviewStream은 /runs/preview에서 provider streaming payload를 확인할 때만 쓰는 힌트예요.
 	PreviewStream bool `json:"preview_stream,omitempty"`
 	// MaxPreviewBytes는 /runs/preview에서 body/raw/context preview 최대 byte 수를 조절해요.
@@ -157,21 +159,23 @@ type RunStartRequest struct {
 
 // RunDTO는 gateway에서 관리하는 실행 단위예요. gateway RunStarter가 실행을 접수하거나 완료했을 때 생성해요.
 type RunDTO struct {
-	ID         string            `json:"id"`
-	SessionID  string            `json:"session_id"`
-	TurnID     string            `json:"turn_id,omitempty"`
-	Status     string            `json:"status"`
-	Prompt     string            `json:"prompt,omitempty"`
-	Provider   string            `json:"provider,omitempty"`
-	Model      string            `json:"model,omitempty"`
-	MCPServers []string          `json:"mcp_servers,omitempty"`
-	Skills     []string          `json:"skills,omitempty"`
-	Subagents  []string          `json:"subagents,omitempty"`
-	EventsURL  string            `json:"events_url,omitempty"`
-	StartedAt  time.Time         `json:"started_at,omitempty"`
-	EndedAt    time.Time         `json:"ended_at,omitempty"`
-	Error      string            `json:"error,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+	ID         string   `json:"id"`
+	SessionID  string   `json:"session_id"`
+	TurnID     string   `json:"turn_id,omitempty"`
+	Status     string   `json:"status"`
+	Prompt     string   `json:"prompt,omitempty"`
+	Provider   string   `json:"provider,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	MCPServers []string `json:"mcp_servers,omitempty"`
+	Skills     []string `json:"skills,omitempty"`
+	Subagents  []string `json:"subagents,omitempty"`
+	// ContextBlocks는 실행 당시 요청에 포함된 임시 prompt context예요.
+	ContextBlocks []string          `json:"context_blocks,omitempty"`
+	EventsURL     string            `json:"events_url,omitempty"`
+	StartedAt     time.Time         `json:"started_at,omitempty"`
+	EndedAt       time.Time         `json:"ended_at,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
 }
 
 // RunValidateResponse는 background run queue에 넣기 전 preflight 결과를 외부 adapter에 보여줘요.

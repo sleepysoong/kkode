@@ -256,7 +256,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if runID == "" {
 			runID = session.NewID("run")
 		}
-		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
 		}
@@ -794,11 +794,14 @@ func cloneStringMap(values map[string]string) map[string]string {
 }
 
 func loadProviderOptions(ctx context.Context, store session.Store, req gateway.RunStartRequest) (app.ProviderOptions, error) {
+	opts := app.ProviderOptions{MCPServers: map[string]llm.MCPServer{}, ContextBlocks: requestContextBlocks(req.ContextBlocks)}
 	resourceStore, _ := store.(session.ResourceStore)
 	if resourceStore == nil {
-		return app.ProviderOptions{}, nil
+		if len(opts.MCPServers) == 0 {
+			opts.MCPServers = nil
+		}
+		return opts, nil
 	}
-	opts := app.ProviderOptions{MCPServers: map[string]llm.MCPServer{}}
 	for _, id := range req.MCPServers {
 		resource, err := resourceStore.LoadResource(ctx, session.ResourceMCPServer, id)
 		if err != nil {
@@ -855,6 +858,34 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 		opts.MCPServers = nil
 	}
 	return opts, nil
+}
+
+func requestContextBlocks(blocks []string) []string {
+	if len(blocks) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		text := strings.TrimSpace(llm.RedactSecrets(block))
+		if text == "" {
+			continue
+		}
+		truncated := false
+		const maxRequestContextBytes = 32 << 10
+		if len(text) > maxRequestContextBytes {
+			text = truncateUTF8Bytes(text, maxRequestContextBytes)
+			truncated = true
+		}
+		parts := []string{"요청 추가 컨텍스트예요:", text}
+		if truncated {
+			parts = append(parts, "[요청 컨텍스트가 길어서 일부만 포함했어요]")
+		}
+		out = append(out, strings.Join(parts, "\n"))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func ensureResourceEnabled(resource session.Resource) error {

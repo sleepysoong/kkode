@@ -2171,7 +2171,7 @@ func waitForRunEventSubscription(t *testing.T, bus *RunEventBus, runID string) {
 
 func TestGatewayRetriesRun(t *testing.T) {
 	store := openTestStore(t)
-	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, Metadata: map[string]string{"source": "discord"}}
+	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, ContextBlocks: []string{"adapter context"}, Metadata: map[string]string{"source": "discord"}}
 	var retryReq RunStartRequest
 	srv, err := New(Config{
 		Store: store,
@@ -2201,7 +2201,7 @@ func TestGatewayRetriesRun(t *testing.T) {
 	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" || retryReq.Metadata[RequestIDMetadataKey] != "req_retry" {
 		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
 	}
-	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" {
+	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" || len(retryReq.ContextBlocks) != 1 || retryReq.ContextBlocks[0] != "adapter context" {
 		t.Fatalf("retry가 실행 옵션을 보존해야 해요: %+v", retryReq)
 	}
 }
