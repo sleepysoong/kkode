@@ -96,6 +96,7 @@ func run(args []string) error {
 		RunEventSubscriber:   runManager.SubscribeEvents,
 		Providers:            providerDTOs(),
 		DefaultMCPServers:    defaultMCPDTOs(),
+		DiagnosticChecks:     defaultMCPDiagnosticChecks(),
 		ResourceStore:        store,
 	})
 	if err != nil {
@@ -510,6 +511,19 @@ func defaultMCPDTOs() []gateway.ResourceDTO {
 			config["headers"] = cloneStringMap(server.Headers)
 		}
 		out = append(out, gateway.RedactResourceDTO(gateway.ResourceDTO{Kind: string(session.ResourceMCPServer), Name: firstNonEmpty(server.Name, name), Description: "kkode 기본 MCP server예요", Enabled: &enabled, Config: config}))
+	}
+	return out
+}
+
+func defaultMCPDiagnosticChecks() []gateway.DiagnosticCheckDTO {
+	diagnostics := app.DefaultMCPDiagnostics("")
+	out := make([]gateway.DiagnosticCheckDTO, 0, len(diagnostics))
+	for _, item := range diagnostics {
+		message := item.Message
+		if item.Kind != "" {
+			message = strings.TrimSpace(message + " kind=" + item.Kind)
+		}
+		out = append(out, gateway.DiagnosticCheckDTO{Name: "default_mcp." + item.Name, Status: item.Status, Message: message})
 	}
 	return out
 }

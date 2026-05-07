@@ -273,3 +273,21 @@ func TestDefaultMCPDTOsAreStableAndRedacted(t *testing.T) {
 		t.Fatalf("default MCP DTO는 secret을 숨겨야 해요: %+v", resources[0].Config)
 	}
 }
+
+func TestDefaultMCPDiagnosticChecksExplainMissingSerena(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("KKODE_SERENA_COMMAND", "")
+	checks := defaultMCPDiagnosticChecks()
+	var sawSerena bool
+	for _, check := range checks {
+		if check.Name == "default_mcp.serena" {
+			sawSerena = true
+			if check.Status != "missing" || !strings.Contains(check.Message, "uvx") {
+				t.Fatalf("Serena diagnostics가 이상해요: %+v", check)
+			}
+		}
+	}
+	if !sawSerena {
+		t.Fatalf("Serena default MCP check가 필요해요: %+v", checks)
+	}
+}

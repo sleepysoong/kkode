@@ -110,6 +110,32 @@ func TestDefaultMCPServersExposeSerenaAndContext7(t *testing.T) {
 	}
 }
 
+func TestDefaultMCPDiagnosticsExplainSerenaAvailability(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("KKODE_SERENA_COMMAND", "")
+	diagnostics := DefaultMCPDiagnostics(root)
+	serena := diagnosticByName(diagnostics, "serena")
+	if serena.Status != "missing" || !strings.Contains(serena.Message, "uvx") {
+		t.Fatalf("Serena missing 이유를 diagnostics에 담아야 해요: %+v", diagnostics)
+	}
+	t.Setenv("KKODE_SERENA_COMMAND", "serena-bin")
+	diagnostics = DefaultMCPDiagnostics(root)
+	serena = diagnosticByName(diagnostics, "serena")
+	if serena.Status != "configured" || !strings.Contains(serena.Message, "serena-bin") {
+		t.Fatalf("Serena configured 상태가 필요해요: %+v", diagnostics)
+	}
+}
+
+func diagnosticByName(items []DefaultMCPDiagnostic, name string) DefaultMCPDiagnostic {
+	for _, item := range items {
+		if item.Name == name {
+			return item
+		}
+	}
+	return DefaultMCPDiagnostic{}
+}
+
 func TestDefaultProviderOptionsCanDisableMCPDefaults(t *testing.T) {
 	t.Setenv("KKODE_DEFAULT_MCP", "off")
 	if opts := DefaultProviderOptions(t.TempDir()); len(opts.MCPServers) != 0 {

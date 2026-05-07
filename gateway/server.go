@@ -43,6 +43,7 @@ type Config struct {
 	AccessLogger         AccessLogger
 	Providers            []ProviderDTO
 	DefaultMCPServers    []ResourceDTO
+	DiagnosticChecks     []DiagnosticCheckDTO
 	Features             []FeatureDTO
 	ResourceStore        session.ResourceStore
 	RunStarter           RunStarter
@@ -553,6 +554,7 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "ok"})
 	}
+	checks = append(checks, s.cfg.DiagnosticChecks...)
 	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}
 	if s.cfg.RunRuntimeStats != nil {
 		stats := runRuntimeStatsDTO(s.cfg.RunRuntimeStats())

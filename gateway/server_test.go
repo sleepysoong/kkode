@@ -936,6 +936,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		RunTimeout:        time.Minute,
 		Providers:         []ProviderDTO{{Name: "openai"}},
 		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
+		DiagnosticChecks:  []DiagnosticCheckDTO{{Name: "default_mcp.context7", Status: "configured", Message: "url=https://mcp.context7.com/mcp"}},
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 			return &RunDTO{}, nil
 		},
@@ -965,14 +966,17 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	if diagnostics.RunRuntime == nil || diagnostics.RunRuntime.TrackedRuns != 3 || diagnostics.RunRuntime.QueuedRuns != 1 || diagnostics.RunRuntime.RunningRuns != 1 || diagnostics.RunRuntime.AvailableRunSlots != 1 || diagnostics.RunRuntime.RunTimeoutSeconds != 60 {
 		t.Fatalf("runtime diagnostics가 이상해요: %+v", diagnostics.RunRuntime)
 	}
-	var sawStore bool
+	var sawStore, sawDefaultMCP bool
 	for _, check := range diagnostics.Checks {
 		if check.Name == "store" && check.Status == "ok" {
 			sawStore = true
 		}
+		if check.Name == "default_mcp.context7" && check.Status == "configured" {
+			sawDefaultMCP = true
+		}
 	}
-	if !sawStore {
-		t.Fatalf("store check가 필요해요: %+v", diagnostics.Checks)
+	if !sawStore || !sawDefaultMCP {
+		t.Fatalf("store/default MCP check가 필요해요: %+v", diagnostics.Checks)
 	}
 }
 
