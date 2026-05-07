@@ -20,9 +20,13 @@ const maxMCPHTTPResponseBytes = 8 << 20
 
 // MCPToolDTO는 MCP tools/list 결과를 외부 API에 노출하는 항목이에요.
 type MCPToolDTO struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	InputSchema map[string]any `json:"input_schema,omitempty"`
+	Name             string         `json:"name"`
+	Description      string         `json:"description,omitempty"`
+	Category         string         `json:"category,omitempty"`
+	Effects          []string       `json:"effects,omitempty"`
+	OutputFormat     string         `json:"output_format,omitempty"`
+	InputSchema      map[string]any `json:"input_schema,omitempty"`
+	ExampleArguments map[string]any `json:"example_arguments,omitempty"`
 }
 
 type MCPToolListResponse struct {
@@ -636,15 +640,58 @@ func parseMCPTools(msg map[string]any) ([]MCPToolDTO, error) {
 		if raw == nil {
 			continue
 		}
-		tool := MCPToolDTO{Name: stringValue(raw["name"]), Description: stringValue(raw["description"])}
+		tool := MCPToolDTO{Name: stringValue(raw["name"]), Description: stringValue(raw["description"]), Category: "mcp", Effects: []string{"mcp"}, OutputFormat: "json"}
 		if schema, ok := raw["inputSchema"].(map[string]any); ok {
 			tool.InputSchema = schema
+			tool.ExampleArguments = exampleArgumentsFromSchema(schema)
 		}
 		if tool.Name != "" {
 			out = append(out, tool)
 		}
 	}
 	return out, nil
+}
+
+func exampleArgumentsFromSchema(schema map[string]any) map[string]any {
+	props, _ := schema["properties"].(map[string]any)
+	if len(props) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	for name, raw := range props {
+		prop, _ := raw.(map[string]any)
+		if prop == nil {
+			continue
+		}
+		out[name] = exampleValueFromSchema(prop)
+		if len(out) >= 8 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func exampleValueFromSchema(schema map[string]any) any {
+	if values, ok := schema["enum"].([]any); ok && len(values) > 0 {
+		return values[0]
+	}
+	switch strings.TrimSpace(stringValue(schema["type"])) {
+	case "integer":
+		return 1
+	case "number":
+		return 1.0
+	case "boolean":
+		return true
+	case "array":
+		return []any{}
+	case "object":
+		return map[string]any{}
+	default:
+		return "value"
+	}
 }
 
 func parseMCPResources(msg map[string]any) ([]MCPResourceDTO, error) {

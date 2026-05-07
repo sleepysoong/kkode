@@ -2233,7 +2233,7 @@ while True:
     if method == "initialize":
         write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}}}})
     elif method == "tools/list":
-        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"tools":[{"name":"echo","description":"Echo text","inputSchema":{"type":"object"}}]}})
+        write_frame({"jsonrpc":"2.0","id":msg["id"],"result":{"tools":[{"name":"echo","description":"Echo text","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"repeat":{"type":"integer"}}}}]}})
         break
 `)
 	store := openTestStore(t)
@@ -2252,7 +2252,7 @@ while True:
 	if err := json.Unmarshal(rec.Body.Bytes(), &tools); err != nil {
 		t.Fatal(err)
 	}
-	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "echo" {
+	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "echo" || tools.Tools[0].Category != "mcp" || tools.Tools[0].OutputFormat != "json" || tools.Tools[0].Effects[0] != "mcp" || tools.Tools[0].ExampleArguments["text"] != "value" || tools.Tools[0].ExampleArguments["repeat"] != float64(1) {
 		t.Fatalf("MCP tools/list 결과가 이상해요: %+v", tools)
 	}
 }
@@ -2282,7 +2282,7 @@ func TestGatewayProbesHTTPMCPServerTools(t *testing.T) {
 				t.Fatalf("tools/list도 session header를 이어야 해요: saw=%v header=%s", sawSession, r.Header.Get("Mcp-Session-Id"))
 			}
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, "event: message\ndata: %s\n\n", `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"http_echo","description":"HTTP echo","inputSchema":{"type":"object"}}]}}`)
+			fmt.Fprintf(w, "event: message\ndata: %s\n\n", `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"http_echo","description":"HTTP echo","inputSchema":{"type":"object","properties":{"text":{"type":"string"}}}}]}}`)
 		default:
 			t.Fatalf("unexpected HTTP MCP method: %v", msg["method"])
 		}
@@ -2304,7 +2304,7 @@ func TestGatewayProbesHTTPMCPServerTools(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &tools); err != nil {
 		t.Fatal(err)
 	}
-	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "http_echo" {
+	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "http_echo" || tools.Tools[0].Category != "mcp" || tools.Tools[0].ExampleArguments["text"] != "value" {
 		t.Fatalf("HTTP MCP tools/list 결과가 이상해요: %+v", tools)
 	}
 }

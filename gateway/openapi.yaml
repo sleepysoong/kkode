@@ -3081,9 +3081,24 @@ components:
           type: string
         description:
           type: string
+        category:
+          type: string
+          description: adapter UI가 MCP tool을 묶을 수 있는 범주예요. 기본값은 mcp예요.
+        effects:
+          type: array
+          items:
+            type: string
+          description: 권한 게이트가 아니라 UI 표시용 실행 성격이에요. MCP tool은 기본적으로 mcp예요.
+        output_format:
+          type: string
+          description: MCP tool call result의 대표 형식이에요. 기본값은 json이에요.
         input_schema:
           type: object
           additionalProperties: true
+        example_arguments:
+          type: object
+          additionalProperties: true
+          description: input_schema properties에서 만든 adapter form용 예제 argument예요.
     MCPResourceListResponse:
       type: object
       required: [server, resources]
