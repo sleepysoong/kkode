@@ -181,7 +181,7 @@ erDiagram
 
 ### 앱 조립: `app/`
 
-- `app.ProviderSpecs`, `app.BuildProvider`, `app.BuildHTTPJSONProviderAdapter`, `app.NewWorkspace`, `app.NewAgent`, `app.NewRuntime`, `tools.StandardTools`가 CLI/gateway의 중복 조립 코드를 줄여요. Provider spec에는 converter/caller/source/operation/HTTP route 변환 profile도 들어 있어서 외부 패널이 provider가 어떤 방식으로 실행되는지 discovery할 수 있어요.
+- `app.ProviderSpecs`, `app.BuildProvider`, `app.RegisterHTTPJSONProvider`, `app.BuildHTTPJSONProviderAdapter`, `app.NewWorkspace`, `app.NewAgent`, `app.NewRuntime`, `tools.StandardTools`가 CLI/gateway의 중복 조립 코드를 줄여요. Provider spec에는 converter/caller/source/operation/HTTP route 변환 profile도 들어 있어서 외부 패널이 provider가 어떤 방식으로 실행되는지 discovery할 수 있어요.
 - `app.DefaultProviderOptions`가 Serena와 Context7 MCP를 기본 provider option으로 합쳐요. `ProviderHandle.BaseRequest`는 OpenAI-compatible HTTP MCP를 built-in `mcp` tool로 전달하고, Copilot은 stdio/http MCP를 SDK session config로 전달해요. `KKODE_DEFAULT_MCP=off`로 끌 수 있고, `KKODE_SERENA_COMMAND`, `KKODE_SERENA_ARGS`, `KKODE_CONTEXT7_URL`, `CONTEXT7_API_KEY`로 실행 환경에 맞게 바꿀 수 있어요.
 - agent 표면에는 표준 `file_*`, `shell_run`, `web_fetch` tool만 붙이고, 이전 `workspace_*` tool 자동 주입은 하지 않아요.
 
@@ -203,7 +203,7 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `ProviderPipeline`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. `ProviderPipeline.Prepare/Call/Decode`를 따로 쓸 수 있어서 preview API, debug UI, 실제 실행이 같은 변환 규칙을 공유해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요. 외부 패키지는 `app.RegisterProvider`로 spec/conversion/factory를 등록해서 core registry를 직접 수정하지 않고 새 API source를 추가할 수 있어요.
+- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `ProviderPipeline`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. `ProviderPipeline.Prepare/Call/Decode`를 따로 쓸 수 있어서 preview API, debug UI, 실제 실행이 같은 변환 규칙을 공유해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요. OpenAI-compatible HTTP source는 `app.RegisterHTTPJSONProvider`로 source 설정만 등록해도 되고, 더 특수한 provider는 `app.RegisterProvider`로 spec/conversion/factory를 등록해서 core registry를 직접 수정하지 않고 추가할 수 있어요.
 - `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `ToolMiddleware`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
@@ -519,6 +519,31 @@ if err != nil {
 }
 
 resp, err := provider.Generate(ctx, req)
+```
+
+OpenAI-compatible source를 별도 provider 이름으로 discovery와 routing에 노출할 때는 `RegisterHTTPJSONProvider`가 가장 짧아요. 기존 `openai.ResponsesConverter` profile을 재사용하고 base URL/API key/route만 등록하므로 “요청 → 컨버팅 레이어 → API 호출” 경계를 깨지 않아요.
+
+```go
+unregister, err := app.RegisterHTTPJSONProvider(app.HTTPJSONProviderRegistration{
+    Name:         "my-gateway",
+    Aliases:      []string{"my-openai-compatible"},
+    Profile:      "openai-compatible",
+    DefaultModel: "gpt-5-mini",
+    AuthEnv:      []string{"MY_GATEWAY_API_KEY"},
+    BaseURL:      "https://api.example.com/v1",
+    APIKeyEnv:    []string{"MY_GATEWAY_API_KEY"},
+    Source:       "my-http-json-gateway",
+})
+if err != nil {
+    return err
+}
+defer unregister()
+
+handle, err := app.BuildProvider("my-openai-compatible", ".")
+if err != nil {
+    return err
+}
+resp, err := handle.Provider.Generate(ctx, req)
 ```
 
 완전히 별도 provider 이름으로 discovery와 routing에 노출해야 하면 `RegisterProvider`를 써요. 등록 단위는 `ProviderSpec`(이름/alias/model/capability/discovery), `ProviderConversionFactory`(표준 요청을 source 요청으로 바꾸는 변환 profile), 선택적 `ProviderFactory`(환경변수 기반 실제 provider 생성)예요.

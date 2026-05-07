@@ -211,7 +211,7 @@ type AdaptedProvider struct {
 }
 ```
 
-단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. 이 흐름은 `ProviderPipeline`이 실제 단계로 나눠서 실행해요. `Prepare`는 변환 preview나 debug UI가 재사용하고, `Call`은 API/SDK/CLI source 경계만 담당하며, `Decode`는 source 결과를 다시 표준 응답으로 맞춰요. 그래서 새 API를 붙일 때 core 타입을 수정하지 않고 converter와 caller만 추가하거나, OpenAI-compatible request builder와 별도 API caller/response parser를 조합하면 돼요. OpenAI-compatible HTTP JSON 파생 API는 `providers/httpjson.Caller`에 base URL과 operation route만 넣어서 source client 중복 없이 붙일 수 있고, `app.BuildHTTPJSONProviderAdapter`는 registry route를 기본값으로 읽어 `BaseURL/APIKey/ProviderName`만으로 `llm.Provider`를 만들어요. `DisableStreaming`을 켜면 registry의 OpenAI-compatible capability에서 `streaming`만 꺼서 JSON-only source가 SSE 지원처럼 광고되지 않게 해요. 기본 OpenAI-compatible client의 단발 호출도 이 caller를 사용해서 새 provider와 같은 transport 경계를 검증해요. `AdaptedProvider`는 이 pipeline을 감싼 `llm.Provider` 구현체라서 기존 provider는 간단한 struct 조립만 유지해요.
+단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. 이 흐름은 `ProviderPipeline`이 실제 단계로 나눠서 실행해요. `Prepare`는 변환 preview나 debug UI가 재사용하고, `Call`은 API/SDK/CLI source 경계만 담당하며, `Decode`는 source 결과를 다시 표준 응답으로 맞춰요. 그래서 새 API를 붙일 때 core 타입을 수정하지 않고 converter와 caller만 추가하거나, OpenAI-compatible request builder와 별도 API caller/response parser를 조합하면 돼요. OpenAI-compatible HTTP JSON 파생 API는 `providers/httpjson.Caller`에 base URL과 operation route만 넣어서 source client 중복 없이 붙일 수 있고, `app.BuildHTTPJSONProviderAdapter`는 registry route를 기본값으로 읽어 `BaseURL/APIKey/ProviderName`만으로 `llm.Provider`를 만들어요. `app.RegisterHTTPJSONProvider`는 같은 profile을 별도 provider 이름으로 discovery/routing까지 등록해서 proxy, gateway, 사내 API처럼 converter가 같은 source를 설정만으로 추가하게 해요. `DisableStreaming`을 켜면 registry의 OpenAI-compatible capability에서 `streaming`만 꺼서 JSON-only source가 SSE 지원처럼 광고되지 않게 해요. 기본 OpenAI-compatible client의 단발 호출도 이 caller를 사용해서 새 provider와 같은 transport 경계를 검증해요. `AdaptedProvider`는 이 pipeline을 감싼 `llm.Provider` 구현체라서 기존 provider는 간단한 struct 조립만 유지해요.
 
 `RequestConverterFunc`, `ResponseConverterFunc`, `ProviderCallerFunc`, `ProviderStreamCallerFunc`는 작은 API source나 plugin을 빠르게 붙이는 함수형 adapter예요. 완전한 provider 패키지를 만들기 전에는 `ProviderPipeline`에 이 함수들을 바로 넣어서 `요청 → 컨버팅 레이어 → API 호출 → 표준 응답`을 검증하고, 나중에 source가 커지면 같은 함수 내용을 struct 구현체로 옮기면 돼요. nil 함수 adapter는 명확한 오류를 돌려주므로 잘못 조립된 plugin이 panic으로 죽지 않아요.
 
@@ -265,6 +265,7 @@ func ProviderAuthStatus(spec ProviderSpec) string
 func BuildProvider(name, root string) (ProviderHandle, error)
 func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error)
 func RegisterProvider(reg ProviderRegistration) (func(), error)
+func RegisterHTTPJSONProvider(reg HTTPJSONProviderRegistration) (func(), error)
 func BuildProviderPipeline(provider string, caller llm.ProviderCaller, streamer llm.ProviderStreamCaller) (llm.ProviderPipeline, error)
 func BuildProviderAdapter(provider string, opts ProviderAdapterOptions) (*llm.AdaptedProvider, error)
 func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) (*llm.AdaptedProvider, error)
@@ -299,9 +300,32 @@ type HTTPJSONProviderOptions struct {
     DisableStreaming  bool
     AdditionalHeaders map[string]string
 }
+
+type HTTPJSONProviderRegistration struct {
+    Name              string
+    Aliases           []string
+    Profile           string
+    DefaultModel      string
+    Models            []string
+    AuthEnv           []string
+    BaseURL           string
+    BaseURLEnv        []string
+    APIKey            string
+    APIKeyEnv         []string
+    Headers           map[string]string
+    AdditionalHeaders map[string]string
+    Routes            []ProviderRouteSpec
+    DefaultOperation  string
+    Capabilities      map[string]any
+    Local             bool
+    DisableStreaming  bool
+    HTTPClient        *http.Client
+    Retry             httpjson.RetryConfig
+    Source            string
+}
 ```
 
-`llm.Router`는 `provider/model` 직접 지정과 alias prefix routing을 지원하고, alias가 겹치면 가장 긴 prefix를 우선해서 provider 선택이 Go map 순서에 흔들리지 않게 해요. `ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델, 인증 상태, 변환 profile 표시를 공유해요. 같은 registry entry는 실행형 `ProviderConversionSet`도 들고 있어서 `PreviewProviderRequest`, `BuildProviderPipeline`, `BuildProviderAdapter`, `BuildHTTPJSONProviderAdapter`가 모두 같은 converter, operation 기본값, HTTP route metadata를 써요. 그래서 새 provider를 추가할 때 spec, alias, capability, 변환 profile, source 생성 로직을 한 entry에 맞추면 되고, OpenAI-compatible 파생 API는 converter를 재사용한 뒤 `BaseURL`과 API key만 바꾸거나 전용 `ProviderCaller`/`ProviderStreamCaller` source만 바꾸면 돼요. 외부 패키지나 테스트 plugin은 `RegisterProvider`로 `ProviderRegistration`을 런타임에 추가하고 반환된 unregister 함수로 되돌릴 수 있어서 core registry 파일을 직접 수정하지 않아도 돼요. registry는 mutex로 보호하고 `ProviderSpecs`/`ResolveProviderSpec`이 방어 복사본을 반환해서 discovery 호출과 테스트 등록이 서로 slice/map을 오염시키지 않게 해요. gateway의 provider discovery도 `conversion.routes[]`를 노출해서 웹 패널이 실제 API 호출 route를 preview/debug 화면에 보여줄 수 있어요. `BuildProviderWithOptions`는 `DefaultProviderOptions(root)`와 저장 resource manifest를 `MergeProviderOptions`로 합친 뒤 같은 registry entry의 factory를 실행해요. 기본 MCP는 Context7 원격 HTTP MCP(`https://mcp.context7.com/mcp`)와 Serena stdio MCP예요. Serena는 `uvx` 또는 `KKODE_SERENA_COMMAND`가 있을 때만 붙여서 실행 환경에 없는 바이너리 때문에 기본 run이 깨지지 않게 해요. `KKODE_DEFAULT_MCP=off`면 기본 MCP를 붙이지 않아요. `ProviderHandle.BaseRequest`는 OpenAI-compatible HTTP MCP를 hosted `mcp` tool로 넘기고, Copilot은 stdio/http MCP를 SDK session config로 넘겨요. CLI와 gateway는 `MergeBaseRequest` 또는 `AgentOptions.BaseRequest`로 이 기본 request를 agent에 전달해요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+`llm.Router`는 `provider/model` 직접 지정과 alias prefix routing을 지원하고, alias가 겹치면 가장 긴 prefix를 우선해서 provider 선택이 Go map 순서에 흔들리지 않게 해요. `ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델, 인증 상태, 변환 profile 표시를 공유해요. 같은 registry entry는 실행형 `ProviderConversionSet`도 들고 있어서 `PreviewProviderRequest`, `BuildProviderPipeline`, `BuildProviderAdapter`, `BuildHTTPJSONProviderAdapter`가 모두 같은 converter, operation 기본값, HTTP route metadata를 써요. 그래서 새 provider를 추가할 때 spec, alias, capability, 변환 profile, source 생성 로직을 한 entry에 맞추면 되고, OpenAI-compatible 파생 API는 `RegisterHTTPJSONProvider`로 profile, `BaseURL`, API key/env, route만 지정하거나 전용 `ProviderCaller`/`ProviderStreamCaller` source만 바꾸면 돼요. 외부 패키지나 테스트 plugin은 `RegisterProvider`로 `ProviderRegistration`을 런타임에 추가하고 반환된 unregister 함수로 되돌릴 수 있어서 core registry 파일을 직접 수정하지 않아도 돼요. registry는 mutex로 보호하고 `ProviderSpecs`/`ResolveProviderSpec`이 방어 복사본을 반환해서 discovery 호출과 테스트 등록이 서로 slice/map을 오염시키지 않게 해요. gateway의 provider discovery도 `conversion.routes[]`를 노출해서 웹 패널이 실제 API 호출 route를 preview/debug 화면에 보여줄 수 있어요. `BuildProviderWithOptions`는 `DefaultProviderOptions(root)`와 저장 resource manifest를 `MergeProviderOptions`로 합친 뒤 같은 registry entry의 factory를 실행해요. 기본 MCP는 Context7 원격 HTTP MCP(`https://mcp.context7.com/mcp`)와 Serena stdio MCP예요. Serena는 `uvx` 또는 `KKODE_SERENA_COMMAND`가 있을 때만 붙여서 실행 환경에 없는 바이너리 때문에 기본 run이 깨지지 않게 해요. `KKODE_DEFAULT_MCP=off`면 기본 MCP를 붙이지 않아요. `ProviderHandle.BaseRequest`는 OpenAI-compatible HTTP MCP를 hosted `mcp` tool로 넘기고, Copilot은 stdio/http MCP를 SDK session config로 넘겨요. CLI와 gateway는 `MergeBaseRequest` 또는 `AgentOptions.BaseRequest`로 이 기본 request를 agent에 전달해요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
 ## Prompt 템플릿 구현체
 

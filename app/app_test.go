@@ -438,6 +438,57 @@ func TestBuildHTTPJSONProviderAdapterCanDisableStreamingCapability(t *testing.T)
 	}
 }
 
+func TestRegisterHTTPJSONProviderReusesProfileWithOnlySourceConfig(t *testing.T) {
+	t.Setenv("CUSTOM_HTTP_KEY", "sk-env")
+	var gotPath string
+	var gotAuth string
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		_, _ = w.Write([]byte(`{"id":"resp_registered_http","model":"source-model","status":"completed","output_text":"등록 source 응답이에요"}`))
+	}))
+	defer server.Close()
+
+	unregister, err := RegisterHTTPJSONProvider(HTTPJSONProviderRegistration{
+		Name:         "registered-http",
+		Aliases:      []string{"registered-http-compatible"},
+		Profile:      "openai-compatible",
+		DefaultModel: "source-model",
+		AuthEnv:      []string{"CUSTOM_HTTP_KEY"},
+		BaseURL:      server.URL + "/v1",
+		APIKeyEnv:    []string{"CUSTOM_HTTP_KEY"},
+		HTTPClient:   server.Client(),
+		Source:       "test-http-json",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	spec, ok := ResolveProviderSpec("registered-http-compatible")
+	if !ok || spec.Name != "registered-http" || spec.DefaultModel != "source-model" || spec.Conversion.Source != "test-http-json" || spec.Conversion.Call != "httpjson.Caller.CallProvider" || spec.Conversion.Routes[0].Path != "/responses" {
+		t.Fatalf("HTTP JSON source discovery가 profile과 source 설정을 함께 보여줘야 해요: spec=%+v ok=%v", spec, ok)
+	}
+	if ProviderAuthStatus(spec) != "configured" {
+		t.Fatalf("source 등록 auth env가 discovery에 반영돼야 해요: %+v", spec.AuthEnv)
+	}
+
+	handle, err := BuildProvider("registered-http-compatible", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := handle.Provider.Generate(context.Background(), llm.Request{Model: "source-model", Messages: []llm.Message{llm.UserText("source만 추가해요")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v1/responses" || gotAuth != "Bearer sk-env" || !strings.Contains(gotBody, "source만 추가해요") || resp.Provider != "registered-http" || resp.Text != "등록 source 응답이에요" {
+		t.Fatalf("등록 HTTP source가 기존 변환 profile을 재사용해야 해요: path=%s auth=%s body=%s resp=%+v", gotPath, gotAuth, gotBody, resp)
+	}
+}
+
 type sourceOnlyCaller struct {
 	got llm.ProviderRequest
 }

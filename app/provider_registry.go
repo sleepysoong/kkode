@@ -120,6 +120,31 @@ type HTTPJSONProviderOptions struct {
 	AdditionalHeaders map[string]string
 }
 
+// HTTPJSONProviderRegistration은 OpenAI-compatible 같은 기존 변환 profile에 HTTP JSON source만 새로 붙이는 등록 단위예요.
+// converter를 새로 만들 필요가 없는 proxy, gateway, 사내 API는 이 구조체만 채우면 discovery와 실행 registry에 함께 등록돼요.
+type HTTPJSONProviderRegistration struct {
+	Name              string
+	Aliases           []string
+	Profile           string
+	DefaultModel      string
+	Models            []string
+	AuthEnv           []string
+	BaseURL           string
+	BaseURLEnv        []string
+	APIKey            string
+	APIKeyEnv         []string
+	Headers           map[string]string
+	AdditionalHeaders map[string]string
+	Routes            []ProviderRouteSpec
+	DefaultOperation  string
+	Capabilities      map[string]any
+	Local             bool
+	DisableStreaming  bool
+	HTTPClient        *http.Client
+	Retry             httpjson.RetryConfig
+	Source            string
+}
+
 // BuildProvider는 환경변수 기반 provider 생성을 한 곳에서 처리해요.
 func BuildProvider(name, root string) (ProviderHandle, error) {
 	return BuildProviderWithOptions(name, root, ProviderOptions{})
@@ -227,6 +252,49 @@ func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) 
 		Caller:       caller,
 		Streamer:     streamer,
 		Capabilities: caps,
+	})
+}
+
+// RegisterHTTPJSONProvider는 기존 변환 profile에 새 HTTP JSON source만 연결해요.
+// 새 OpenAI-compatible gateway는 profile/base URL/API key/env/route만 넘기면 `요청 -> 변환 -> API 호출 -> 응답 변환` 흐름을 재사용해요.
+func RegisterHTTPJSONProvider(reg HTTPJSONProviderRegistration) (func(), error) {
+	reg = cloneHTTPJSONProviderRegistration(reg)
+	profile := strings.TrimSpace(reg.Profile)
+	if profile == "" {
+		profile = "openai-compatible"
+	}
+	profileSpec, ok := ResolveProviderSpec(profile)
+	if !ok {
+		return nil, fmt.Errorf("provider profile을 찾을 수 없어요: %s", profile)
+	}
+	spec := httpJSONProviderSpecFromRegistration(reg, profileSpec)
+	routes := spec.Conversion.Routes
+	if len(routes) == 0 {
+		routes = cloneProviderRoutes(profileSpec.Conversion.Routes)
+	}
+	factory := func(root string, opts ProviderOptions) (ProviderHandle, error) {
+		provider, err := BuildHTTPJSONProviderAdapter(profile, HTTPJSONProviderOptions{
+			ProviderName:      spec.Name,
+			BaseURL:           firstConfiguredValue(reg.BaseURL, reg.BaseURLEnv),
+			APIKey:            firstConfiguredValue(reg.APIKey, append(cloneStringSlice(reg.APIKeyEnv), reg.AuthEnv...)),
+			Headers:           reg.Headers,
+			AdditionalHeaders: reg.AdditionalHeaders,
+			HTTPClient:        reg.HTTPClient,
+			Retry:             reg.Retry,
+			DefaultOperation:  firstNonEmpty(reg.DefaultOperation, firstOperation(spec)),
+			Routes:            httpJSONRoutesFromSpec(routes),
+			Capabilities:      capabilitiesFromMap(spec.Capabilities),
+			DisableStreaming:  reg.DisableStreaming,
+		})
+		if err != nil {
+			return ProviderHandle{}, err
+		}
+		return ProviderHandle{Provider: provider}, nil
+	}
+	return RegisterProvider(ProviderRegistration{
+		Spec:       spec,
+		Conversion: providerConversionFromProfile(profile),
+		Factory:    factory,
 	})
 }
 
@@ -400,6 +468,24 @@ func codexCLIConversion(spec ProviderSpec) ProviderConversionSet {
 	}
 }
 
+func providerConversionFromProfile(profile string) ProviderConversionFactory {
+	return func(spec ProviderSpec) ProviderConversionSet {
+		_, conversion, err := resolveProviderConversion(profile)
+		if err != nil {
+			return ProviderConversionSet{}
+		}
+		if spec.Conversion.Operations != nil {
+			operation := firstOperation(spec)
+			conversion.Options.Operation = operation
+			conversion.StreamOptions.Operation = operation
+		}
+		if spec.Conversion.Routes != nil && conversion.StreamOptions.Operation == "" {
+			conversion.StreamOptions.Operation = conversion.Options.Operation
+		}
+		return conversion
+	}
+}
+
 func capabilitiesFromMap(values map[string]any) llm.Capabilities {
 	truthy := func(name string) bool {
 		v, ok := values[name]
@@ -488,7 +574,7 @@ func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
 	spec.Models = append([]string(nil), spec.Models...)
 	spec.AuthEnv = append([]string(nil), spec.AuthEnv...)
 	spec.Conversion.Operations = append([]string(nil), spec.Conversion.Operations...)
-	spec.Conversion.Routes = append([]ProviderRouteSpec(nil), spec.Conversion.Routes...)
+	spec.Conversion.Routes = cloneProviderRoutes(spec.Conversion.Routes)
 	if spec.Capabilities != nil {
 		capabilities := make(map[string]any, len(spec.Capabilities))
 		for key, value := range spec.Capabilities {
@@ -502,6 +588,78 @@ func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
 func cloneProviderRegistration(reg ProviderRegistration) ProviderRegistration {
 	reg.Spec = cloneProviderSpec(reg.Spec)
 	return reg
+}
+
+func cloneHTTPJSONProviderRegistration(reg HTTPJSONProviderRegistration) HTTPJSONProviderRegistration {
+	reg.Aliases = append([]string(nil), reg.Aliases...)
+	reg.Models = append([]string(nil), reg.Models...)
+	reg.AuthEnv = append([]string(nil), reg.AuthEnv...)
+	reg.BaseURLEnv = append([]string(nil), reg.BaseURLEnv...)
+	reg.APIKeyEnv = append([]string(nil), reg.APIKeyEnv...)
+	reg.Headers = cloneStringMap(reg.Headers)
+	reg.AdditionalHeaders = cloneStringMap(reg.AdditionalHeaders)
+	reg.Routes = cloneProviderRoutes(reg.Routes)
+	if reg.Capabilities != nil {
+		capabilities := make(map[string]any, len(reg.Capabilities))
+		for key, value := range reg.Capabilities {
+			capabilities[key] = value
+		}
+		reg.Capabilities = capabilities
+	}
+	return reg
+}
+
+func httpJSONProviderSpecFromRegistration(reg HTTPJSONProviderRegistration, profile ProviderSpec) ProviderSpec {
+	defaultModel := firstNonEmpty(reg.DefaultModel, profile.DefaultModel)
+	models := append([]string(nil), reg.Models...)
+	if len(models) == 0 && defaultModel != "" {
+		models = []string{defaultModel}
+	}
+	authEnv := append([]string(nil), reg.AuthEnv...)
+	if len(authEnv) == 0 {
+		authEnv = append(authEnv, reg.APIKeyEnv...)
+	}
+	capabilities := cloneAnyMap(reg.Capabilities)
+	if capabilities == nil {
+		capabilities = cloneAnyMap(profile.Capabilities)
+	}
+	if capabilities == nil {
+		capabilities = map[string]any{}
+	}
+	if reg.DisableStreaming {
+		capabilities["streaming"] = false
+	}
+	operations := append([]string(nil), profile.Conversion.Operations...)
+	if reg.DefaultOperation != "" {
+		operations = []string{strings.TrimSpace(reg.DefaultOperation)}
+	}
+	routes := cloneProviderRoutes(reg.Routes)
+	if len(routes) == 0 {
+		routes = cloneProviderRoutes(profile.Conversion.Routes)
+	}
+	source := firstNonEmpty(reg.Source, "http-json")
+	stream := "httpjson.Caller.StreamProvider"
+	if reg.DisableStreaming {
+		stream = ""
+	}
+	return ProviderSpec{
+		Name:         reg.Name,
+		Aliases:      append([]string(nil), reg.Aliases...),
+		DefaultModel: defaultModel,
+		Models:       models,
+		AuthEnv:      authEnv,
+		Local:        reg.Local,
+		Capabilities: capabilities,
+		Conversion: ProviderConversionSpec{
+			RequestConverter:  profile.Conversion.RequestConverter,
+			ResponseConverter: profile.Conversion.ResponseConverter,
+			Call:              "httpjson.Caller.CallProvider",
+			Stream:            stream,
+			Source:            source,
+			Operations:        operations,
+			Routes:            routes,
+		},
+	}
 }
 
 func validateProviderRegistration(reg ProviderRegistration) error {
@@ -579,6 +737,20 @@ func cloneHTTPJSONRoutes(routes map[string]httpjson.Route) map[string]httpjson.R
 	return out
 }
 
+func cloneProviderRoutes(routes []ProviderRouteSpec) []ProviderRouteSpec {
+	if len(routes) == 0 {
+		return nil
+	}
+	return append([]ProviderRouteSpec(nil), routes...)
+}
+
+func cloneStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]string(nil), values...)
+}
+
 func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil
@@ -588,4 +760,36 @@ func cloneStringMap(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
+}
+
+func cloneAnyMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func firstConfiguredValue(explicit string, envKeys []string) string {
+	if value := strings.TrimSpace(explicit); value != "" {
+		return value
+	}
+	for _, key := range envKeys {
+		if value := strings.TrimSpace(os.Getenv(strings.TrimSpace(key))); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
