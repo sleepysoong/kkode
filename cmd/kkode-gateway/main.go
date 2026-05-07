@@ -451,6 +451,9 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 		if err != nil {
 			return opts, err
 		}
+		if err := ensureResourceEnabled(resource); err != nil {
+			return opts, err
+		}
 		server, err := mcpServerFromResource(resource)
 		if err != nil {
 			return opts, err
@@ -462,6 +465,9 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 		if err != nil {
 			return opts, err
 		}
+		if err := ensureResourceEnabled(resource); err != nil {
+			return opts, err
+		}
 		if dir := skillDirectoryFromResource(resource); dir != "" {
 			opts.SkillDirectories = append(opts.SkillDirectories, dir)
 		}
@@ -469,6 +475,9 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 	for _, id := range req.Subagents {
 		resource, err := resourceStore.LoadResource(ctx, session.ResourceSubagent, id)
 		if err != nil {
+			return opts, err
+		}
+		if err := ensureResourceEnabled(resource); err != nil {
 			return opts, err
 		}
 		agent, err := agentFromResource(resource)
@@ -481,6 +490,13 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 		opts.MCPServers = nil
 	}
 	return opts, nil
+}
+
+func ensureResourceEnabled(resource session.Resource) error {
+	if resource.Enabled {
+		return nil
+	}
+	return fmt.Errorf("%s resource %q는 비활성화되어 있어서 run에 연결할 수 없어요", resource.Kind, resource.ID)
 }
 
 type mcpResourceConfig struct {

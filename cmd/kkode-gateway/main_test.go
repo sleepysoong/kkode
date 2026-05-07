@@ -167,6 +167,23 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	}
 }
 
+func TestLoadProviderOptionsRejectsDisabledResources(t *testing.T) {
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	disabled, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "off", Enabled: false, Config: []byte(`{"path":"/tmp/skills/off"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadProviderOptions(ctx, store, gateway.RunStartRequest{Skills: []string{disabled.ID}})
+	if err == nil || !strings.Contains(err.Error(), "비활성화") {
+		t.Fatalf("비활성 resource는 run에 연결하면 안 돼요: %v", err)
+	}
+}
+
 func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	t.Setenv("KKODE_DEFAULT_MCP", "off")
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
