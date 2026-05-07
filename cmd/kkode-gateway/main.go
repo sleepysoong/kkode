@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -564,9 +565,11 @@ func loadProviderOptions(ctx context.Context, store session.Store, req gateway.R
 		if err := ensureResourceEnabled(resource); err != nil {
 			return opts, err
 		}
-		if dir := skillDirectoryFromResource(resource); dir != "" {
-			opts.SkillDirectories = append(opts.SkillDirectories, dir)
+		dir, err := skillDirectoryFromResource(resource)
+		if err != nil {
+			return opts, err
 		}
+		opts.SkillDirectories = append(opts.SkillDirectories, dir)
 	}
 	for _, id := range req.Subagents {
 		resource, err := resourceStore.LoadResource(ctx, session.ResourceSubagent, id)
@@ -635,10 +638,38 @@ type skillResourceConfig struct {
 	Directory string `json:"directory"`
 }
 
-func skillDirectoryFromResource(resource session.Resource) string {
+func skillDirectoryFromResource(resource session.Resource) (string, error) {
 	var cfg skillResourceConfig
-	_ = json.Unmarshal(resource.Config, &cfg)
-	return firstNonEmpty(cfg.Path, cfg.Directory)
+	if len(resource.Config) > 0 {
+		if err := json.Unmarshal(resource.Config, &cfg); err != nil {
+			return "", err
+		}
+	}
+	path := strings.TrimSpace(firstNonEmpty(cfg.Path, cfg.Directory))
+	if path == "" {
+		return "", fmt.Errorf("skill resource %q에는 path 또는 directory가 필요해요", resource.ID)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("skill resource %q 경로를 읽을 수 없어요: %w", resource.ID, err)
+	}
+	if !info.IsDir() {
+		return filepath.Dir(path), nil
+	}
+	if firstExistingSkillFile(path) == "" {
+		return "", fmt.Errorf("skill resource %q directory에는 SKILL.md 또는 README.md가 필요해요: %s", resource.ID, path)
+	}
+	return path, nil
+}
+
+func firstExistingSkillFile(dir string) string {
+	for _, name := range []string{"SKILL.md", "README.md", "skill.md"} {
+		path := filepath.Join(dir, name)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path
+		}
+	}
+	return ""
 }
 
 type agentResourceConfig struct {

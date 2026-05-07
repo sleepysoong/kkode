@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -147,11 +149,15 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
+	skillDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# 리뷰 스킬\n\n코드를 리뷰해요.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	mcp, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "filesystem", Enabled: true, Config: []byte(`{"kind":"stdio","command":"mcp-fs","args":["."],"tools":["read"]}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	skill, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "review", Enabled: true, Config: []byte(`{"path":"/tmp/skills/review"}`)})
+	skill, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "review", Enabled: true, Config: []byte(`{"path":"` + skillDir + `"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +169,7 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != "/tmp/skills/review" || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" {
+	if opts.MCPServers["filesystem"].Command != "mcp-fs" || len(opts.SkillDirectories) != 1 || opts.SkillDirectories[0] != skillDir || len(opts.CustomAgents) != 1 || opts.CustomAgents[0].DisplayName != "planner" {
 		t.Fatalf("provider options가 이상해요: %+v", opts)
 	}
 	agent := opts.CustomAgents[0]
@@ -186,6 +192,33 @@ func TestLoadProviderOptionsRejectsDisabledResources(t *testing.T) {
 	_, err = loadProviderOptions(ctx, store, gateway.RunStartRequest{Skills: []string{disabled.ID}})
 	if err == nil || !strings.Contains(err.Error(), "비활성화") {
 		t.Fatalf("비활성 resource는 run에 연결하면 안 돼요: %v", err)
+	}
+}
+
+func TestLoadProviderOptionsRejectsInvalidSkillManifest(t *testing.T) {
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	missingPath, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "missing_path", Enabled: true, Config: []byte(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadProviderOptions(ctx, store, gateway.RunStartRequest{Skills: []string{missingPath.ID}})
+	if err == nil || !strings.Contains(err.Error(), "path 또는 directory") {
+		t.Fatalf("path 없는 skill은 run 전에 거부해야 해요: %v", err)
+	}
+
+	emptyDir := t.TempDir()
+	emptySkill, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSkill, Name: "empty", Enabled: true, Config: []byte(`{"path":"` + emptyDir + `"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadProviderOptions(ctx, store, gateway.RunStartRequest{Skills: []string{emptySkill.ID}})
+	if err == nil || !strings.Contains(err.Error(), "SKILL.md") {
+		t.Fatalf("SKILL.md 없는 skill directory는 run 전에 거부해야 해요: %v", err)
 	}
 }
 
