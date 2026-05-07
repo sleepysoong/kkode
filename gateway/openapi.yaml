@@ -371,6 +371,12 @@ paths:
             type: integer
             default: 200
             maximum: 5000
+        - in: query
+          name: redact
+          schema:
+            type: boolean
+            default: false
+          description: true면 raw_session을 제외하고 secret 패턴을 마스킹해요.
       responses:
         '200':
           description: session export bundle이에요.
@@ -1853,7 +1859,7 @@ components:
             $ref: '#/components/schemas/Session'
     SessionExportResponse:
       type: object
-      required: [format_version, exported_at, session, raw_session, counts, turns, events, todos]
+      required: [format_version, exported_at, session, counts, turns, events, todos]
       properties:
         format_version:
           type: string
@@ -1867,6 +1873,8 @@ components:
           description: import/debug를 위한 원본 session JSON snapshot이에요.
         counts:
           $ref: '#/components/schemas/SessionExportCounts'
+        redacted:
+          type: boolean
         turns:
           type: array
           items:

@@ -1,10 +1,12 @@
 package gateway
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -15,8 +17,9 @@ type SessionExportResponse struct {
 	FormatVersion string                 `json:"format_version"`
 	ExportedAt    time.Time              `json:"exported_at"`
 	Session       SessionDTO             `json:"session"`
-	RawSession    session.Session        `json:"raw_session"`
+	RawSession    *session.Session       `json:"raw_session,omitempty"`
 	Counts        SessionExportCountsDTO `json:"counts"`
+	Redacted      bool                   `json:"redacted,omitempty"`
 	Turns         []TurnDTO              `json:"turns"`
 	Events        []EventDTO             `json:"events"`
 	Todos         []TodoDTO              `json:"todos"`
@@ -35,12 +38,12 @@ type SessionExportCountsDTO struct {
 
 // SessionImportRequest는 export bundle을 다른 gateway/store로 다시 심을 때 쓰는 요청이에요.
 type SessionImportRequest struct {
-	FormatVersion string          `json:"format_version,omitempty"`
-	RawSession    session.Session `json:"raw_session"`
-	Checkpoints   []CheckpointDTO `json:"checkpoints,omitempty"`
-	Runs          []RunDTO        `json:"runs,omitempty"`
-	NewSessionID  string          `json:"new_session_id,omitempty"`
-	Overwrite     bool            `json:"overwrite,omitempty"`
+	FormatVersion string           `json:"format_version,omitempty"`
+	RawSession    *session.Session `json:"raw_session"`
+	Checkpoints   []CheckpointDTO  `json:"checkpoints,omitempty"`
+	Runs          []RunDTO         `json:"runs,omitempty"`
+	NewSessionID  string           `json:"new_session_id,omitempty"`
+	Overwrite     bool             `json:"overwrite,omitempty"`
 }
 
 // SessionImportResponse는 import 결과와 실제 저장된 항목 수를 알려줘요.
@@ -63,11 +66,13 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
 	}
+	redacted := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "true")
+	rawSession := *sess
 	resp := SessionExportResponse{
 		FormatVersion: sessionExportFormatVersion,
 		ExportedAt:    s.cfg.Now(),
 		Session:       toSessionDTO(sess),
-		RawSession:    *sess,
+		RawSession:    &rawSession,
 		Turns:         exportTurnDTOs(sess),
 		Events:        exportEventDTOs(sess),
 		Todos:         todoDTOs(sess.Todos),
@@ -89,6 +94,9 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		resp.Runs = runs
 	}
 	resp.Counts = SessionExportCountsDTO{Turns: len(resp.Turns), Events: len(resp.Events), Todos: len(resp.Todos), Checkpoints: len(resp.Checkpoints), Runs: len(resp.Runs)}
+	if redacted {
+		redactSessionExport(&resp)
+	}
 	writeJSON(w, resp)
 }
 
@@ -106,11 +114,11 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "unsupported_export_format", "지원하지 않는 session export format이에요")
 		return
 	}
-	imported := req.RawSession
-	if strings.TrimSpace(imported.ID) == "" {
+	if req.RawSession == nil || strings.TrimSpace(req.RawSession.ID) == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_import", "raw_session.id가 필요해요")
 		return
 	}
+	imported := *req.RawSession
 	originalID := imported.ID
 	if newID := strings.TrimSpace(req.NewSessionID); newID != "" {
 		rewriteImportedSessionID(&imported, newID)
@@ -214,4 +222,54 @@ func checkpointFromDTO(dto CheckpointDTO, sessionID string) session.Checkpoint {
 		cp.ID = session.NewID("cp")
 	}
 	return cp
+}
+
+func redactSessionExport(resp *SessionExportResponse) {
+	resp.Redacted = true
+	resp.RawSession = nil
+	resp.Session.ProjectRoot = llm.RedactSecrets(resp.Session.ProjectRoot)
+	resp.Session.Summary = llm.RedactSecrets(resp.Session.Summary)
+	resp.Session.Metadata = redactStringMap(resp.Session.Metadata)
+	for i := range resp.Turns {
+		resp.Turns[i].Prompt = llm.RedactSecrets(resp.Turns[i].Prompt)
+		resp.Turns[i].ResponseText = llm.RedactSecrets(resp.Turns[i].ResponseText)
+		resp.Turns[i].Error = llm.RedactSecrets(resp.Turns[i].Error)
+		for j := range resp.Turns[i].Messages {
+			resp.Turns[i].Messages[j].Content = llm.RedactSecrets(resp.Turns[i].Messages[j].Content)
+		}
+	}
+	for i := range resp.Events {
+		resp.Events[i].Error = llm.RedactSecrets(resp.Events[i].Error)
+		resp.Events[i].Payload = redactRawJSON(resp.Events[i].Payload)
+	}
+	for i := range resp.Todos {
+		resp.Todos[i].Content = llm.RedactSecrets(resp.Todos[i].Content)
+		resp.Todos[i].Priority = llm.RedactSecrets(resp.Todos[i].Priority)
+	}
+	for i := range resp.Checkpoints {
+		resp.Checkpoints[i].Payload = redactRawJSON(resp.Checkpoints[i].Payload)
+	}
+	for i := range resp.Runs {
+		resp.Runs[i].Prompt = llm.RedactSecrets(resp.Runs[i].Prompt)
+		resp.Runs[i].Error = llm.RedactSecrets(resp.Runs[i].Error)
+		resp.Runs[i].Metadata = redactStringMap(resp.Runs[i].Metadata)
+	}
+}
+
+func redactRawJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.RawMessage(llm.RedactSecrets(string(raw)))
+}
+
+func redactStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = llm.RedactSecrets(value)
+	}
+	return out
 }
