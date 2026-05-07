@@ -2124,6 +2124,9 @@ components:
           type: integer
         max_output_tokens:
           type: integer
+        max_result_bytes:
+          type: integer
+          description: live provider smoke 응답 text를 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
         timeout_ms:
           type: integer
           description: live provider smoke 호출에 적용할 timeout이에요. 0이면 기본 60초를 사용해요.
@@ -2158,6 +2161,12 @@ components:
           type: string
         text:
           type: string
+        text_bytes:
+          type: integer
+          description: secret 마스킹 뒤 원래 live smoke text byte 수예요.
+        text_truncated:
+          type: boolean
+          description: max_result_bytes 때문에 text가 잘렸는지 알려줘요.
         usage:
           $ref: '#/components/schemas/Usage'
     Provider:

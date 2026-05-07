@@ -497,6 +497,46 @@ func TestSyncProviderTesterAppliesLiveTimeout(t *testing.T) {
 	}
 }
 
+func TestSyncProviderTesterTruncatesLiveResult(t *testing.T) {
+	unregister, err := app.RegisterProvider(app.ProviderRegistration{
+		Spec: app.ProviderSpec{
+			Name:         "large-provider-test",
+			DefaultModel: "large-model",
+			Models:       []string{"large-model"},
+			Local:        true,
+			Conversion: app.ProviderConversionSpec{
+				Operations: []string{"large.generate"},
+			},
+		},
+		Conversion: func(spec app.ProviderSpec) app.ProviderConversionSet {
+			return app.ProviderConversionSet{
+				RequestConverter: llm.RequestConverterFunc(func(ctx context.Context, req llm.Request, opts llm.ConvertOptions) (llm.ProviderRequest, error) {
+					return llm.ProviderRequest{Operation: "large.generate", Model: req.Model, Body: map[string]any{"input": req.Messages[0].Content}}, nil
+				}),
+				Options: llm.ConvertOptions{Operation: "large.generate"},
+			}
+		},
+		Factory: func(root string, opts app.ProviderOptions) (app.ProviderHandle, error) {
+			return app.ProviderHandle{Provider: largeProviderTest{}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	resp, err := syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{Live: true, MaxResultBytes: 18})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.OK || resp.Result == nil || !resp.Result.TextTruncated || resp.Result.TextBytes <= len(resp.Result.Text) || !utf8.ValidString(resp.Result.Text) {
+		t.Fatalf("provider live smoke 결과 제한이 필요해요: %+v", resp)
+	}
+	if strings.Contains(resp.Result.Text, "ghp_") || !strings.Contains(resp.Result.Text, "[REDACTED]") {
+		t.Fatalf("provider live smoke 결과는 secret을 먼저 숨겨야 해요: %+v", resp.Result)
+	}
+}
+
 type slowProviderTest struct{}
 
 func (slowProviderTest) Name() string { return "slow-provider-test" }
@@ -512,6 +552,18 @@ func (slowProviderTest) Generate(ctx context.Context, req llm.Request) (*llm.Res
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+type largeProviderTest struct{}
+
+func (largeProviderTest) Name() string { return "large-provider-test" }
+
+func (largeProviderTest) Capabilities() llm.Capabilities {
+	return llm.Capabilities{}
+}
+
+func (largeProviderTest) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	return llm.TextResponse("large-provider-test", req.Model, "token=ghp_123456789012345678901234567890123456 가나다라마바"), nil
 }
 
 func TestDefaultMCPDTOsAreStableAndRedacted(t *testing.T) {

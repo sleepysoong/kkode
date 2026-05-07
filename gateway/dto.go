@@ -321,15 +321,18 @@ type ProviderTestRequest struct {
 	Metadata        map[string]string `json:"metadata,omitempty"`
 	MaxPreviewBytes int               `json:"max_preview_bytes,omitempty"`
 	MaxOutputTokens int               `json:"max_output_tokens,omitempty"`
+	MaxResultBytes  int               `json:"max_result_bytes,omitempty"`
 	TimeoutMS       int               `json:"timeout_ms,omitempty"`
 }
 
 // ProviderTestResultDTO는 provider live smoke 결과를 adapter 친화적으로 요약해요.
 type ProviderTestResultDTO struct {
-	ID     string    `json:"id,omitempty"`
-	Status string    `json:"status,omitempty"`
-	Text   string    `json:"text,omitempty"`
-	Usage  *UsageDTO `json:"usage,omitempty"`
+	ID            string    `json:"id,omitempty"`
+	Status        string    `json:"status,omitempty"`
+	Text          string    `json:"text,omitempty"`
+	TextBytes     int       `json:"text_bytes,omitempty"`
+	TextTruncated bool      `json:"text_truncated,omitempty"`
+	Usage         *UsageDTO `json:"usage,omitempty"`
 }
 
 // ProviderTestResponse는 provider 단독 preflight 결과예요.

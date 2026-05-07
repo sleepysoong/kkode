@@ -439,7 +439,7 @@ func syncProviderTester() gateway.ProviderTester {
 			return out, nil
 		}
 		if req.Stream {
-			result, err := smokeStreamProvider(liveCtx, handle.Provider, providerReq)
+			result, err := smokeStreamProvider(liveCtx, handle.Provider, providerReq, req.MaxResultBytes)
 			if err != nil {
 				out.OK = false
 				out.Message = err.Error()
@@ -455,7 +455,7 @@ func syncProviderTester() gateway.ProviderTester {
 			out.Message = err.Error()
 			return out, nil
 		}
-		out.Result = providerTestResult(resp)
+		out.Result = providerTestResult(resp, req.MaxResultBytes)
 		out.Message = "provider live test가 성공했어요"
 		return out, nil
 	}
@@ -471,7 +471,7 @@ func providerTestTimeout(timeoutMS int) (time.Duration, error) {
 	return time.Duration(timeoutMS) * time.Millisecond, nil
 }
 
-func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Request) (*gateway.ProviderTestResultDTO, error) {
+func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Request, maxResultBytes int) (*gateway.ProviderTestResultDTO, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("provider가 필요해요")
 	}
@@ -495,9 +495,9 @@ func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Req
 			text.WriteString(event.Delta)
 		}
 		if event.Response != nil {
-			result = providerTestResult(event.Response)
+			result = providerTestResult(event.Response, maxResultBytes)
 			if text.Len() > 0 && result.Text == "" {
-				result.Text = text.String()
+				setProviderTestResultText(result, text.String(), maxResultBytes)
 			}
 		}
 		if event.Type == llm.StreamEventError {
@@ -511,30 +511,45 @@ func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Req
 				result.Status = "completed"
 			}
 			if result.Text == "" {
-				result.Text = text.String()
+				setProviderTestResultText(result, text.String(), maxResultBytes)
 			}
 			return result, nil
 		}
 	}
 	if result.Text == "" {
-		result.Text = text.String()
+		setProviderTestResultText(result, text.String(), maxResultBytes)
 	}
 	return result, fmt.Errorf("provider stream이 완료 event를 보내지 않았어요")
 }
 
-func providerTestResult(resp *llm.Response) *gateway.ProviderTestResultDTO {
+func providerTestResult(resp *llm.Response, maxResultBytes int) *gateway.ProviderTestResultDTO {
 	if resp == nil {
 		return nil
 	}
 	result := &gateway.ProviderTestResultDTO{
 		ID:     resp.ID,
 		Status: resp.Status,
-		Text:   llm.RedactSecrets(resp.Text),
 	}
+	setProviderTestResultText(result, resp.Text, maxResultBytes)
 	if resp.Usage != (llm.Usage{}) {
 		result.Usage = &gateway.UsageDTO{InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens, TotalTokens: resp.Usage.TotalTokens, ReasoningTokens: resp.Usage.ReasoningTokens}
 	}
 	return result
+}
+
+func setProviderTestResultText(result *gateway.ProviderTestResultDTO, text string, maxBytes int) {
+	if result == nil || text == "" {
+		return
+	}
+	redacted := llm.RedactSecrets(text)
+	result.TextBytes = len(redacted)
+	if maxBytes <= 0 || len(redacted) <= maxBytes {
+		result.Text = redacted
+		result.TextTruncated = false
+		return
+	}
+	result.Text = truncateUTF8Bytes(redacted, maxBytes)
+	result.TextTruncated = true
 }
 
 func toProviderRoutePreviewDTO(route *app.ProviderRoutePreview) *gateway.ProviderRoutePreviewDTO {
