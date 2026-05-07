@@ -2442,6 +2442,11 @@ components:
         parameters:
           type: object
           additionalProperties: true
+          description: LLM/tool 호출에 쓰는 JSON Schema 형식 argument 정의예요.
+        example_arguments:
+          type: object
+          additionalProperties: true
+          description: 웹/Discord adapter가 tool 호출 폼을 채울 때 참고할 수 있는 안전한 예제 argument예요.
         strict:
           type: boolean
         requires_workspace:

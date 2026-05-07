@@ -17,6 +17,7 @@ type ToolDTO struct {
 	Name              string         `json:"name"`
 	Description       string         `json:"description,omitempty"`
 	Parameters        map[string]any `json:"parameters,omitempty"`
+	ExampleArguments  map[string]any `json:"example_arguments,omitempty"`
 	Strict            *bool          `json:"strict,omitempty"`
 	RequiresWorkspace bool           `json:"requires_workspace,omitempty"`
 }
@@ -131,7 +132,32 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 }
 
 func toToolDTO(tool llm.Tool) ToolDTO {
-	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, Strict: tool.Strict, RequiresWorkspace: toolRequiresWorkspace(tool.Name)}
+	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, ExampleArguments: toolExampleArguments(tool.Name), Strict: tool.Strict, RequiresWorkspace: toolRequiresWorkspace(tool.Name)}
+}
+
+func toolExampleArguments(name string) map[string]any {
+	switch strings.TrimSpace(name) {
+	case "file_read":
+		return map[string]any{"path": "README.md", "max_bytes": 4096}
+	case "file_write":
+		return map[string]any{"path": "notes/todo.md", "content": "할 일을 정리해요\n"}
+	case "file_edit":
+		return map[string]any{"path": "README.md", "old": "기존 문장", "new": "새 문장", "expected_replacements": 1}
+	case "file_apply_patch":
+		return map[string]any{"patch_text": "*** Begin Patch\n*** Update File: README.md\n@@\n-기존 문장\n+새 문장\n*** End Patch\n"}
+	case "file_list":
+		return map[string]any{"path": "."}
+	case "file_glob":
+		return map[string]any{"pattern": "**/*.go"}
+	case "file_grep":
+		return map[string]any{"pattern": "TODO", "path_glob": "**/*.go", "max_matches": 20}
+	case "shell_run":
+		return map[string]any{"command": "go", "args": []any{"test", "./..."}, "timeout_ms": 120000}
+	case "web_fetch":
+		return map[string]any{"url": "https://example.com", "max_bytes": 65536, "timeout_ms": 10000}
+	default:
+		return nil
+	}
 }
 
 func toolRequiresWorkspace(name string) bool {
