@@ -79,22 +79,7 @@ func (c *Caller) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 	if err != nil {
 		return llm.ProviderResult{}, err
 	}
-	endpoint, err := c.endpoint(route)
-	if err != nil {
-		return llm.ProviderResult{}, err
-	}
-	headers := httptransport.CloneHeaders(c.headers)
-	for k, v := range route.Headers {
-		headers[k] = v
-	}
-	for k, v := range req.Headers {
-		headers[k] = v
-	}
-	method := strings.TrimSpace(route.Method)
-	if method == "" {
-		method = http.MethodPost
-	}
-	hreq, payload, err := httptransport.NewJSONRequest(ctx, method, endpoint, c.apiKey, headers, req.Body, route.Accept)
+	hreq, payload, err := c.newRequest(ctx, route, req, req.Body)
 	if err != nil {
 		return llm.ProviderResult{}, err
 	}
@@ -111,6 +96,61 @@ func (c *Caller) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 		return llm.ProviderResult{}, httptransport.ErrorFromResponse(c.providerName+" "+operation, res, data)
 	}
 	return llm.ProviderResult{Provider: c.providerName, Model: req.Model, Body: data, Headers: res.Header}, nil
+}
+
+// StreamProvider는 변환된 ProviderRequest를 SSE HTTP JSON API로 보내고 raw SSE frame을 StreamEvent로 돌려줘요.
+// provider별 semantic delta parsing은 전용 ProviderStreamCaller가 맡고, 이 caller는 범용 raw stream 연결에 집중해요.
+func (c *Caller) StreamProvider(ctx context.Context, req llm.ProviderRequest) (llm.EventStream, error) {
+	if c == nil {
+		return nil, fmt.Errorf("httpjson caller가 필요해요")
+	}
+	operation := strings.TrimSpace(req.Operation)
+	if operation == "" {
+		operation = c.defaultOperation
+	}
+	route, err := c.route(operation)
+	if err != nil {
+		return nil, err
+	}
+	if route.Accept == "" {
+		route.Accept = "text/event-stream"
+	}
+	body := streamBody(req.Body)
+	hreq, payload, err := c.newRequest(ctx, route, req, body)
+	if err != nil {
+		return nil, err
+	}
+	res, err := httptransport.DoWithRetry(c.httpClient, hreq, payload, c.retry)
+	if err != nil {
+		return nil, err
+	}
+	if !httptransport.IsSuccessStatus(res.StatusCode) {
+		defer res.Body.Close()
+		data, _ := io.ReadAll(res.Body)
+		return nil, httptransport.ErrorFromResponse(c.providerName+" "+operation+" stream", res, data)
+	}
+	events := make(chan llm.StreamEvent, 32)
+	go c.readSSE(ctx, operation, res.Body, events)
+	return llm.NewChannelStream(ctx, events, res.Body), nil
+}
+
+func (c *Caller) newRequest(ctx context.Context, route Route, req llm.ProviderRequest, body any) (*http.Request, []byte, error) {
+	endpoint, err := c.endpoint(route)
+	if err != nil {
+		return nil, nil, err
+	}
+	headers := httptransport.CloneHeaders(c.headers)
+	for k, v := range route.Headers {
+		headers[k] = v
+	}
+	for k, v := range req.Headers {
+		headers[k] = v
+	}
+	method := strings.TrimSpace(route.Method)
+	if method == "" {
+		method = http.MethodPost
+	}
+	return httptransport.NewJSONRequest(ctx, method, endpoint, c.apiKey, headers, body, route.Accept)
 }
 
 func (c *Caller) route(operation string) (Route, error) {
@@ -135,6 +175,40 @@ func (c *Caller) endpoint(route Route) (string, error) {
 		return "", fmt.Errorf("httpjson base URL이 필요해요")
 	}
 	return c.baseURL + "/" + strings.TrimLeft(path, "/"), nil
+}
+
+func (c *Caller) readSSE(ctx context.Context, operation string, r io.Reader, out chan<- llm.StreamEvent) {
+	defer close(out)
+	err := httptransport.ReadSSE(ctx, r, func(eventName string, data []byte) bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case out <- llm.StreamEvent{Type: llm.StreamEventUnknown, Provider: c.providerName, EventName: eventName, Raw: append([]byte(nil), data...)}:
+			return true
+		}
+	})
+	if err != nil {
+		out <- llm.StreamEvent{Type: llm.StreamEventError, Provider: c.providerName, EventName: operation, Error: err}
+		return
+	}
+	if ctx.Err() == nil {
+		out <- llm.StreamEvent{Type: llm.StreamEventCompleted, Provider: c.providerName, EventName: operation}
+	}
+}
+
+func streamBody(body any) any {
+	m, ok := body.(map[string]any)
+	if !ok {
+		return body
+	}
+	out := make(map[string]any, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	if _, exists := out["stream"]; !exists {
+		out["stream"] = true
+	}
+	return out
 }
 
 func cloneRoutes(routes map[string]Route) map[string]Route {

@@ -467,6 +467,8 @@ if err != nil {
 resp, err := pipeline.Generate(ctx, req)
 ```
 
+SSE source도 같은 caller를 `Streamer`로 넘기면 raw SSE frame을 `llm.StreamEvent`로 받을 수 있어요. provider별 text delta/tool call 의미 해석이 필요하면 전용 `ProviderStreamCaller`를 추가하면 돼요.
+
 `llm.Provider` 구현체가 필요하면 같은 registry를 이렇게 감싸요.
 
 ```go

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +68,37 @@ func TestCallerReportsHTTPError(t *testing.T) {
 	var httpErr *httptransport.HTTPError
 	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadGateway || httpErr.Body != "bad\n" {
 		t.Fatalf("공통 HTTP 오류가 필요해요: %#v", err)
+	}
+}
+
+func TestCallerStreamsRawSSEEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("stream accept header가 필요해요: %+v", r.Header)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"stream":true`) {
+			t.Fatalf("stream body가 필요해요: %s", string(body))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message.delta\n"))
+		_, _ = w.Write([]byte("data: {\"delta\":\"안\"}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+	caller := New(Config{ProviderName: "custom-api", BaseURL: server.URL, HTTPClient: server.Client(), DefaultOperation: "responses.create", Routes: map[string]Route{"responses.create": {Path: "/stream"}}})
+	stream, err := caller.StreamProvider(context.Background(), llm.ProviderRequest{Body: map[string]any{"model": "gpt"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	ev, err := stream.Recv()
+	if err != nil || ev.Type != llm.StreamEventUnknown || ev.Provider != "custom-api" || ev.EventName != "message.delta" || string(ev.Raw) != `{"delta":"안"}` {
+		t.Fatalf("raw SSE event가 이상해요: %+v err=%v", ev, err)
+	}
+	ev, err = stream.Recv()
+	if err != nil || ev.Type != llm.StreamEventCompleted || ev.EventName != "responses.create" {
+		t.Fatalf("stream completed event가 필요해요: %+v err=%v", ev, err)
 	}
 }
 
