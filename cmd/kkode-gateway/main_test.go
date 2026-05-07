@@ -184,6 +184,34 @@ func TestLoadProviderOptionsRejectsDisabledResources(t *testing.T) {
 	}
 }
 
+func TestSyncRunValidatorChecksSessionProviderAndResources(t *testing.T) {
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	sess := session.NewSession(t.TempDir(), "openai", "gpt-5-mini", "kkode", session.AgentModeBuild)
+	sess.ID = "sess_validate"
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "off", Enabled: false, Config: []byte(`{"kind":"stdio","command":"off"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validator := syncRunValidator(store)
+	if err := validator(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "go"}); err != nil {
+		t.Fatalf("정상 run preflight가 실패하면 안 돼요: %v", err)
+	}
+	if err := validator(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "go", Provider: "missing-provider"}); err == nil || !strings.Contains(err.Error(), "unknown provider") {
+		t.Fatalf("알 수 없는 provider는 queue 전에 거부해야 해요: %v", err)
+	}
+	if err := validator(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "go", MCPServers: []string{disabled.ID}}); err == nil || !strings.Contains(err.Error(), "비활성화") {
+		t.Fatalf("비활성 resource는 queue 전에 거부해야 해요: %v", err)
+	}
+}
+
 func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	t.Setenv("KKODE_DEFAULT_MCP", "off")
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")

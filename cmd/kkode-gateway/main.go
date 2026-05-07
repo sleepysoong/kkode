@@ -85,6 +85,7 @@ func run(args []string) error {
 		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
 		RunPreviewer:         syncRunPreviewer(store),
+		RunValidator:         syncRunValidator(store),
 		RunRuntimeStats:      runManager.RuntimeStats,
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
@@ -257,6 +258,26 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 			run.Error = runErr.Error()
 		}
 		return run, nil
+	}
+}
+
+func syncRunValidator(store session.Store) gateway.RunValidator {
+	return func(ctx context.Context, req gateway.RunStartRequest) error {
+		sess, err := store.LoadSession(ctx, req.SessionID)
+		if err != nil {
+			return err
+		}
+		providerName := firstNonEmpty(req.Provider, sess.ProviderName)
+		if providerName == "" {
+			providerName = "openai"
+		}
+		if _, ok := app.ResolveProviderSpec(providerName); !ok {
+			return fmt.Errorf("unknown provider: %s", providerName)
+		}
+		if _, err := loadProviderOptions(ctx, store, req); err != nil {
+			return err
+		}
+		return nil
 	}
 }
 

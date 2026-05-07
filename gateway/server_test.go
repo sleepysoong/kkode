@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -349,8 +350,13 @@ func TestGatewayAccessLoggerUsesRequestID(t *testing.T) {
 func TestGatewayRunStarterBoundary(t *testing.T) {
 	store := openTestStore(t)
 	var started RunStartRequest
+	var validated RunStartRequest
 	srv, err := New(Config{
 		Store: store,
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			validated = req
+			return nil
+		},
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 			started = req
 			return &RunDTO{ID: "run_test", SessionID: req.SessionID, Status: "queued", EventsURL: "/api/v1/runs/run_test/events", Metadata: req.Metadata}, nil
@@ -372,6 +378,36 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	}
 	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata["source"] != "panel" {
 		t.Fatalf("unexpected run: %+v", run)
+	}
+	if validated.SessionID != "sess_1" || validated.Metadata[RequestIDMetadataKey] != "req_run" {
+		t.Fatalf("run validator는 enqueue 전에 같은 request metadata를 받아야 해요: %+v", validated)
+	}
+}
+
+func TestGatewayRunValidatorRejectsBeforeStarter(t *testing.T) {
+	store := openTestStore(t)
+	started := false
+	srv, err := New(Config{
+		Store: store,
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			return errors.New("resource off")
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			started = true
+			return &RunDTO{ID: "run_test", SessionID: req.SessionID, Status: "queued"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_run_preflight") {
+		t.Fatalf("preflight 오류는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if started {
+		t.Fatal("validator가 실패하면 RunStarter를 호출하면 안 돼요")
 	}
 }
 

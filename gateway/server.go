@@ -21,6 +21,9 @@ type RunStarter func(ctx context.Context, req RunStartRequest) (*RunDTO, error)
 // RunPreviewer는 실제 실행 전에 provider/model/resource 조립 결과를 계산해요.
 type RunPreviewer func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error)
 
+// RunValidator는 background queue에 넣기 전에 빠른 실행 전 검증을 수행해요.
+type RunValidator func(ctx context.Context, req RunStartRequest) error
+
 // RunRuntimeStatsGetter는 diagnostics가 process-local run queue 상태를 읽는 경계예요.
 type RunRuntimeStatsGetter func() RunRuntimeStats
 
@@ -43,6 +46,7 @@ type Config struct {
 	ResourceStore        session.ResourceStore
 	RunStarter           RunStarter
 	RunPreviewer         RunPreviewer
+	RunValidator         RunValidator
 	RunRuntimeStats      RunRuntimeStatsGetter
 	RunGetter            RunGetter
 	RunLister            RunLister
@@ -506,6 +510,11 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
 	}
+	if s.cfg.RunValidator == nil {
+		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "missing"})
+	} else {
+		checks = append(checks, DiagnosticCheckDTO{Name: "run_validator", Status: "ok"})
+	}
 	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}
 	if s.cfg.RunRuntimeStats != nil {
 		stats := runRuntimeStatsDTO(s.cfg.RunRuntimeStats())
@@ -864,6 +873,12 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
+	if s.cfg.RunValidator != nil {
+		if err := s.cfg.RunValidator(r.Context(), req); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_run_preflight", err.Error())
+			return
+		}
+	}
 	run, err := s.cfg.RunStarter(r.Context(), req)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "start_run_failed", err.Error())
@@ -944,7 +959,14 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 	}
 	metadata["retried_from"] = original.ID
 	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
-	retry, err := s.cfg.RunStarter(r.Context(), RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents)})
+	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents)}
+	if s.cfg.RunValidator != nil {
+		if err := s.cfg.RunValidator(r.Context(), req); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_run_preflight", err.Error())
+			return
+		}
+	}
+	retry, err := s.cfg.RunStarter(r.Context(), req)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "retry_run_failed", err.Error())
 		return
