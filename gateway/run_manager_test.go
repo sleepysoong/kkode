@@ -144,6 +144,24 @@ func TestAsyncRunManagerCancelsRun(t *testing.T) {
 	waitForRunStatus(t, manager, run.ID, "cancelled")
 }
 
+func TestAsyncRunManagerKeepsCancelledStatusWhenStarterReturnsSuccessAfterCancel(t *testing.T) {
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		<-ctx.Done()
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
+	})
+	run, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "ignore cancel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Cancel(context.Background(), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	cancelled := waitForRunStatus(t, manager, run.ID, "cancelled")
+	if cancelled.Error == "" {
+		t.Fatalf("context 취소 이유가 남아야 해요: %+v", cancelled)
+	}
+}
+
 func TestAsyncRunManagerLimitsConcurrentRunningRuns(t *testing.T) {
 	release := make(chan struct{})
 	started := make(chan string, 2)

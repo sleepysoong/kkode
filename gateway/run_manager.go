@@ -527,9 +527,16 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		if run.EndedAt.IsZero() {
 			run.EndedAt = m.timestamp()
 		}
+		if runCtx.Err() != nil {
+			if run.Error == "" {
+				run.Error = runCtx.Err().Error()
+			}
+			run.Status = "cancelled"
+			return
+		}
 		if err != nil {
 			run.Error = err.Error()
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || runCtx.Err() != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				run.Status = "cancelled"
 			} else {
 				run.Status = "failed"
