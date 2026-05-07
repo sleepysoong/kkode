@@ -28,7 +28,7 @@ llm.Request
 
 ## 이번에 강화한 부분이에요
 
-Gateway run/test 요청의 `metadata`도 provider `llm.Request.Metadata`까지 전달해요. Provider preview는 매칭된 route template와 resolved path/query도 보여줘요. Run preview는 요청 단위 임시 context와 선택한 Skill/Subagent가 system prompt에 추가할 `context_blocks`도 secret 마스킹 후 `max_preview_bytes` 예산 안에서 노출해요. 그래서 외부 웹 패널이나 Discord adapter가 넣은 `trace_id`, `deployment`, `api_version`, `account_id` 같은 값을 run record, provider metadata, HTTP route template에서 같은 값으로 재사용하고, 실행 버튼 전 실제 추가 지침까지 확인할 수 있어요. `context_blocks`는 run record에 보존되므로 retry도 같은 adapter-provided context를 복원해요.
+Gateway run/test 요청의 `metadata`도 provider `llm.Request.Metadata`까지 전달해요. Provider preview는 매칭된 route template와 resolved path/query도 보여줘요. Run preview는 요청 단위 임시 context와 선택한 Skill/Subagent가 system prompt에 추가할 `context_blocks`도 secret 마스킹 후 `max_preview_bytes` 예산 안에서 노출해요. 그래서 외부 웹 패널이나 Discord adapter가 넣은 `trace_id`, `deployment`, `api_version`, `account_id` 같은 값을 run record, provider metadata, HTTP route template에서 같은 값으로 재사용하고, 실행 버튼 전 실제 추가 지침까지 확인할 수 있어요. `context_blocks`는 실행/저장 전 secret 마스킹과 UTF-8 안전 길이 제한을 거친 뒤 run record에 보존되므로 retry도 같은 adapter-provided context를 복원해요.
 
 HTTP JSON route가 고정 path만 지원하면 `/responses` 같은 OpenAI-compatible API에는 충분하지만, 아래 형태의 일반 API에는 부족해요.
 

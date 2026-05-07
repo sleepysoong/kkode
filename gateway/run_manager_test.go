@@ -319,13 +319,13 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", TurnID: "turn_1"}, nil
 	}, store)
-	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, ContextBlocks: []string{"adapter context"}})
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, ContextBlocks: []string{"adapter token=ghp_123456789012345678901234567890123456 context"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitForRunStatus(t, manager, run.ID, "completed")
 	loaded := waitForPersistedRunStatus(t, store, run.ID, "completed")
-	if loaded.TurnID != "turn_1" || loaded.Provider != "copilot" || loaded.Model != "gpt-5-mini" || len(loaded.MCPServers) != 1 || loaded.MCPServers[0] != "mcp_1" || len(loaded.Skills) != 1 || loaded.Skills[0] != "skill_1" || len(loaded.Subagents) != 1 || loaded.Subagents[0] != "agent_1" || len(loaded.ContextBlocks) != 1 || loaded.ContextBlocks[0] != "adapter context" {
+	if loaded.TurnID != "turn_1" || loaded.Provider != "copilot" || loaded.Model != "gpt-5-mini" || len(loaded.MCPServers) != 1 || loaded.MCPServers[0] != "mcp_1" || len(loaded.Skills) != 1 || loaded.Skills[0] != "skill_1" || len(loaded.Subagents) != 1 || loaded.Subagents[0] != "agent_1" || len(loaded.ContextBlocks) != 1 || strings.Contains(loaded.ContextBlocks[0], "ghp_") || !strings.Contains(loaded.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("persisted run이 이상해요: %+v", loaded)
 	}
 	restarted := NewAsyncRunManagerWithStore(nil, store)
@@ -333,7 +333,7 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != "completed" || got.TurnID != "turn_1" || got.Provider != "copilot" || got.Model != "gpt-5-mini" || len(got.MCPServers) != 1 || got.MCPServers[0] != "mcp_1" || len(got.ContextBlocks) != 1 || got.ContextBlocks[0] != "adapter context" {
+	if got.Status != "completed" || got.TurnID != "turn_1" || got.Provider != "copilot" || got.Model != "gpt-5-mini" || len(got.MCPServers) != 1 || got.MCPServers[0] != "mcp_1" || len(got.ContextBlocks) != 1 || strings.Contains(got.ContextBlocks[0], "ghp_") || !strings.Contains(got.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("restart 후 run 조회가 이상해요: %+v", got)
 	}
 }

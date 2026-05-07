@@ -221,6 +221,7 @@ func splitCSV(raw string) []string {
 
 func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 	return func(ctx context.Context, req gateway.RunStartRequest) (*gateway.RunDTO, error) {
+		req.ContextBlocks = gateway.SanitizeContextBlocks(req.ContextBlocks)
 		sess, err := store.LoadSession(ctx, req.SessionID)
 		if err != nil {
 			return nil, err
@@ -794,7 +795,7 @@ func cloneStringMap(values map[string]string) map[string]string {
 }
 
 func loadProviderOptions(ctx context.Context, store session.Store, req gateway.RunStartRequest) (app.ProviderOptions, error) {
-	opts := app.ProviderOptions{MCPServers: map[string]llm.MCPServer{}, ContextBlocks: requestContextBlocks(req.ContextBlocks)}
+	opts := app.ProviderOptions{MCPServers: map[string]llm.MCPServer{}, ContextBlocks: requestContextBlocks(gateway.SanitizeContextBlocks(req.ContextBlocks))}
 	resourceStore, _ := store.(session.ResourceStore)
 	if resourceStore == nil {
 		if len(opts.MCPServers) == 0 {

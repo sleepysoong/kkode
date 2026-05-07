@@ -1091,6 +1091,7 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	req = sanitizeRunStartRequest(req)
 	if err := validateRunStartRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
 		return
@@ -1160,6 +1161,7 @@ func (s *Server) validateRun(w http.ResponseWriter, r *http.Request) {
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	req = sanitizeRunStartRequest(req)
 	requestID := requestIDFromRequest(r)
 	idempotencyKey := idempotencyKeyFromRequest(r, req.Metadata)
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestID)
@@ -1205,6 +1207,7 @@ func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	req = sanitizeRunStartRequest(req)
 	if err := validateRunStartRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
 		return

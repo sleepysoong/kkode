@@ -1314,7 +1314,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","provider":"openai","preview_stream":true,"max_preview_bytes":123}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","provider":"openai","preview_stream":true,"max_preview_bytes":123,"context_blocks":["token=ghp_123456789012345678901234567890123456 패널 context"]}`))
 	req.Header.Set(RequestIDHeader, "req_preview")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -1325,7 +1325,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 {
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
 }

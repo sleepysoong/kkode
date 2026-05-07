@@ -219,6 +219,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	if m == nil || m.starter == nil {
 		return nil, errors.New("run starter가 필요해요")
 	}
+	req = sanitizeRunStartRequest(req)
 	runID := strings.TrimSpace(req.RunID)
 	if runID == "" {
 		runID = session.NewID("run")
