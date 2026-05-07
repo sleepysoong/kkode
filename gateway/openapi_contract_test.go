@@ -55,6 +55,20 @@ func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAPIOperationsExposeUniqueOperationIDs(t *testing.T) {
+	operations := readOpenAPIOperationIDs(t)
+	seen := map[string]string{}
+	for op, id := range operations {
+		if strings.TrimSpace(id) == "" {
+			t.Fatalf("OpenAPI operation %s에 operationId가 필요해요", op)
+		}
+		if previous := seen[id]; previous != "" {
+			t.Fatalf("OpenAPI operationId가 중복됐어요: id=%s first=%s second=%s", id, previous, op)
+		}
+		seen[id] = op
+	}
+}
+
 func TestOpenAPIComponentReferencesExist(t *testing.T) {
 	data, err := os.ReadFile("openapi.yaml")
 	if err != nil {
@@ -256,6 +270,44 @@ func readOpenAPIOperationErrorResponses(t *testing.T) map[string]bool {
 		}
 		if currentOp != "" && strings.Contains(line, "#/components/responses/Error") {
 			out[currentOp] = true
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("OpenAPI operation을 읽지 못했어요")
+	}
+	return out
+}
+
+func readOpenAPIOperationIDs(t *testing.T) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathRe := regexp.MustCompile(`^  (/[^:]+):$`)
+	methodRe := regexp.MustCompile(`^    (get|post|put|delete|patch|options):$`)
+	operationIDRe := regexp.MustCompile(`^      operationId:\s*([A-Za-z0-9_]+)\s*$`)
+	out := map[string]string{}
+	currentPath := ""
+	currentOp := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if m := pathRe.FindStringSubmatch(line); m != nil {
+			currentPath = m[1]
+			currentOp = ""
+			continue
+		}
+		if currentPath == "" {
+			continue
+		}
+		if m := methodRe.FindStringSubmatch(line); m != nil {
+			currentOp = m[1] + " " + currentPath
+			out[currentOp] = ""
+			continue
+		}
+		if currentOp != "" {
+			if m := operationIDRe.FindStringSubmatch(line); m != nil {
+				out[currentOp] = m[1]
+			}
 		}
 	}
 	if len(out) == 0 {

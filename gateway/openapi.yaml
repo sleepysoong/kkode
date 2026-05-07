@@ -12,6 +12,7 @@ security:
 paths:
   /healthz:
     get:
+      operationId: getHealthz
       summary: 프로세스 health를 확인해요.
       security: []
       responses:
@@ -25,6 +26,7 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
   /readyz:
     get:
+      operationId: getReadyz
       summary: gateway 준비 상태를 확인해요.
       security: []
       responses:
@@ -38,6 +40,7 @@ paths:
                 $ref: '#/components/schemas/ReadyResponse'
   /api/v1:
     get:
+      operationId: getAPIIndex
       summary: API discovery index를 반환해요.
       responses:
         default:
@@ -50,6 +53,7 @@ paths:
                 $ref: '#/components/schemas/APIIndexResponse'
   /api/v1/openapi.yaml:
     get:
+      operationId: getOpenapiYaml
       summary: 현재 OpenAPI YAML 스펙을 반환해요.
       responses:
         default:
@@ -62,6 +66,7 @@ paths:
                 type: string
   /api/v1/version:
     get:
+      operationId: getVersion
       summary: gateway version과 provider 목록을 반환해요.
       responses:
         default:
@@ -74,6 +79,7 @@ paths:
                 $ref: '#/components/schemas/VersionResponse'
   /api/v1/capabilities:
     get:
+      operationId: getCapabilities
       summary: gateway 기능과 provider capability를 반환해요.
       responses:
         default:
@@ -86,6 +92,7 @@ paths:
                 $ref: '#/components/schemas/CapabilityResponse'
   /api/v1/diagnostics:
     get:
+      operationId: getDiagnostics
       summary: gateway 운영 진단 정보를 반환해요.
       responses:
         default:
@@ -98,6 +105,7 @@ paths:
                 $ref: '#/components/schemas/DiagnosticsResponse'
   /api/v1/providers:
     get:
+      operationId: getProviders
       summary: gateway가 알고 있는 provider 목록을 반환해요.
       responses:
         default:
@@ -110,6 +118,7 @@ paths:
                 $ref: '#/components/schemas/ProviderListResponse'
   /api/v1/providers/{provider}:
     get:
+      operationId: getProvidersByProvider
       summary: provider 이름이나 alias로 provider 상세를 반환해요.
       parameters:
         - in: path
@@ -128,6 +137,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/providers/{provider}/test:
     post:
+      operationId: postProvidersByProviderTest
       summary: provider 단독 preflight와 선택적 live smoke를 실행해요.
       parameters:
         - in: path
@@ -152,6 +162,7 @@ paths:
                 $ref: '#/components/schemas/ProviderTestResponse'
   /api/v1/models:
     get:
+      operationId: getModels
       summary: provider별 model catalog를 반환해요.
       parameters:
         - in: query
@@ -169,6 +180,7 @@ paths:
                 $ref: '#/components/schemas/ModelListResponse'
   /api/v1/stats:
     get:
+      operationId: getStats
       summary: gateway dashboard 통계를 반환해요.
       responses:
         '200':
@@ -181,6 +193,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/files:
     get:
+      operationId: getFiles
       summary: workspace 디렉터리 항목을 나열해요.
       parameters:
         - in: query
@@ -204,6 +217,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/files/content:
     get:
+      operationId: getFilesContent
       summary: workspace 파일 내용을 읽어요.
       parameters:
         - in: query
@@ -238,6 +252,7 @@ paths:
         '400':
           $ref: '#/components/responses/Error'
     put:
+      operationId: putFilesContent
       summary: workspace 파일 내용을 써요.
       requestBody:
         required: true
@@ -256,6 +271,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/files/grep:
     get:
+      operationId: getFilesGrep
       summary: workspace 파일에서 문자열 또는 regex를 검색해요.
       parameters:
         - in: query
@@ -299,6 +315,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/files/glob:
     get:
+      operationId: getFilesGlob
       summary: workspace 파일 경로를 glob 패턴으로 찾아요.
       parameters:
         - in: query
@@ -328,6 +345,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/files/patch:
     post:
+      operationId: postFilesPatch
       summary: apply_patch 형식 patch를 workspace에 적용해요.
       description: 권한 프롬프트 없이 project_root 기준으로 즉시 적용해요.
       requestBody:
@@ -347,6 +365,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/git/status:
     get:
+      operationId: getGitStatus
       summary: workspace git status를 반환해요.
       parameters:
         - in: query
@@ -365,6 +384,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/git/diff:
     get:
+      operationId: getGitDiff
       summary: workspace git diff를 반환해요.
       parameters:
         - in: query
@@ -392,6 +412,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/git/log:
     get:
+      operationId: getGitLog
       summary: workspace git log를 반환해요.
       parameters:
         - in: query
@@ -416,6 +437,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/tools:
     get:
+      operationId: getTools
       summary: 표준 file/shell/web tool 목록을 반환해요.
       responses:
         default:
@@ -428,6 +450,7 @@ paths:
                 $ref: '#/components/schemas/ToolListResponse'
   /api/v1/tools/{tool}:
     get:
+      operationId: getToolsByTool
       summary: 표준 tool 상세 schema를 반환해요.
       parameters:
         - in: path
@@ -446,6 +469,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/tools/call:
     post:
+      operationId: postToolsCall
       summary: 표준 tool을 직접 실행해요.
       description: 권한 프롬프트 없이 표준 tool을 바로 실행해요. file/shell tool은 project_root가 필요하고 web_fetch는 project_root 없이도 실행할 수 있어요.
       requestBody:
@@ -465,6 +489,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions:
     get:
+      operationId: getSessions
       summary: session 목록을 반환해요.
       parameters:
         - in: query
@@ -487,6 +512,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SessionListResponse'
     post:
+      operationId: postSessions
       summary: 새 session을 만들어요.
       requestBody:
         required: true
@@ -505,6 +531,7 @@ paths:
                 $ref: '#/components/schemas/Session'
   /api/v1/sessions/import:
     post:
+      operationId: postSessionsImport
       summary: session export bundle을 import해요.
       requestBody:
         required: true
@@ -525,6 +552,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}:
     get:
+      operationId: getSessionsBySessionId
       summary: session 상세를 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -539,6 +567,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/export:
     get:
+      operationId: getSessionsBySessionIdExport
       summary: session export JSON을 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -571,6 +600,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/compact:
     post:
+      operationId: postSessionsBySessionIdCompact
       summary: session turn을 extractive summary로 압축해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -591,6 +621,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/fork:
     post:
+      operationId: postSessionsBySessionIdFork
       summary: 기존 session을 fork해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -614,6 +645,7 @@ paths:
                 $ref: '#/components/schemas/Session'
   /api/v1/sessions/{session_id}/turns:
     get:
+      operationId: getSessionsBySessionIdTurns
       summary: session turn 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -639,6 +671,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/turns/{turn_id}:
     get:
+      operationId: getSessionsBySessionIdTurnsByTurnId
       summary: session turn 상세를 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -658,6 +691,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/transcript:
     get:
+      operationId: getSessionsBySessionIdTranscript
       summary: session transcript를 markdown 포함 JSON으로 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -678,6 +712,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/events:
     get:
+      operationId: getSessionsBySessionIdEvents
       summary: session event를 JSON 또는 SSE로 replay해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -711,6 +746,7 @@ paths:
                 type: string
   /api/v1/sessions/{session_id}/checkpoints:
     get:
+      operationId: getSessionsBySessionIdCheckpoints
       summary: session checkpoint 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -730,6 +766,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CheckpointListResponse'
     post:
+      operationId: postSessionsBySessionIdCheckpoints
       summary: session checkpoint를 저장해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -750,6 +787,7 @@ paths:
                 $ref: '#/components/schemas/Checkpoint'
   /api/v1/sessions/{session_id}/checkpoints/{checkpoint_id}:
     get:
+      operationId: getSessionsBySessionIdCheckpointsByCheckpointId
       summary: session checkpoint 상세를 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -770,6 +808,7 @@ paths:
 
   /api/v1/sessions/{session_id}/todos:
     get:
+      operationId: getSessionsBySessionIdTodos
       summary: session todo 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -783,6 +822,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TodoListResponse'
     put:
+      operationId: putSessionsBySessionIdTodos
       summary: session todo 목록 전체를 교체해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -802,6 +842,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TodoListResponse'
     post:
+      operationId: postSessionsBySessionIdTodos
       summary: todo 하나를 추가하거나 같은 id를 갱신해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -822,6 +863,7 @@ paths:
                 $ref: '#/components/schemas/TodoListResponse'
   /api/v1/sessions/{session_id}/todos/{todo_id}:
     delete:
+      operationId: deleteSessionsBySessionIdTodosByTodoId
       summary: todo 하나를 삭제해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -838,6 +880,7 @@ paths:
 
   /api/v1/prompts:
     get:
+      operationId: getPrompts
       summary: 내장 prompt template 목록을 반환해요.
       responses:
         default:
@@ -850,6 +893,7 @@ paths:
                 $ref: '#/components/schemas/PromptTemplateListResponse'
   /api/v1/prompts/{template_name}:
     get:
+      operationId: getPromptsByTemplateName
       summary: 내장 prompt template 원문을 반환해요.
       parameters:
         - in: path
@@ -868,6 +912,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/prompts/{template_name}/render:
     post:
+      operationId: postPromptsByTemplateNameRender
       summary: 내장 prompt template을 입력 data로 렌더링해요.
       parameters:
         - in: path
@@ -892,6 +937,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers:
     get:
+      operationId: getMcpServers
       summary: MCP server manifest 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/Enabled'
@@ -906,6 +952,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourceListResponse'
     post:
+      operationId: postMcpServers
       summary: MCP server manifest를 저장해요.
       requestBody:
         required: true
@@ -924,6 +971,7 @@ paths:
                 $ref: '#/components/schemas/Resource'
   /api/v1/mcp/servers/{resource_id}:
     get:
+      operationId: getMcpServersByResourceId
       summary: MCP server manifest를 조회해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -937,6 +985,7 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
     put:
+      operationId: putMcpServersByResourceId
       summary: MCP server manifest를 갱신해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -956,6 +1005,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resource'
     delete:
+      operationId: deleteMcpServersByResourceId
       summary: MCP server manifest를 삭제해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -967,6 +1017,7 @@ paths:
 
   /api/v1/mcp/servers/{resource_id}/tools:
     get:
+      operationId: getMcpServersByResourceIdTools
       summary: MCP stdio/http server를 probe해서 tools/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -983,6 +1034,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/resources:
     get:
+      operationId: getMcpServersByResourceIdResources
       summary: MCP stdio/http server를 probe해서 resources/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -999,6 +1051,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/resources/read:
     get:
+      operationId: getMcpServersByResourceIdResourcesRead
       summary: MCP stdio/http server resource를 resources/read로 읽어요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1020,6 +1073,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/prompts:
     get:
+      operationId: getMcpServersByResourceIdPrompts
       summary: MCP stdio/http server를 probe해서 prompts/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1036,6 +1090,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/prompts/{prompt_name}/get:
     post:
+      operationId: postMcpServersByResourceIdPromptsByPromptNameGet
       summary: MCP stdio/http server prompt를 prompts/get으로 가져와요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1063,6 +1118,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call:
     post:
+      operationId: postMcpServersByResourceIdToolsByToolNameCall
       summary: MCP stdio/http server tool을 직접 호출해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1090,6 +1146,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/skills:
     get:
+      operationId: getSkills
       summary: skill manifest 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/Enabled'
@@ -1104,6 +1161,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourceListResponse'
     post:
+      operationId: postSkills
       summary: skill manifest를 저장해요.
       requestBody:
         required: true
@@ -1122,6 +1180,7 @@ paths:
                 $ref: '#/components/schemas/Resource'
   /api/v1/skills/{resource_id}:
     get:
+      operationId: getSkillsByResourceId
       summary: skill manifest를 조회해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1135,6 +1194,7 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
     put:
+      operationId: putSkillsByResourceId
       summary: skill manifest를 갱신해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1154,6 +1214,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resource'
     delete:
+      operationId: deleteSkillsByResourceId
       summary: skill manifest를 삭제해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1164,6 +1225,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/skills/{resource_id}/preview:
     get:
+      operationId: getSkillsByResourceIdPreview
       summary: skill manifest의 SKILL.md 또는 README.md preview를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1184,6 +1246,7 @@ paths:
 
   /api/v1/subagents:
     get:
+      operationId: getSubagents
       summary: subagent manifest 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/Enabled'
@@ -1198,6 +1261,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourceListResponse'
     post:
+      operationId: postSubagents
       summary: subagent manifest를 저장해요.
       requestBody:
         required: true
@@ -1216,6 +1280,7 @@ paths:
                 $ref: '#/components/schemas/Resource'
   /api/v1/subagents/{resource_id}:
     get:
+      operationId: getSubagentsByResourceId
       summary: subagent manifest를 조회해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1229,6 +1294,7 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
     put:
+      operationId: putSubagentsByResourceId
       summary: subagent manifest를 갱신해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1248,6 +1314,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resource'
     delete:
+      operationId: deleteSubagentsByResourceId
       summary: subagent manifest를 삭제해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1259,6 +1326,7 @@ paths:
 
   /api/v1/subagents/{resource_id}/preview:
     get:
+      operationId: getSubagentsByResourceIdPreview
       summary: subagent manifest를 실행 전 preview 형태로 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -1274,6 +1342,7 @@ paths:
 
   /api/v1/lsp/symbols:
     get:
+      operationId: getLspSymbols
       summary: Go source symbol을 LSP-style로 검색해요.
       parameters:
         - in: query
@@ -1302,6 +1371,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/lsp/document-symbols:
     get:
+      operationId: getLspDocumentSymbols
       summary: Go 파일 하나의 document symbol outline을 반환해요.
       parameters:
         - in: query
@@ -1325,6 +1395,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/lsp/definitions:
     get:
+      operationId: getLspDefinitions
       summary: Go symbol definition 위치를 반환해요.
       parameters:
         - in: query
@@ -1354,6 +1425,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/lsp/references:
     get:
+      operationId: getLspReferences
       summary: Go symbol reference 위치를 반환해요.
       parameters:
         - in: query
@@ -1383,6 +1455,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/lsp/diagnostics:
     get:
+      operationId: getLspDiagnostics
       summary: Go parse diagnostics를 반환해요.
       parameters:
         - in: query
@@ -1411,6 +1484,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/lsp/hover:
     get:
+      operationId: getLspHover
       summary: Go symbol hover 정보를 반환해요.
       parameters:
         - in: query
@@ -1434,6 +1508,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/runs:
     get:
+      operationId: getRuns
       summary: background run 목록을 반환해요.
       parameters:
         - in: query
@@ -1470,6 +1545,7 @@ paths:
         '501':
           $ref: '#/components/responses/Error'
     post:
+      operationId: postRuns
       summary: agent background run을 시작해요.
       description: gateway는 run을 즉시 접수하고 실제 agent 실행은 background RunManager에서 이어가요. `Idempotency-Key` header나 `metadata.idempotency_key`가 같으면 기존 run을 반환해요.
       parameters:
@@ -1506,6 +1582,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/runs/preview:
     post:
+      operationId: postRunsPreview
       summary: agent run 조립 결과를 실행 없이 미리 보여줘요.
       description: provider/model/default MCP/선택 resource/base request tool을 계산하지만 background run은 만들지 않아요.
       requestBody:
@@ -1525,6 +1602,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/runs/validate:
     post:
+      operationId: postRunsValidate
       summary: background run을 queue에 넣기 전 preflight만 실행해요.
       description: session/provider/resource/workspace/provider factory를 검증하지만 run은 만들지 않아요. 외부 패널이 실행 버튼 전 오류를 보여줄 때 사용해요. 실패도 200 응답의 ok=false로 반환해서 UI가 같은 schema로 처리하게 해요.
       requestBody:
@@ -1544,6 +1622,7 @@ paths:
                 $ref: '#/components/schemas/RunValidateResponse'
   /api/v1/requests/{request_id}/runs:
     get:
+      operationId: getRequestsByRequestIdRuns
       summary: request id로 연결된 background run 목록을 반환해요.
       parameters:
         - in: path
@@ -1568,6 +1647,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/requests/{request_id}/events:
     get:
+      operationId: getRequestsByRequestIdEvents
       summary: request id로 연결된 background run event를 반환해요.
       parameters:
         - in: path
@@ -1607,6 +1687,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/requests/{request_id}/transcript:
     get:
+      operationId: getRequestsByRequestIdTranscript
       summary: request id로 연결된 run transcript 묶음을 반환해요.
       parameters:
         - in: path
@@ -1652,6 +1733,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}:
     get:
+      operationId: getRunsByRunId
       summary: background run 상태를 조회해요.
       parameters:
         - $ref: '#/components/parameters/RunID'
@@ -1669,6 +1751,7 @@ paths:
 
   /api/v1/runs/{run_id}/events:
     get:
+      operationId: getRunsByRunIdEvents
       summary: run 상태 변경을 JSON 또는 SSE로 받아요.
       parameters:
         - $ref: '#/components/parameters/RunID'
@@ -1710,6 +1793,7 @@ paths:
 
   /api/v1/runs/{run_id}/transcript:
     get:
+      operationId: getRunsByRunIdTranscript
       summary: run 하나에 해당하는 turn, session event, run event transcript를 조회해요.
       parameters:
         - $ref: '#/components/parameters/RunID'
@@ -1747,6 +1831,7 @@ paths:
 
   /api/v1/runs/{run_id}/retry:
     post:
+      operationId: postRunsByRunIdRetry
       summary: 기존 run의 prompt와 session으로 새 background run을 시작해요.
       parameters:
         - $ref: '#/components/parameters/RunID'
@@ -1763,6 +1848,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}/cancel:
     post:
+      operationId: postRunsByRunIdCancel
       summary: background run을 취소해요.
       parameters:
         - $ref: '#/components/parameters/RunID'
