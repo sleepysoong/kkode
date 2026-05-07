@@ -226,6 +226,10 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request, parts []
 		s.listRunEventsByRequestID(w, r, parts[1])
 		return
 	}
+	if len(parts) == 3 && parts[2] == "transcript" {
+		s.getRequestTranscript(w, r, parts[1])
+		return
+	}
 	writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
 }
 

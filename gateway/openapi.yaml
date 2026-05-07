@@ -1460,6 +1460,51 @@ paths:
                 type: string
         '501':
           $ref: '#/components/responses/Error'
+  /api/v1/requests/{request_id}/transcript:
+    get:
+      summary: request id로 연결된 run transcript 묶음을 반환해요.
+      parameters:
+        - in: path
+          name: request_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: run_limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+          description: request id에 연결된 run을 최대 몇 개까지 transcript로 묶을지 정해요.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 1000
+          description: 각 run transcript에 포함할 run event replay 개수예요.
+        - in: query
+          name: event_limit
+          schema:
+            type: integer
+            default: 500
+            maximum: 5000
+          description: 각 run turn에 연결된 session event 개수예요.
+        - in: query
+          name: redact
+          schema:
+            type: boolean
+            default: true
+          description: false면 secret redaction 없이 request transcript를 반환해요.
+      responses:
+        '200':
+          description: request id와 연결된 run transcript 묶음이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestCorrelationTranscriptResponse'
+        '501':
+          $ref: '#/components/responses/Error'
   /api/v1/runs/{run_id}:
     get:
       summary: background run 상태를 조회해요.
@@ -2907,6 +2952,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RunEvent'
+    RequestCorrelationTranscriptResponse:
+      type: object
+      required: [request_id, transcripts, markdown, redacted]
+      properties:
+        request_id:
+          type: string
+        transcripts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunTranscriptResponse'
+        markdown:
+          type: string
+        redacted:
+          type: boolean
     RunEventListResponse:
       type: object
       required: [events]

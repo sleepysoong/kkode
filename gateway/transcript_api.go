@@ -28,6 +28,14 @@ type RunTranscriptResponse struct {
 	Redacted  bool          `json:"redacted"`
 }
 
+// RequestCorrelationTranscriptResponse는 외부 request id 하나에서 파생된 run transcript 묶음이에요.
+type RequestCorrelationTranscriptResponse struct {
+	RequestID   string                  `json:"request_id"`
+	Transcripts []RunTranscriptResponse `json:"transcripts"`
+	Markdown    string                  `json:"markdown"`
+	Redacted    bool                    `json:"redacted"`
+}
+
 func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if r.Method != http.MethodGet {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 transcript method예요")
@@ -40,6 +48,53 @@ func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, se
 	}
 	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
 	resp := toTranscriptResponse(sess, redacted)
+	writeJSON(w, resp)
+}
+
+func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, requestID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 request transcript method예요")
+		return
+	}
+	if s.cfg.RunLister == nil {
+		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
+		return
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
+		return
+	}
+	runLimit := queryLimit(r, "run_limit", 50, 200)
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: runLimit})
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
+		return
+	}
+	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
+	sessionCache := make(map[string]*session.Session)
+	transcripts := make([]RunTranscriptResponse, 0, len(runs))
+	for _, run := range runs {
+		sess, ok := sessionCache[run.SessionID]
+		if !ok {
+			sess, err = s.cfg.Store.LoadSession(r.Context(), run.SessionID)
+			if err != nil {
+				writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+				return
+			}
+			sessionCache[run.SessionID] = sess
+		}
+		transcripts = append(transcripts, s.toRunTranscriptResponse(r, run, sess, redacted))
+	}
+	resp := RequestCorrelationTranscriptResponse{
+		RequestID:   requestID,
+		Transcripts: transcripts,
+		Markdown:    requestCorrelationTranscriptMarkdown(requestID, transcripts),
+		Redacted:    redacted,
+	}
+	if redacted {
+		resp.Markdown = llm.RedactSecrets(resp.Markdown)
+	}
 	writeJSON(w, resp)
 }
 
@@ -235,6 +290,21 @@ func runTranscriptMarkdown(run RunDTO, sess *session.Session, turn *TurnDTO, eve
 			if ev.Error != "" {
 				fmt.Fprintf(&b, " error=%s", ev.Error)
 			}
+			fmt.Fprintln(&b)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func requestCorrelationTranscriptMarkdown(requestID string, transcripts []RunTranscriptResponse) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# kkode request transcript\n\n")
+	fmt.Fprintf(&b, "- request: `%s`\n", requestID)
+	fmt.Fprintf(&b, "- runs: `%d`\n\n", len(transcripts))
+	for i, transcript := range transcripts {
+		fmt.Fprintf(&b, "## Run %d `%s`\n\n", i+1, transcript.Run.ID)
+		if strings.TrimSpace(transcript.Markdown) != "" {
+			fmt.Fprintln(&b, strings.TrimSpace(transcript.Markdown))
 			fmt.Fprintln(&b)
 		}
 	}
