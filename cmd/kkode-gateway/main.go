@@ -349,11 +349,12 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 			return nil, err
 		}
 		providerReq, _ := ag.Prepare(req.Prompt)
-		providerPreview, err := app.PreviewProviderRequest(ctx, providerName, providerReq, req.PreviewStream, 64<<10)
+		maxPreviewBytes := runPreviewBytes(req.MaxPreviewBytes)
+		providerPreview, err := app.PreviewProviderRequest(ctx, providerName, providerReq, req.PreviewStream, maxPreviewBytes)
 		if err != nil {
 			return nil, err
 		}
-		contextBlocks, contextTruncated := previewContextBlocks(providerOptions.ContextBlocks, 64<<10)
+		contextBlocks, contextTruncated := previewContextBlocks(providerOptions.ContextBlocks, maxPreviewBytes)
 		return &gateway.RunPreviewResponse{
 			SessionID:         req.SessionID,
 			ProjectRoot:       sess.ProjectRoot,
@@ -613,6 +614,13 @@ func cloneStringSlice(in []string) []string {
 	out := make([]string, len(in))
 	copy(out, in)
 	return out
+}
+
+func runPreviewBytes(maxBytes int) int {
+	if maxBytes <= 0 {
+		return 64 << 10
+	}
+	return maxBytes
 }
 
 func previewContextBlocks(blocks []string, maxBytes int) ([]string, bool) {

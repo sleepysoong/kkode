@@ -2904,6 +2904,10 @@ components:
           type: boolean
           default: false
           description: /runs/preview에서 provider streaming 요청 payload를 미리 볼지 정해요. 실제 background run 실행 방식은 바꾸지 않아요.
+        max_preview_bytes:
+          type: integer
+          default: 65536
+          description: /runs/preview에서 provider body/raw/context preview에 적용할 최대 byte 수예요. 실제 run 실행 payload는 바꾸지 않아요.
     RunValidateResponse:
       type: object
       required: [ok]

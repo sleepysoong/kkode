@@ -350,6 +350,9 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 }
 
 func TestPreviewContextBlocksRedactsAndTruncatesUTF8(t *testing.T) {
+	if runPreviewBytes(0) != 64<<10 || runPreviewBytes(123) != 123 {
+		t.Fatal("run preview byte 예산 기본값/override가 이상해요")
+	}
 	blocks, truncated := previewContextBlocks([]string{
 		"token=ghp_123456789012345678901234567890123456\n가나다라마",
 		"두 번째 블록이에요",

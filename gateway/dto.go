@@ -149,8 +149,10 @@ type RunStartRequest struct {
 	Skills     []string          `json:"skills,omitempty"`
 	Subagents  []string          `json:"subagents,omitempty"`
 	// PreviewStream은 /runs/preview에서 provider streaming payload를 확인할 때만 쓰는 힌트예요.
-	PreviewStream bool   `json:"preview_stream,omitempty"`
-	RunID         string `json:"-"`
+	PreviewStream bool `json:"preview_stream,omitempty"`
+	// MaxPreviewBytes는 /runs/preview에서 body/raw/context preview 최대 byte 수를 조절해요.
+	MaxPreviewBytes int    `json:"max_preview_bytes,omitempty"`
+	RunID           string `json:"-"`
 }
 
 // RunDTO는 gateway에서 관리하는 실행 단위예요. gateway RunStarter가 실행을 접수하거나 완료했을 때 생성해요.
