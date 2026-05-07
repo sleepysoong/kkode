@@ -26,6 +26,26 @@ func TestFeatureCatalogEndpointsExistInOpenAPI(t *testing.T) {
 	}
 }
 
+func TestAPIIndexLinksExistInOpenAPI(t *testing.T) {
+	paths := readOpenAPIPaths(t)
+	postLinks := map[string]bool{
+		"provider_test":  true,
+		"run_preview":    true,
+		"run_validate":   true,
+		"session_import": true,
+	}
+	for name, path := range APIIndexLinks() {
+		method := "get"
+		if postLinks[name] {
+			method = "post"
+		}
+		methods := paths[path]
+		if !methods[method] {
+			t.Fatalf("API index link가 OpenAPI paths에 없어요: link=%s method=%s path=%s", name, method, path)
+		}
+	}
+}
+
 func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
 	ops := readOpenAPIOperationErrorResponses(t)
 	for op, hasError := range ops {
