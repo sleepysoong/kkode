@@ -1177,14 +1177,15 @@ func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {
 	if diagnostics.OK {
 		t.Fatalf("runtime wiring이 빠진 diagnostics는 unhealthy여야 해요: %+v", diagnostics)
 	}
+	if len(diagnostics.MissingRuntimeWiring) != 3 {
+		t.Fatalf("diagnostics는 missing runtime wiring 목록을 직접 제공해야 해요: %+v", diagnostics)
+	}
 	missing := map[string]bool{}
-	for _, check := range diagnostics.Checks {
-		if check.Status == "missing" {
-			missing[check.Name] = true
-		}
+	for _, name := range diagnostics.MissingRuntimeWiring {
+		missing[name] = true
 	}
 	if !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] {
-		t.Fatalf("빠진 runtime wiring check가 필요해요: %+v", diagnostics.Checks)
+		t.Fatalf("빠진 runtime wiring 목록이 필요해요: %+v", diagnostics.MissingRuntimeWiring)
 	}
 }
 

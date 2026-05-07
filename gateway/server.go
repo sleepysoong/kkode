@@ -624,13 +624,14 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "store", Status: "unknown", Message: "store ping을 지원하지 않아요"})
 	}
-	wiringChecks, wiringOK := s.runtimeWiringChecks()
+	missingRuntimeWiring := s.missingRuntimeWiring()
+	wiringChecks, wiringOK := runtimeWiringChecks(missingRuntimeWiring)
 	if !wiringOK {
 		ok = false
 	}
 	checks = append(checks, wiringChecks...)
 	checks = append(checks, s.cfg.DiagnosticChecks...)
-	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout)}
+	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout), MissingRuntimeWiring: missingRuntimeWiring}
 	if s.cfg.RunRuntimeStats != nil {
 		stats := runRuntimeStatsDTO(s.cfg.RunRuntimeStats())
 		resp.RunRuntime = &stats
@@ -655,9 +656,9 @@ func (s *Server) missingRuntimeWiring() []string {
 	return missing
 }
 
-func (s *Server) runtimeWiringChecks() ([]DiagnosticCheckDTO, bool) {
+func runtimeWiringChecks(missingRuntimeWiring []string) ([]DiagnosticCheckDTO, bool) {
 	missing := map[string]struct{}{}
-	for _, name := range s.missingRuntimeWiring() {
+	for _, name := range missingRuntimeWiring {
 		missing[name] = struct{}{}
 	}
 	names := []string{"run_starter", "run_previewer", "run_validator", "provider_tester"}

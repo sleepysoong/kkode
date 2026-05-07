@@ -1899,6 +1899,11 @@ components:
           type: integer
         run_timeout_seconds:
           type: integer
+        missing_runtime_wiring:
+          type: array
+          description: 필수 runtime boundary 중 연결되지 않은 항목 이름 목록이에요.
+          items:
+            type: string
         run_runtime:
           $ref: '#/components/schemas/RunRuntimeStats'
     DiagnosticCheck:

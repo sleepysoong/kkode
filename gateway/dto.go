@@ -344,18 +344,19 @@ type CapabilityResponse struct {
 
 // DiagnosticsResponse는 배포/adapter 연결 상태를 한 번에 점검하는 운영 응답이에요.
 type DiagnosticsResponse struct {
-	OK                bool                 `json:"ok"`
-	Version           string               `json:"version"`
-	Commit            string               `json:"commit,omitempty"`
-	Time              time.Time            `json:"time"`
-	Checks            []DiagnosticCheckDTO `json:"checks"`
-	Providers         int                  `json:"providers"`
-	Features          int                  `json:"features"`
-	DefaultMCPServers int                  `json:"default_mcp_servers"`
-	MaxRequestBytes   int64                `json:"max_request_bytes"`
-	MaxConcurrentRuns int                  `json:"max_concurrent_runs,omitempty"`
-	RunTimeoutSeconds int                  `json:"run_timeout_seconds,omitempty"`
-	RunRuntime        *RunRuntimeStatsDTO  `json:"run_runtime,omitempty"`
+	OK                   bool                 `json:"ok"`
+	Version              string               `json:"version"`
+	Commit               string               `json:"commit,omitempty"`
+	Time                 time.Time            `json:"time"`
+	Checks               []DiagnosticCheckDTO `json:"checks"`
+	Providers            int                  `json:"providers"`
+	Features             int                  `json:"features"`
+	DefaultMCPServers    int                  `json:"default_mcp_servers"`
+	MaxRequestBytes      int64                `json:"max_request_bytes"`
+	MaxConcurrentRuns    int                  `json:"max_concurrent_runs,omitempty"`
+	RunTimeoutSeconds    int                  `json:"run_timeout_seconds,omitempty"`
+	MissingRuntimeWiring []string             `json:"missing_runtime_wiring,omitempty"`
+	RunRuntime           *RunRuntimeStatsDTO  `json:"run_runtime,omitempty"`
 }
 
 type DiagnosticCheckDTO struct {
