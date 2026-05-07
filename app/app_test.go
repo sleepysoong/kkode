@@ -106,6 +106,94 @@ func TestProviderSpecsExposeConversionProfiles(t *testing.T) {
 	}
 }
 
+func TestRegisterProviderAddsExternalConversionProfile(t *testing.T) {
+	unregister, err := RegisterProvider(ProviderRegistration{
+		Spec: ProviderSpec{
+			Name:         "registered-api",
+			Aliases:      []string{"registered-compatible"},
+			DefaultModel: "registered-model",
+			Models:       []string{"registered-model"},
+			Capabilities: llm.Capabilities{Tools: true, StructuredOutput: true}.ToMap(),
+			Conversion: ProviderConversionSpec{
+				RequestConverter:  "registered.RequestConverter",
+				ResponseConverter: "registered.ResponseConverter",
+				Call:              "registered.Caller.CallProvider",
+				Source:            "external-test-source",
+				Operations:        []string{"registered.create"},
+			},
+		},
+		Conversion: func(spec ProviderSpec) ProviderConversionSet {
+			operation := firstOperation(spec)
+			converter := openai.ResponsesConverter{ProviderName: spec.Name}
+			return ProviderConversionSet{
+				RequestConverter:  converter,
+				ResponseConverter: converter,
+				Options:           llm.ConvertOptions{Operation: operation},
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	spec, ok := ResolveProviderSpec("registered-compatible")
+	if !ok || spec.Name != "registered-api" || spec.Conversion.Source != "external-test-source" {
+		t.Fatalf("등록 provider discovery가 이상해요: spec=%+v ok=%v", spec, ok)
+	}
+	provider, err := BuildProviderAdapter("registered-compatible", ProviderAdapterOptions{Caller: &sourceOnlyCaller{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := provider.Generate(context.Background(), llm.Request{Model: "registered-model", Messages: []llm.Message{llm.UserText("확장")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !provider.Capabilities().StructuredOutput || resp.Provider != "registered-api" || resp.Text != "source-only 응답이에요" {
+		t.Fatalf("등록 provider가 변환 레이어와 adapter를 재사용해야 해요: caps=%+v resp=%+v", provider.Capabilities(), resp)
+	}
+
+	unregister()
+	if _, ok := ResolveProviderSpec("registered-compatible"); ok {
+		t.Fatal("unregister 뒤에는 provider discovery에서 사라져야 해요")
+	}
+}
+
+func TestRegisterProviderRejectsDuplicateAliases(t *testing.T) {
+	unregister, err := RegisterProvider(ProviderRegistration{
+		Spec: ProviderSpec{
+			Name: "duplicate-test",
+			Conversion: ProviderConversionSpec{
+				Operations: []string{"duplicate.create"},
+			},
+		},
+		Conversion: func(spec ProviderSpec) ProviderConversionSet {
+			converter := openai.ResponsesConverter{ProviderName: spec.Name}
+			return ProviderConversionSet{RequestConverter: converter, ResponseConverter: converter, Options: llm.ConvertOptions{Operation: firstOperation(spec)}}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	if _, err := RegisterProvider(ProviderRegistration{
+		Spec: ProviderSpec{
+			Name:    "duplicate-test-2",
+			Aliases: []string{"duplicate-test"},
+			Conversion: ProviderConversionSpec{
+				Operations: []string{"duplicate.create"},
+			},
+		},
+		Conversion: func(spec ProviderSpec) ProviderConversionSet {
+			converter := openai.ResponsesConverter{ProviderName: spec.Name}
+			return ProviderConversionSet{RequestConverter: converter, ResponseConverter: converter, Options: llm.ConvertOptions{Operation: firstOperation(spec)}}
+		},
+	}); err == nil {
+		t.Fatal("이미 등록된 provider name을 alias로 재사용하면 안 돼요")
+	}
+}
+
 func TestDefaultMCPServersExposeSerenaAndContext7(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("KKODE_SERENA_COMMAND", "uvx")

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/codexcli"
@@ -66,6 +67,18 @@ type ProviderConversionSet struct {
 	StreamOptions     llm.ConvertOptions
 }
 
+// ProviderConversionFactory는 provider spec을 실행형 변환 profile로 바꿔요.
+// 외부 패키지는 RegisterProvider로 이 factory를 등록해서 core 코드를 수정하지 않고 새 API source를 붙일 수 있어요.
+type ProviderConversionFactory func(spec ProviderSpec) ProviderConversionSet
+
+// ProviderRegistration은 provider registry에 넣을 단위예요.
+// Spec은 discovery와 기본값을 설명하고, Conversion은 변환 레이어를 만들며, Factory는 환경 기반 실제 provider를 만들어요.
+type ProviderRegistration struct {
+	Spec       ProviderSpec
+	Conversion ProviderConversionFactory
+	Factory    ProviderFactory
+}
+
 // Pipeline은 변환 profile에 API/SDK/CLI source caller를 꽂아서 표준 파이프라인을 만들어요.
 func (c ProviderConversionSet) Pipeline(providerName string, caller llm.ProviderCaller, streamer llm.ProviderStreamCaller) llm.ProviderPipeline {
 	streamOpts := c.StreamOptions
@@ -107,14 +120,6 @@ type HTTPJSONProviderOptions struct {
 	AdditionalHeaders map[string]string
 }
 
-type providerConversionFactory func(spec ProviderSpec) ProviderConversionSet
-
-type providerRegistryEntry struct {
-	Spec       ProviderSpec
-	Conversion providerConversionFactory
-	Factory    ProviderFactory
-}
-
 // BuildProvider는 환경변수 기반 provider 생성을 한 곳에서 처리해요.
 func BuildProvider(name, root string) (ProviderHandle, error) {
 	return BuildProviderWithOptions(name, root, ProviderOptions{})
@@ -123,8 +128,11 @@ func BuildProvider(name, root string) (ProviderHandle, error) {
 // BuildProviderWithOptions는 gateway resource manifest를 provider별 설정으로 반영해요.
 func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error) {
 	entry, ok := resolveProviderEntry(name)
-	if !ok || entry.Factory == nil {
+	if !ok {
 		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
+	}
+	if entry.Factory == nil {
+		return ProviderHandle{}, fmt.Errorf("provider factory가 등록되지 않았어요: %s", entry.Spec.Name)
 	}
 	opts = MergeProviderOptions(DefaultProviderOptions(root), opts)
 	return entry.Factory(root, opts)
@@ -230,100 +238,137 @@ func DefaultModel(provider string) string {
 	return "gpt-5-mini"
 }
 
-var providerRegistry = []providerRegistryEntry{
-	{
-		Spec: ProviderSpec{
-			Name:         "openai",
-			Aliases:      []string{"openai-compatible"},
-			DefaultModel: "gpt-5-mini",
-			Models:       []string{"gpt-5-mini"},
-			AuthEnv:      []string{"OPENAI_API_KEY"},
-			Capabilities: openai.DefaultCapabilities().ToMap(),
-			Conversion: ProviderConversionSpec{
-				RequestConverter:  "openai.ResponsesConverter",
-				ResponseConverter: "openai.ResponsesConverter",
-				Call:              "openai.Client.CallProvider",
-				Stream:            "openai.Client.StreamProvider",
-				Source:            "http-json+sse",
-				Operations:        []string{"responses.create"},
-				Routes:            []ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
+var (
+	providerRegistryMu sync.RWMutex
+	providerRegistry   = []ProviderRegistration{
+		{
+			Spec: ProviderSpec{
+				Name:         "openai",
+				Aliases:      []string{"openai-compatible"},
+				DefaultModel: "gpt-5-mini",
+				Models:       []string{"gpt-5-mini"},
+				AuthEnv:      []string{"OPENAI_API_KEY"},
+				Capabilities: openai.DefaultCapabilities().ToMap(),
+				Conversion: ProviderConversionSpec{
+					RequestConverter:  "openai.ResponsesConverter",
+					ResponseConverter: "openai.ResponsesConverter",
+					Call:              "openai.Client.CallProvider",
+					Stream:            "openai.Client.StreamProvider",
+					Source:            "http-json+sse",
+					Operations:        []string{"responses.create"},
+					Routes:            []ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
+				},
+			},
+			Conversion: openAICompatibleConversion("openai"),
+			Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+				return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
 			},
 		},
-		Conversion: openAICompatibleConversion("openai"),
-		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
-			return ProviderHandle{Provider: openai.New(openai.Config{BaseURL: os.Getenv("OPENAI_BASE_URL"), APIKey: os.Getenv("OPENAI_API_KEY")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
-		},
-	},
-	{
-		Spec: ProviderSpec{
-			Name:         "omniroute",
-			DefaultModel: "gpt-5-mini",
-			Models:       []string{"gpt-5-mini", "auto"},
-			AuthEnv:      []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"},
-			Capabilities: omniroute.DefaultCapabilities().ToMap(),
-			Conversion: ProviderConversionSpec{
-				RequestConverter:  "openai.ResponsesConverter",
-				ResponseConverter: "openai.ResponsesConverter",
-				Call:              "openai.Client.CallProvider via omniroute headers",
-				Stream:            "openai.Client.StreamProvider via omniroute headers",
-				Source:            "http-gateway",
-				Operations:        []string{"responses.create", "omniroute.management", "omniroute.a2a"},
-				Routes:            []ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
+		{
+			Spec: ProviderSpec{
+				Name:         "omniroute",
+				DefaultModel: "gpt-5-mini",
+				Models:       []string{"gpt-5-mini", "auto"},
+				AuthEnv:      []string{"OMNIROUTE_API_KEY", "OPENAI_API_KEY"},
+				Capabilities: omniroute.DefaultCapabilities().ToMap(),
+				Conversion: ProviderConversionSpec{
+					RequestConverter:  "openai.ResponsesConverter",
+					ResponseConverter: "openai.ResponsesConverter",
+					Call:              "openai.Client.CallProvider via omniroute headers",
+					Stream:            "openai.Client.StreamProvider via omniroute headers",
+					Source:            "http-gateway",
+					Operations:        []string{"responses.create", "omniroute.management", "omniroute.a2a"},
+					Routes:            []ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
+				},
+			},
+			Conversion: openAICompatibleConversion("omniroute"),
+			Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+				return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
 			},
 		},
-		Conversion: openAICompatibleConversion("omniroute"),
-		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
-			return ProviderHandle{Provider: omniroute.New(omniroute.Config{BaseURL: os.Getenv("OMNIROUTE_BASE_URL"), APIKey: EnvDefault("OMNIROUTE_API_KEY", os.Getenv("OPENAI_API_KEY")), SessionID: os.Getenv("OMNIROUTE_SESSION_ID"), Progress: EnvBool("OMNIROUTE_PROGRESS")}), BaseRequest: llm.Request{Tools: openAICompatibleMCPTools(opts)}}, nil
-		},
-	},
-	{
-		Spec: ProviderSpec{
-			Name:         "copilot",
-			Aliases:      []string{"github-copilot"},
-			DefaultModel: "gpt-5-mini",
-			Models:       []string{"gpt-5-mini"},
-			AuthEnv:      []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"},
-			Capabilities: copilot.DefaultCapabilities().ToMap(),
-			Conversion: ProviderConversionSpec{
-				RequestConverter:  "copilot.SessionConverter",
-				ResponseConverter: "copilot.SessionConverter",
-				Call:              "copilot.Client.CallProvider",
-				Stream:            "copilot.Session.Stream",
-				Source:            "github-copilot-sdk",
-				Operations:        []string{"copilot.session.send"},
+		{
+			Spec: ProviderSpec{
+				Name:         "copilot",
+				Aliases:      []string{"github-copilot"},
+				DefaultModel: "gpt-5-mini",
+				Models:       []string{"gpt-5-mini"},
+				AuthEnv:      []string{"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"},
+				Capabilities: copilot.DefaultCapabilities().ToMap(),
+				Conversion: ProviderConversionSpec{
+					RequestConverter:  "copilot.SessionConverter",
+					ResponseConverter: "copilot.SessionConverter",
+					Call:              "copilot.Client.CallProvider",
+					Stream:            "copilot.Session.Stream",
+					Source:            "github-copilot-sdk",
+					Operations:        []string{"copilot.session.send"},
+				},
+			},
+			Conversion: copilotConversion,
+			Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+				client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
+				return ProviderHandle{Provider: client, Close: client.Close}, nil
 			},
 		},
-		Conversion: copilotConversion,
-		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
-			client := copilot.New(copilot.Config{WorkingDirectory: root, GitHubToken: EnvDefault("COPILOT_GITHUB_TOKEN", EnvDefault("GH_TOKEN", os.Getenv("GITHUB_TOKEN"))), MCPServers: copilot.MCPServerConfigs(opts.MCPServers), SkillDirectories: opts.SkillDirectories, CustomAgents: copilot.AgentConfigs(opts.CustomAgents)})
-			return ProviderHandle{Provider: client, Close: client.Close}, nil
-		},
-	},
-	{
-		Spec: ProviderSpec{
-			Name:         "codex",
-			Aliases:      []string{"codexcli", "codex-cli"},
-			DefaultModel: "gpt-5.3-codex",
-			Models:       []string{"gpt-5.3-codex"},
-			Local:        true,
-			Capabilities: codexcli.DefaultCapabilities().ToMap(),
-			Conversion: ProviderConversionSpec{
-				RequestConverter:  "codexcli.ExecConverter",
-				ResponseConverter: "codexcli.ExecConverter",
-				Call:              "codexcli.Client.CallProvider",
-				Stream:            "codexcli.Client.Stream",
-				Source:            "codex-cli-jsonl",
-				Operations:        []string{"codex.exec"},
+		{
+			Spec: ProviderSpec{
+				Name:         "codex",
+				Aliases:      []string{"codexcli", "codex-cli"},
+				DefaultModel: "gpt-5.3-codex",
+				Models:       []string{"gpt-5.3-codex"},
+				Local:        true,
+				Capabilities: codexcli.DefaultCapabilities().ToMap(),
+				Conversion: ProviderConversionSpec{
+					RequestConverter:  "codexcli.ExecConverter",
+					ResponseConverter: "codexcli.ExecConverter",
+					Call:              "codexcli.Client.CallProvider",
+					Stream:            "codexcli.Client.Stream",
+					Source:            "codex-cli-jsonl",
+					Operations:        []string{"codex.exec"},
+				},
+			},
+			Conversion: codexCLIConversion,
+			Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
+				return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
 			},
 		},
-		Conversion: codexCLIConversion,
-		Factory: func(root string, opts ProviderOptions) (ProviderHandle, error) {
-			return ProviderHandle{Provider: codexcli.New(codexcli.Config{WorkingDirectory: root, Sandbox: os.Getenv("CODEX_SANDBOX"), Ephemeral: EnvBool("CODEX_EPHEMERAL")})}, nil
-		},
-	},
+	}
+)
+
+// RegisterProvider는 런타임에 provider profile을 추가해요.
+// 반환된 unregister 함수를 호출하면 테스트나 플러그인 종료 시 등록을 되돌릴 수 있어요.
+func RegisterProvider(reg ProviderRegistration) (func(), error) {
+	reg = cloneProviderRegistration(reg)
+	if err := validateProviderRegistration(reg); err != nil {
+		return nil, err
+	}
+	providerRegistryMu.Lock()
+	defer providerRegistryMu.Unlock()
+	if existing, ok := findProviderRegistrationLocked(reg.Spec.Name); ok {
+		return nil, fmt.Errorf("provider가 이미 등록되어 있어요: %s", existing.Spec.Name)
+	}
+	for _, alias := range reg.Spec.Aliases {
+		if existing, ok := findProviderRegistrationLocked(alias); ok {
+			return nil, fmt.Errorf("provider alias가 이미 등록되어 있어요: %s -> %s", alias, existing.Spec.Name)
+		}
+	}
+	providerRegistry = append(providerRegistry, reg)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			providerRegistryMu.Lock()
+			defer providerRegistryMu.Unlock()
+			name := strings.ToLower(strings.TrimSpace(reg.Spec.Name))
+			for i, entry := range providerRegistry {
+				if strings.ToLower(strings.TrimSpace(entry.Spec.Name)) == name {
+					providerRegistry = append(providerRegistry[:i], providerRegistry[i+1:]...)
+					return
+				}
+			}
+		})
+	}, nil
 }
 
-func openAICompatibleConversion(providerName string) providerConversionFactory {
+func openAICompatibleConversion(providerName string) ProviderConversionFactory {
 	return func(spec ProviderSpec) ProviderConversionSet {
 		operation := firstOperation(spec)
 		return ProviderConversionSet{
@@ -384,6 +429,8 @@ func capabilitiesFromMap(values map[string]any) llm.Capabilities {
 }
 
 func ProviderSpecs() []ProviderSpec {
+	providerRegistryMu.RLock()
+	defer providerRegistryMu.RUnlock()
 	specs := make([]ProviderSpec, 0, len(providerRegistry))
 	for _, entry := range providerRegistry {
 		specs = append(specs, cloneProviderSpec(entry.Spec))
@@ -399,19 +446,25 @@ func ResolveProviderSpec(name string) (ProviderSpec, bool) {
 	return cloneProviderSpec(entry.Spec), true
 }
 
-func resolveProviderEntry(name string) (providerRegistryEntry, bool) {
+func resolveProviderEntry(name string) (ProviderRegistration, bool) {
+	providerRegistryMu.RLock()
+	defer providerRegistryMu.RUnlock()
+	return findProviderRegistrationLocked(name)
+}
+
+func findProviderRegistrationLocked(name string) (ProviderRegistration, bool) {
 	needle := strings.ToLower(strings.TrimSpace(name))
 	for _, entry := range providerRegistry {
-		if needle == entry.Spec.Name {
-			return entry, true
+		if needle == strings.ToLower(strings.TrimSpace(entry.Spec.Name)) {
+			return cloneProviderRegistration(entry), true
 		}
 		for _, alias := range entry.Spec.Aliases {
-			if needle == alias {
-				return entry, true
+			if needle == strings.ToLower(strings.TrimSpace(alias)) {
+				return cloneProviderRegistration(entry), true
 			}
 		}
 	}
-	return providerRegistryEntry{}, false
+	return ProviderRegistration{}, false
 }
 
 func resolveProviderConversion(name string) (ProviderSpec, ProviderConversionSet, error) {
@@ -444,6 +497,43 @@ func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
 		spec.Capabilities = capabilities
 	}
 	return spec
+}
+
+func cloneProviderRegistration(reg ProviderRegistration) ProviderRegistration {
+	reg.Spec = cloneProviderSpec(reg.Spec)
+	return reg
+}
+
+func validateProviderRegistration(reg ProviderRegistration) error {
+	name := strings.TrimSpace(reg.Spec.Name)
+	if name == "" {
+		return fmt.Errorf("provider name이 필요해요")
+	}
+	if strings.Contains(name, "/") || strings.Contains(name, " ") {
+		return fmt.Errorf("provider name은 공백이나 slash 없이 써야 해요: %s", name)
+	}
+	if reg.Conversion == nil {
+		return fmt.Errorf("provider conversion factory가 필요해요: %s", name)
+	}
+	if len(reg.Spec.Conversion.Operations) == 0 {
+		return fmt.Errorf("provider conversion operation이 필요해요: %s", name)
+	}
+	seen := map[string]struct{}{strings.ToLower(name): {}}
+	for _, alias := range reg.Spec.Aliases {
+		alias = strings.TrimSpace(alias)
+		if alias == "" {
+			return fmt.Errorf("provider alias는 비워둘 수 없어요: %s", name)
+		}
+		if strings.Contains(alias, "/") || strings.Contains(alias, " ") {
+			return fmt.Errorf("provider alias는 공백이나 slash 없이 써야 해요: %s", alias)
+		}
+		key := strings.ToLower(alias)
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("provider alias가 중복되었어요: %s", alias)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 func firstOperation(spec ProviderSpec) string {

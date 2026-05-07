@@ -203,7 +203,7 @@ erDiagram
 
 - `Provider`, `StreamProvider`, `SessionProvider`를 제공해요.
 - `Request`, `Response`, `Message`, `Item`으로 provider 공통 입출력을 표현해요.
-- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `ProviderPipeline`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. `ProviderPipeline.Prepare/Call/Decode`를 따로 쓸 수 있어서 preview API, debug UI, 실제 실행이 같은 변환 규칙을 공유해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요.
+- `RequestConverter`, `ResponseConverter`, `ProviderCaller`, `ProviderStreamCaller`, `ProviderPipeline`, `AdaptedProvider`로 `요청 DTO → provider별 변환 → API/source 호출 → 표준 응답/stream` 흐름을 재사용해요. `ProviderPipeline.Prepare/Call/Decode`를 따로 쓸 수 있어서 preview API, debug UI, 실제 실행이 같은 변환 규칙을 공유해요. 새 provider는 표준 `llm.Request`를 직접 오염시키지 말고 converter와 caller를 추가하는 방향으로 붙이면 돼요. 양방향 `Converter` 하나를 써도 되고 request/response converter를 분리해 OpenAI-compatible 요청 builder, 다른 API caller, 별도 response parser를 조합해도 돼요. Streaming source는 request converter와 stream caller만으로 붙일 수 있어요. 외부 패키지는 `app.RegisterProvider`로 spec/conversion/factory를 등록해서 core registry를 직접 수정하지 않고 새 API source를 추가할 수 있어요.
 - `Tool`, `ToolCall`, `ToolResult`, `ToolRegistry`, `ToolMiddleware`, `RunToolLoop`로 tool 실행 루프를 처리해요. 여러 tool call은 옵션이 켜져 있으면 상한 안에서 비동기로 실행하고 결과 순서는 보존해요.
 - `ReasoningConfig`, `ReasoningItem`으로 thinking/reasoning 정보를 보존해요.
 - `TextFormat`으로 structured output 설정을 표현해요.
@@ -492,6 +492,42 @@ if err != nil {
 }
 
 resp, err := provider.Generate(ctx, req)
+```
+
+완전히 별도 provider 이름으로 discovery와 routing에 노출해야 하면 `RegisterProvider`를 써요. 등록 단위는 `ProviderSpec`(이름/alias/model/capability/discovery), `ProviderConversionFactory`(표준 요청을 source 요청으로 바꾸는 변환 profile), 선택적 `ProviderFactory`(환경변수 기반 실제 provider 생성)예요.
+
+```go
+unregister, err := app.RegisterProvider(app.ProviderRegistration{
+    Spec: app.ProviderSpec{
+        Name:         "my-gateway",
+        Aliases:      []string{"my-openai-compatible"},
+        DefaultModel: "gpt-5-mini",
+        Models:       []string{"gpt-5-mini"},
+        AuthEnv:      []string{"MY_GATEWAY_API_KEY"},
+        Capabilities: llm.Capabilities{Tools: true, StructuredOutput: true}.ToMap(),
+        Conversion: app.ProviderConversionSpec{
+            RequestConverter:  "openai.ResponsesConverter",
+            ResponseConverter: "openai.ResponsesConverter",
+            Call:              "httpjson.Caller.CallProvider",
+            Source:            "external-http-json",
+            Operations:        []string{"responses.create"},
+            Routes:            []app.ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
+        },
+    },
+    Conversion: func(spec app.ProviderSpec) app.ProviderConversionSet {
+        converter := openai.ResponsesConverter{ProviderName: spec.Name}
+        return app.ProviderConversionSet{
+            RequestConverter:  converter,
+            ResponseConverter: converter,
+            Options:           llm.ConvertOptions{Operation: "responses.create"},
+            StreamOptions:     llm.ConvertOptions{Operation: "responses.create", Stream: true},
+        }
+    },
+})
+if err != nil {
+    return err
+}
+defer unregister() // 테스트나 플러그인 종료 시 되돌려요.
 ```
 
 ## OpenAI-compatible 예제
