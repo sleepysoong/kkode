@@ -70,6 +70,22 @@ func TestOpenAPIOperationsExposeUniqueOperationIDs(t *testing.T) {
 	}
 }
 
+func TestOpenAPIOperationsExposeSuccessResponse(t *testing.T) {
+	statuses := readOpenAPIOperationResponseStatuses(t)
+	for op, responses := range statuses {
+		hasSuccess := false
+		for _, status := range responses {
+			if strings.HasPrefix(status, "2") {
+				hasSuccess = true
+				break
+			}
+		}
+		if !hasSuccess {
+			t.Fatalf("OpenAPI operation %s에 2xx 성공 response가 필요해요: %+v", op, responses)
+		}
+	}
+}
+
 func TestOpenAPIPathParametersAreDeclared(t *testing.T) {
 	operations := readOpenAPIPathParameterDeclarations(t)
 	for op, contract := range operations {
@@ -329,6 +345,61 @@ func readOpenAPIOperationIDs(t *testing.T) map[string]string {
 	}
 	if len(out) == 0 {
 		t.Fatal("OpenAPI operation을 읽지 못했어요")
+	}
+	return out
+}
+
+func readOpenAPIOperationResponseStatuses(t *testing.T) map[string][]string {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathRe := regexp.MustCompile(`^  (/[^:]+):$`)
+	methodRe := regexp.MustCompile(`^    (get|post|put|delete|patch|options):$`)
+	statusRe := regexp.MustCompile(`^        '?([0-9]{3}|default)'?:`)
+	out := map[string][]string{}
+	currentPath := ""
+	currentOp := ""
+	inResponses := false
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "components:" {
+			break
+		}
+		if m := pathRe.FindStringSubmatch(line); m != nil {
+			currentPath = m[1]
+			currentOp = ""
+			inResponses = false
+			continue
+		}
+		if currentPath == "" {
+			continue
+		}
+		if m := methodRe.FindStringSubmatch(line); m != nil {
+			currentOp = m[1] + " " + currentPath
+			out[currentOp] = nil
+			inResponses = false
+			continue
+		}
+		if currentOp == "" {
+			continue
+		}
+		if strings.TrimSpace(line) == "responses:" {
+			inResponses = true
+			continue
+		}
+		if inResponses {
+			if m := statusRe.FindStringSubmatch(line); m != nil {
+				out[currentOp] = append(out[currentOp], m[1])
+				continue
+			}
+			if strings.HasPrefix(line, "      ") && !strings.HasPrefix(line, "        ") && strings.TrimSpace(line) != "" {
+				inResponses = false
+			}
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("OpenAPI operation response를 읽지 못했어요")
 	}
 	return out
 }
