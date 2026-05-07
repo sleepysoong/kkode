@@ -15,6 +15,8 @@ paths:
       summary: 프로세스 health를 확인해요.
       security: []
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 정상이에요.
   /readyz:
@@ -22,12 +24,16 @@ paths:
       summary: gateway 준비 상태를 확인해요.
       security: []
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 준비됐어요.
   /api/v1:
     get:
       summary: API discovery index를 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 주요 API link 목록이에요.
           content:
@@ -38,6 +44,8 @@ paths:
     get:
       summary: 현재 OpenAPI YAML 스펙을 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: OpenAPI YAML 문서예요.
           content:
@@ -48,6 +56,8 @@ paths:
     get:
       summary: gateway version과 provider 목록을 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: version 응답이에요.
           content:
@@ -58,6 +68,8 @@ paths:
     get:
       summary: gateway 기능과 provider capability를 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: gateway capability discovery 응답이에요.
           content:
@@ -68,6 +80,8 @@ paths:
     get:
       summary: gateway 운영 진단 정보를 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: diagnostics 응답이에요.
           content:
@@ -78,6 +92,8 @@ paths:
     get:
       summary: gateway가 알고 있는 provider 목록을 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: provider 목록이에요.
           content:
@@ -111,6 +127,8 @@ paths:
           schema:
             type: string
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: model 목록이에요.
           content:
@@ -368,6 +386,8 @@ paths:
     get:
       summary: 표준 file/shell/web tool 목록을 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: tool 목록이에요.
           content:
@@ -426,6 +446,8 @@ paths:
             default: 50
             maximum: 200
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: session 목록이에요.
           content:
@@ -441,6 +463,8 @@ paths:
             schema:
               $ref: '#/components/schemas/SessionCreateRequest'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: 생성된 session이에요.
           content:
@@ -548,6 +572,8 @@ paths:
                 at_turn_id:
                   type: string
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: fork된 session이에요.
           content:
@@ -640,6 +666,8 @@ paths:
             type: boolean
           description: true면 text/event-stream으로 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: event 목록 또는 SSE stream이에요.
           content:
@@ -661,6 +689,8 @@ paths:
             default: 50
             maximum: 200
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: checkpoint 목록이에요.
           content:
@@ -678,6 +708,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Checkpoint'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: 저장된 checkpoint예요.
           content:
@@ -710,6 +742,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SessionID'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: todo 목록이에요.
           content:
@@ -727,6 +761,8 @@ paths:
             schema:
               $ref: '#/components/schemas/TodoListResponse'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 갱신된 todo 목록이에요.
           content:
@@ -744,6 +780,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Todo'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: 갱신된 todo 목록이에요.
           content:
@@ -770,6 +808,8 @@ paths:
     get:
       summary: 내장 prompt template 목록을 반환해요.
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: prompt template 목록이에요.
           content:
@@ -825,6 +865,8 @@ paths:
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: MCP server manifest 목록이에요.
           content:
@@ -840,6 +882,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Resource'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: 저장된 MCP server manifest예요.
           content:
@@ -871,6 +915,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Resource'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 갱신된 MCP server manifest예요.
           content:
@@ -1017,6 +1063,8 @@ paths:
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: skill manifest 목록이에요.
           content:
@@ -1032,6 +1080,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Resource'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: 저장된 skill manifest예요.
           content:
@@ -1063,6 +1113,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Resource'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 갱신된 skill manifest예요.
           content:
@@ -1105,6 +1157,8 @@ paths:
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: subagent manifest 목록이에요.
           content:
@@ -1120,6 +1174,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Resource'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '201':
           description: 저장된 subagent manifest예요.
           content:
@@ -1151,6 +1207,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Resource'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: 갱신된 subagent manifest예요.
           content:
@@ -1444,6 +1502,8 @@ paths:
             schema:
               $ref: '#/components/schemas/RunStartRequest'
       responses:
+        default:
+          $ref: '#/components/responses/Error'
         '200':
           description: run preflight 결과예요.
           content:
