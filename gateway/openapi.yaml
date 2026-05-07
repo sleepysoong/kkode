@@ -334,6 +334,32 @@ paths:
                 $ref: '#/components/schemas/Session'
         '404':
           $ref: '#/components/responses/Error'
+  /api/v1/sessions/{session_id}/export:
+    get:
+      summary: session export JSON을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - in: query
+          name: checkpoint_limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 5000
+        - in: query
+          name: run_limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 5000
+      responses:
+        '200':
+          description: session export bundle이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionExportResponse'
+        '404':
+          $ref: '#/components/responses/Error'
   /api/v1/sessions/{session_id}/compact:
     post:
       summary: session turn을 extractive summary로 압축해요.
@@ -1805,6 +1831,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Session'
+    SessionExportResponse:
+      type: object
+      required: [format_version, exported_at, session, turns, events, todos]
+      properties:
+        format_version:
+          type: string
+        exported_at:
+          type: string
+          format: date-time
+        session:
+          $ref: '#/components/schemas/Session'
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/Turn'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        todos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Todo'
+        checkpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Checkpoint'
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Run'
     Session:
       type: object
       required: [id, project_root, provider_name, model, agent_name, mode, turn_count, updated_at]

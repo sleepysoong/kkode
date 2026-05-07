@@ -558,6 +558,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.getSessionTranscript(w, r, sessionID)
 		return
 	}
+	if len(parts) == 3 && parts[2] == "export" {
+		s.exportSession(w, r, sessionID)
+		return
+	}
 	if len(parts) >= 3 && parts[2] == "turns" {
 		s.handleSessionTurns(w, r, sessionID, parts[3:])
 		return

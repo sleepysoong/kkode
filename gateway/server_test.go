@@ -1858,6 +1858,59 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	}
 }
 
+func TestGatewayExportsSessionBundle(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("go", llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("go")}})
+	turn.Response = llm.TextResponse("openai", "gpt-5-mini", "ok")
+	sess.AppendTurn(turn)
+	sess.AppendEvent(session.Event{ID: "ev_export", SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed", At: time.Now().UTC()})
+	sess.Todos = []session.Todo{{ID: "todo_export", Content: "내보내기", Status: session.TodoCompleted, UpdatedAt: time.Now().UTC()}}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_export", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"복구해요"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveRun(ctx, session.Run{ID: "run_export", SessionID: sess.ID, Status: "completed", Prompt: "go", Model: "gpt-5-mini"}); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			runs, err := store.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Limit: q.Limit})
+			if err != nil {
+				return nil, err
+			}
+			out := make([]RunDTO, 0, len(runs))
+			for _, run := range runs {
+				out = append(out, *runDTOFromSession(run))
+			}
+			return out, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var exported SessionExportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
+		t.Fatal(err)
+	}
+	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 {
+		t.Fatalf("session export가 이상해요: %+v", exported)
+	}
+	if exported.Turns[0].ResponseText != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Runs[0].ID != "run_export" {
+		t.Fatalf("session export 상세가 이상해요: %+v", exported)
+	}
+}
+
 func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
