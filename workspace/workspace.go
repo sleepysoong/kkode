@@ -364,34 +364,66 @@ func (w *Workspace) ApplyPatch(patchText string) error {
 	if err != nil {
 		return err
 	}
+	plans := make([]patchPlan, 0, len(ops))
 	for _, op := range ops {
-		switch op.kind {
-		case "add":
-			if err := w.WriteFile(op.path, op.newText); err != nil {
+		plan, err := w.planPatchOp(op)
+		if err != nil {
+			return err
+		}
+		plans = append(plans, plan)
+	}
+	for _, plan := range plans {
+		if plan.delete {
+			if err := os.Remove(plan.absPath); err != nil {
 				return err
 			}
-		case "delete":
-			path, err := w.Resolve(op.path)
-			if err != nil {
-				return err
-			}
-			if err := os.Remove(path); err != nil {
-				return err
-			}
-		case "update":
-			content, err := w.ReadFile(op.path)
-			if err != nil {
-				return err
-			}
-			if !strings.Contains(content, op.oldText) {
-				return fmt.Errorf("patch context not found in %s", op.path)
-			}
-			if err := w.WriteFile(op.path, strings.Replace(content, op.oldText, op.newText, 1)); err != nil {
-				return err
-			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(plan.absPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(plan.absPath, []byte(plan.content), 0o644); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+type patchPlan struct {
+	absPath string
+	content string
+	delete  bool
+}
+
+func (w *Workspace) planPatchOp(op patchOp) (patchPlan, error) {
+	path, err := w.Resolve(op.path)
+	if err != nil {
+		return patchPlan{}, err
+	}
+	plan := patchPlan{absPath: path}
+	switch op.kind {
+	case "add":
+		plan.content = op.newText
+		return plan, nil
+	case "delete":
+		if _, err := os.Stat(path); err != nil {
+			return patchPlan{}, err
+		}
+		plan.delete = true
+		return plan, nil
+	case "update":
+		content, err := w.ReadFile(op.path)
+		if err != nil {
+			return patchPlan{}, err
+		}
+		if !strings.Contains(content, op.oldText) {
+			return patchPlan{}, fmt.Errorf("patch context not found in %s", op.path)
+		}
+		plan.content = strings.Replace(content, op.oldText, op.newText, 1)
+		return plan, nil
+	default:
+		return patchPlan{}, fmt.Errorf("unsupported patch operation: %s", op.kind)
+	}
 }
 
 func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {

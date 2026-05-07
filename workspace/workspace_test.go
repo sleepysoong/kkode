@@ -127,6 +127,41 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	}
 }
 
+func TestWorkspaceApplyPatchPrevalidatesBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("a.txt", "alpha\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("b.txt", "beta\n"); err != nil {
+		t.Fatal(err)
+	}
+	patch := `*** Begin Patch
+*** Update File: a.txt
+@@
+-alpha
++alpha patched
+*** Update File: b.txt
+@@
+-missing
++beta patched
+*** End Patch
+`
+	if err := w.ApplyPatch(patch); err == nil {
+		t.Fatal("뒤쪽 patch 검증이 실패하면 전체 patch 적용이 중단돼야 해요")
+	}
+	unchanged, err := w.ReadFile("a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged != "alpha\n" {
+		t.Fatalf("검증 실패 전 파일을 미리 쓰면 안 돼요: %q", unchanged)
+	}
+}
+
 func TestWorkspaceCanWriteDotGitAndRunCommands(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)
