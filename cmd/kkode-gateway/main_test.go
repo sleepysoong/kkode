@@ -58,6 +58,9 @@ func TestProviderDTOsExposeConversionProfile(t *testing.T) {
 		if provider.Name == "copilot" && len(provider.Aliases) == 0 {
 			t.Fatalf("마이그레이션 친화 provider alias가 필요해요: %+v", provider)
 		}
+		if provider.AuthStatus != "local" && len(provider.AuthEnv) == 0 {
+			t.Fatalf("%s provider 설정 UI가 쓸 auth env 힌트가 필요해요: %+v", provider.Name, provider)
+		}
 	}
 }
 

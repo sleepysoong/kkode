@@ -454,7 +454,7 @@ func providerDTOs() []gateway.ProviderDTO {
 		if len(models) == 0 && spec.DefaultModel != "" {
 			models = []string{spec.DefaultModel}
 		}
-		out = append(out, gateway.ProviderDTO{Name: spec.Name, Aliases: append([]string(nil), spec.Aliases...), Models: models, DefaultModel: spec.DefaultModel, Capabilities: spec.Capabilities, AuthStatus: app.ProviderAuthStatus(spec), Conversion: conversionDTO(spec.Conversion)})
+		out = append(out, gateway.ProviderDTO{Name: spec.Name, Aliases: append([]string(nil), spec.Aliases...), Models: models, DefaultModel: spec.DefaultModel, Capabilities: spec.Capabilities, AuthStatus: app.ProviderAuthStatus(spec), AuthEnv: append([]string(nil), spec.AuthEnv...), Conversion: conversionDTO(spec.Conversion)})
 	}
 	return out
 }

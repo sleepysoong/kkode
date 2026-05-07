@@ -1875,6 +1875,11 @@ components:
           additionalProperties: true
         auth_status:
           type: string
+        auth_env:
+          type: array
+          description: provider 인증에 사용할 수 있는 환경변수 이름 목록이에요. secret 값은 포함하지 않아요.
+          items:
+            type: string
         conversion:
           $ref: '#/components/schemas/Conversion'
     Conversion:

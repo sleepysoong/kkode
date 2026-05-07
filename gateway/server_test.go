@@ -1152,7 +1152,7 @@ func TestGatewaySessionTurnsAPI(t *testing.T) {
 func TestGatewayModelsDiscovery(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{Store: store, Providers: []ProviderDTO{
-		{Name: "openai", Aliases: []string{"openai-compatible"}, Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured", Conversion: &ConversionDTO{RequestConverter: "openai.ResponsesConverter", Call: "openai.Client.CallProvider", Source: "http-json+sse", Operations: []string{"responses.create"}}},
+		{Name: "openai", Aliases: []string{"openai-compatible"}, Models: []string{"gpt-5-mini", "gpt-5-large"}, DefaultModel: "gpt-5-mini", Capabilities: map[string]any{"tools": true}, AuthStatus: "configured", AuthEnv: []string{"OPENAI_API_KEY"}, Conversion: &ConversionDTO{RequestConverter: "openai.ResponsesConverter", Call: "openai.Client.CallProvider", Source: "http-json+sse", Operations: []string{"responses.create"}}},
 		{Name: "codex", Models: []string{"gpt-5.3-codex"}, DefaultModel: "gpt-5.3-codex", AuthStatus: "local"},
 	}})
 	if err != nil {
@@ -1225,7 +1225,7 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &provider); err != nil {
 		t.Fatal(err)
 	}
-	if provider.Name != "openai" || len(provider.Aliases) != 1 || provider.Conversion == nil || provider.Conversion.Source != "http-json+sse" {
+	if provider.Name != "openai" || len(provider.Aliases) != 1 || len(provider.AuthEnv) != 1 || provider.AuthEnv[0] != "OPENAI_API_KEY" || provider.Conversion == nil || provider.Conversion.Source != "http-json+sse" {
 		t.Fatalf("provider 상세 discovery가 이상해요: %+v", provider)
 	}
 

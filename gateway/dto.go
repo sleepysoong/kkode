@@ -233,6 +233,7 @@ type ProviderDTO struct {
 	DefaultModel string         `json:"default_model,omitempty"`
 	Capabilities map[string]any `json:"capabilities,omitempty"`
 	AuthStatus   string         `json:"auth_status,omitempty"`
+	AuthEnv      []string       `json:"auth_env,omitempty"`
 	Conversion   *ConversionDTO `json:"conversion,omitempty"`
 }
 
