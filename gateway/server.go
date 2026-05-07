@@ -25,6 +25,9 @@ type RunPreviewer func(ctx context.Context, req RunStartRequest) (*RunPreviewRes
 // RunValidator는 background queue에 넣기 전에 빠른 실행 전 검증을 수행해요.
 type RunValidator func(ctx context.Context, req RunStartRequest) error
 
+// ProviderTester는 provider 단독 preflight/preview/선택적 live smoke를 실행해요.
+type ProviderTester func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error)
+
 // RunRuntimeStatsGetter는 diagnostics가 process-local run queue 상태를 읽는 경계예요.
 type RunRuntimeStatsGetter func() RunRuntimeStats
 
@@ -49,6 +52,7 @@ type Config struct {
 	RunStarter           RunStarter
 	RunPreviewer         RunPreviewer
 	RunValidator         RunValidator
+	ProviderTester       ProviderTester
 	RunRuntimeStats      RunRuntimeStatsGetter
 	RunGetter            RunGetter
 	RunLister            RunLister
@@ -468,11 +472,19 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []s
 }
 
 func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts []string) {
-	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 providers 요청이에요")
+	if len(parts) == 3 && parts[2] == "test" {
+		if r.Method != http.MethodPost {
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "provider test는 POST만 지원해요")
+			return
+		}
+		s.testProvider(w, r, parts[1])
 		return
 	}
 	if len(parts) == 2 {
+		if r.Method != http.MethodGet {
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "provider 상세는 GET만 지원해요")
+			return
+		}
 		provider, ok := findProvider(s.cfg.Providers, parts[1])
 		if !ok {
 			writeError(w, r, http.StatusNotFound, "provider_not_found", "provider를 찾을 수 없어요")
@@ -481,11 +493,37 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 		writeJSON(w, provider)
 		return
 	}
-	if len(parts) != 1 {
+	if len(parts) != 1 || r.Method != http.MethodGet {
+		if len(parts) == 1 {
+			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "provider 목록은 GET만 지원해요")
+			return
+		}
 		writeError(w, r, http.StatusNotFound, "not_found", "provider endpoint를 찾을 수 없어요")
 		return
 	}
 	writeJSON(w, ProviderListResponse{Providers: s.cfg.Providers})
+}
+
+func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerName string) {
+	if _, ok := findProvider(s.cfg.Providers, providerName); !ok {
+		writeError(w, r, http.StatusNotFound, "provider_not_found", "provider를 찾을 수 없어요")
+		return
+	}
+	if s.cfg.ProviderTester == nil {
+		writeError(w, r, http.StatusNotImplemented, "provider_tester_missing", "이 gateway에는 ProviderTester가 연결되지 않았어요")
+		return
+	}
+	var req ProviderTestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, r, http.StatusBadRequest, "bad_json", "provider test 요청 JSON을 읽지 못했어요")
+		return
+	}
+	resp, err := s.cfg.ProviderTester(r.Context(), providerName, req)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "provider_test_failed", err.Error())
+		return
+	}
+	writeJSON(w, resp)
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []string) {

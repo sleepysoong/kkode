@@ -118,6 +118,30 @@ paths:
                 $ref: '#/components/schemas/Provider'
         '404':
           $ref: '#/components/responses/Error'
+  /api/v1/providers/{provider}/test:
+    post:
+      summary: provider 단독 preflight와 선택적 live smoke를 실행해요.
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderTestRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Error'
+        '200':
+          description: provider test 결과예요. live 실패도 ok=false 본문으로 반환할 수 있어요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderTestResponse'
   /api/v1/models:
     get:
       summary: provider별 model catalog를 반환해요.
@@ -1932,6 +1956,54 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Provider'
+    ProviderTestRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        prompt:
+          type: string
+        stream:
+          type: boolean
+        live:
+          type: boolean
+        max_preview_bytes:
+          type: integer
+        max_output_tokens:
+          type: integer
+    ProviderTestResponse:
+      type: object
+      required: [ok, provider]
+      properties:
+        ok:
+          type: boolean
+        provider:
+          type: string
+        model:
+          type: string
+        auth_status:
+          type: string
+        live:
+          type: boolean
+        stream:
+          type: boolean
+        message:
+          type: string
+        provider_request:
+          $ref: '#/components/schemas/ProviderRequestPreview'
+        result:
+          $ref: '#/components/schemas/ProviderTestResult'
+    ProviderTestResult:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        text:
+          type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
     Provider:
       type: object
       required: [name]

@@ -1267,6 +1267,32 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 		t.Fatalf("provider 상세 discovery가 이상해요: %+v", provider)
 	}
 
+	var testedProvider string
+	srv, err = New(Config{
+		Store:     store,
+		Providers: []ProviderDTO{{Name: "openai", Aliases: []string{"openai-compatible"}}},
+		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
+			testedProvider = provider
+			return &ProviderTestResponse{OK: true, Provider: "openai", Model: req.Model, Message: "ok", ProviderRequest: &ProviderRequestPreviewDTO{Provider: "openai", Operation: "responses.create"}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":"gpt-5-mini","prompt":"ping"}`))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("provider test status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var testResp ProviderTestResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &testResp); err != nil {
+		t.Fatal(err)
+	}
+	if testedProvider != "openai-compatible" || !testResp.OK || testResp.ProviderRequest == nil || testResp.ProviderRequest.Operation != "responses.create" {
+		t.Fatalf("provider test 응답이 이상해요: provider=%s resp=%+v", testedProvider, testResp)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/missing", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

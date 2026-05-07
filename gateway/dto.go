@@ -279,6 +279,37 @@ type ProviderListResponse struct {
 	Providers []ProviderDTO `json:"providers"`
 }
 
+// ProviderTestRequest는 session 없이 provider 변환/인증/live smoke를 점검할 때 써요.
+type ProviderTestRequest struct {
+	Model           string `json:"model,omitempty"`
+	Prompt          string `json:"prompt,omitempty"`
+	Stream          bool   `json:"stream,omitempty"`
+	Live            bool   `json:"live,omitempty"`
+	MaxPreviewBytes int    `json:"max_preview_bytes,omitempty"`
+	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
+}
+
+// ProviderTestResultDTO는 provider live smoke 결과를 adapter 친화적으로 요약해요.
+type ProviderTestResultDTO struct {
+	ID     string    `json:"id,omitempty"`
+	Status string    `json:"status,omitempty"`
+	Text   string    `json:"text,omitempty"`
+	Usage  *UsageDTO `json:"usage,omitempty"`
+}
+
+// ProviderTestResponse는 provider 단독 preflight 결과예요.
+type ProviderTestResponse struct {
+	OK              bool                       `json:"ok"`
+	Provider        string                     `json:"provider"`
+	Model           string                     `json:"model,omitempty"`
+	AuthStatus      string                     `json:"auth_status,omitempty"`
+	Live            bool                       `json:"live,omitempty"`
+	Stream          bool                       `json:"stream,omitempty"`
+	Message         string                     `json:"message,omitempty"`
+	ProviderRequest *ProviderRequestPreviewDTO `json:"provider_request,omitempty"`
+	Result          *ProviderTestResultDTO     `json:"result,omitempty"`
+}
+
 // ModelDTO는 외부 adapter가 모델 선택 UI를 만들 때 쓰는 정규화된 모델 항목이에요.
 type ModelDTO struct {
 	ID           string         `json:"id"`

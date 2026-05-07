@@ -88,6 +88,7 @@ func run(args []string) error {
 		RunStarter:           runManager.Start,
 		RunPreviewer:         syncRunPreviewer(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}),
 		RunValidator:         syncRunValidator(store),
+		ProviderTester:       syncProviderTester(),
 		RunRuntimeStats:      runManager.RuntimeStats,
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
@@ -359,6 +360,155 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 			ProviderRequest:   toProviderRequestPreviewDTO(providerPreview),
 		}, nil
 	}
+}
+
+func syncProviderTester() gateway.ProviderTester {
+	return func(ctx context.Context, providerName string, req gateway.ProviderTestRequest) (*gateway.ProviderTestResponse, error) {
+		spec, ok := app.ResolveProviderSpec(providerName)
+		if !ok {
+			return nil, fmt.Errorf("unknown provider: %s", providerName)
+		}
+		model := firstNonEmpty(req.Model, spec.DefaultModel)
+		if model == "" {
+			model = app.DefaultModel(spec.Name)
+		}
+		prompt := strings.TrimSpace(req.Prompt)
+		if prompt == "" {
+			prompt = "provider test예요. 짧게 ok라고 답해요."
+		}
+		maxOutputTokens := req.MaxOutputTokens
+		if maxOutputTokens <= 0 {
+			maxOutputTokens = 64
+		}
+		providerReq := llm.Request{
+			Model:           model,
+			Messages:        []llm.Message{llm.UserText(prompt)},
+			MaxOutputTokens: maxOutputTokens,
+		}
+		preview, err := app.PreviewProviderRequest(ctx, spec.Name, providerReq, req.Stream, req.MaxPreviewBytes)
+		out := &gateway.ProviderTestResponse{
+			OK:         err == nil,
+			Provider:   spec.Name,
+			Model:      model,
+			AuthStatus: app.ProviderAuthStatus(spec),
+			Live:       req.Live,
+			Stream:     req.Stream,
+		}
+		if preview != nil {
+			out.ProviderRequest = toProviderRequestPreviewDTO(preview)
+		}
+		if err != nil {
+			out.Message = err.Error()
+			return out, nil
+		}
+		out.Message = "provider 변환 preflight가 성공했어요"
+		if !req.Live {
+			return out, nil
+		}
+
+		liveCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+		handle, err := app.BuildProviderWithOptions(spec.Name, ".", app.ProviderOptions{})
+		if err != nil {
+			out.OK = false
+			out.Message = err.Error()
+			return out, nil
+		}
+		if handle.Close != nil {
+			defer handle.Close()
+		}
+		if handle.Provider == nil {
+			out.OK = false
+			out.Message = "provider factory가 nil provider를 반환했어요"
+			return out, nil
+		}
+		if req.Stream {
+			result, err := smokeStreamProvider(liveCtx, handle.Provider, providerReq)
+			if err != nil {
+				out.OK = false
+				out.Message = err.Error()
+				return out, nil
+			}
+			out.Result = result
+			out.Message = "provider live stream test가 성공했어요"
+			return out, nil
+		}
+		resp, err := handle.Provider.Generate(liveCtx, providerReq)
+		if err != nil {
+			out.OK = false
+			out.Message = err.Error()
+			return out, nil
+		}
+		out.Result = providerTestResult(resp)
+		out.Message = "provider live test가 성공했어요"
+		return out, nil
+	}
+}
+
+func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Request) (*gateway.ProviderTestResultDTO, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("provider가 필요해요")
+	}
+	streamer, ok := provider.(llm.StreamProvider)
+	if !ok {
+		return nil, fmt.Errorf("provider stream을 지원하지 않아요: %s", provider.Name())
+	}
+	stream, err := streamer.Stream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+	var text strings.Builder
+	result := &gateway.ProviderTestResultDTO{Status: "streaming"}
+	for i := 0; i < 128; i++ {
+		event, err := stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+		if event.Delta != "" {
+			text.WriteString(event.Delta)
+		}
+		if event.Response != nil {
+			result = providerTestResult(event.Response)
+			if text.Len() > 0 && result.Text == "" {
+				result.Text = text.String()
+			}
+		}
+		if event.Type == llm.StreamEventError {
+			if event.Error != nil {
+				return nil, event.Error
+			}
+			return nil, fmt.Errorf("provider stream error event를 받았어요")
+		}
+		if event.Type == llm.StreamEventCompleted {
+			if result.Status == "" || result.Status == "streaming" {
+				result.Status = "completed"
+			}
+			if result.Text == "" {
+				result.Text = text.String()
+			}
+			return result, nil
+		}
+	}
+	if result.Text == "" {
+		result.Text = text.String()
+	}
+	return result, fmt.Errorf("provider stream이 완료 event를 보내지 않았어요")
+}
+
+func providerTestResult(resp *llm.Response) *gateway.ProviderTestResultDTO {
+	if resp == nil {
+		return nil
+	}
+	result := &gateway.ProviderTestResultDTO{
+		ID:     resp.ID,
+		Status: resp.Status,
+		Text:   llm.RedactSecrets(resp.Text),
+	}
+	if resp.Usage != (llm.Usage{}) {
+		result.Usage = &gateway.UsageDTO{InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens, TotalTokens: resp.Usage.TotalTokens, ReasoningTokens: resp.Usage.ReasoningTokens}
+	}
+	return result
 }
 
 func toProviderRequestPreviewDTO(preview *app.ProviderRequestPreview) *gateway.ProviderRequestPreviewDTO {

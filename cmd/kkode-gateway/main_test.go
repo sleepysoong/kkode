@@ -312,6 +312,20 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	}
 }
 
+func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
+	tester := syncProviderTester()
+	resp, err := tester(context.Background(), "openai-compatible", gateway.ProviderTestRequest{Model: "gpt-5-mini", Prompt: "provider preview"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.OK || resp.Provider != "openai" || resp.Model != "gpt-5-mini" || resp.ProviderRequest == nil || resp.ProviderRequest.Operation != "responses.create" || !strings.Contains(resp.ProviderRequest.BodyJSON, "provider preview") {
+		t.Fatalf("provider tester preview가 이상해요: %+v", resp)
+	}
+	if resp.Live {
+		t.Fatal("live=false 기본 provider test는 외부 API를 호출하면 안 돼요")
+	}
+}
+
 func TestDefaultMCPDTOsAreStableAndRedacted(t *testing.T) {
 	t.Setenv("KKODE_SERENA_COMMAND", "uvx")
 	t.Setenv("CONTEXT7_API_KEY", "secret")
