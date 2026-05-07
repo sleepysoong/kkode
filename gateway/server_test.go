@@ -1523,6 +1523,46 @@ func TestGatewayRunSSEStreamsProgressEvents(t *testing.T) {
 	}
 }
 
+func TestGatewayRunTranscriptEndpoint(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	secret := "token=abc1234567890secretvalue"
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("prompt "+secret, llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("prompt " + secret)}})
+	turn.Response = llm.TextResponse("openai", "gpt-5-mini", "response "+secret)
+	sess.AppendTurn(turn)
+	sess.AppendEvent(session.Event{ID: "ev_run_transcript", SessionID: sess.ID, TurnID: turn.ID, Type: "tool.completed", Tool: "file_read", At: time.Now().UTC(), Payload: json.RawMessage(`{"value":"token=abc1234567890secretvalue"}`)})
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	run := session.Run{ID: "run_transcript", SessionID: sess.ID, TurnID: turn.ID, Status: "completed", Prompt: "run " + secret, Provider: "openai", Model: "gpt-5-mini"}
+	if _, _, err := store.SaveRunWithEvent(ctx, run, session.RunEvent{RunID: run.ID, Type: "tool.completed", Tool: "file_read", Message: "message " + secret, At: time.Now().UTC(), Run: run}); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewAsyncRunManagerWithStore(nil, store)
+	srv, err := New(Config{Store: store, RunGetter: manager.Get, RunEventLister: manager.Events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got RunTranscriptResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Run.ID != "run_transcript" || got.Turn == nil || got.Turn.ID != turn.ID || len(got.Events) != 1 || len(got.RunEvents) != 1 || !strings.Contains(got.Markdown, "Run events") {
+		t.Fatalf("run transcript 응답이 이상해요: %+v", got)
+	}
+	body := rec.Body.String()
+	if !got.Redacted || !strings.Contains(body, "[REDACTED]") || strings.Contains(body, secret) {
+		t.Fatalf("run transcript는 기본 redaction을 적용해야 해요: %s", body)
+	}
+}
+
 func TestGatewayRunSSECatchesUpdateDuringReplay(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()

@@ -877,6 +877,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		s.getRunEvents(w, r, runID)
 		return
 	}
+	if len(parts) == 3 && parts[2] == "transcript" && r.Method == http.MethodGet {
+		s.getRunTranscript(w, r, runID)
+		return
+	}
 	if len(parts) == 3 && parts[2] == "retry" && r.Method == http.MethodPost {
 		s.retryRun(w, r, runID)
 		return

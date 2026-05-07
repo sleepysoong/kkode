@@ -1518,6 +1518,43 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/v1/runs/{run_id}/transcript:
+    get:
+      summary: run 하나에 해당하는 turn, session event, run event transcript를 조회해요.
+      parameters:
+        - $ref: '#/components/parameters/RunID'
+        - in: query
+          name: redact
+          schema:
+            type: boolean
+            default: true
+          description: false면 secret redaction 없이 원문에 가깝게 반환해요.
+        - in: query
+          name: event_limit
+          schema:
+            type: integer
+            default: 500
+            maximum: 5000
+          description: run turn에 연결된 session event를 읽을 최대 개수예요.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 200
+            maximum: 1000
+          description: durable run event를 읽을 최대 개수예요.
+      responses:
+        '200':
+          description: run 단위 transcript예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunTranscriptResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+        '501':
+          $ref: '#/components/responses/Error'
+
   /api/v1/runs/{run_id}/retry:
     post:
       summary: 기존 run의 prompt와 session으로 새 background run을 시작해요.
@@ -2276,6 +2313,28 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Turn'
+        markdown:
+          type: string
+        redacted:
+          type: boolean
+    RunTranscriptResponse:
+      type: object
+      required: [run, session, markdown, redacted]
+      properties:
+        run:
+          $ref: '#/components/schemas/Run'
+        session:
+          $ref: '#/components/schemas/Session'
+        turn:
+          $ref: '#/components/schemas/Turn'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        run_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunEvent'
         markdown:
           type: string
         redacted:
