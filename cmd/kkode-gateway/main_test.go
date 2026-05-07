@@ -249,6 +249,13 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
+	streamPreview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}, PreviewStream: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if streamPreview.ProviderRequest == nil || !streamPreview.ProviderRequest.Stream {
+		t.Fatalf("stream provider request 변환 preview가 필요해요: %+v", streamPreview.ProviderRequest)
+	}
 	if strings.Contains(preview.ProviderRequest.BodyJSON, "secret") || !strings.Contains(preview.ProviderRequest.BodyJSON, "[REDACTED]") {
 		t.Fatalf("provider request preview도 secret을 숨겨야 해요: %s", preview.ProviderRequest.BodyJSON)
 	}

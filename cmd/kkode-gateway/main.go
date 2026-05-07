@@ -344,7 +344,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 			return nil, err
 		}
 		providerReq, _ := ag.Prepare(req.Prompt)
-		providerPreview, err := app.PreviewProviderRequest(ctx, providerName, providerReq, false, 64<<10)
+		providerPreview, err := app.PreviewProviderRequest(ctx, providerName, providerReq, req.PreviewStream, 64<<10)
 		if err != nil {
 			return nil, err
 		}

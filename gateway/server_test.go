@@ -997,7 +997,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","provider":"openai"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","provider":"openai","preview_stream":true}`))
 	req.Header.Set(RequestIDHeader, "req_preview")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -1008,7 +1008,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" {
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
 }
