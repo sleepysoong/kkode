@@ -247,6 +247,7 @@ type DiagnosticsResponse struct {
 	Features          int                  `json:"features"`
 	DefaultMCPServers int                  `json:"default_mcp_servers"`
 	MaxRequestBytes   int64                `json:"max_request_bytes"`
+	MaxConcurrentRuns int                  `json:"max_concurrent_runs,omitempty"`
 }
 
 type DiagnosticCheckDTO struct {
@@ -257,7 +258,8 @@ type DiagnosticCheckDTO struct {
 
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.
 type LimitDTO struct {
-	MaxRequestBytes int64 `json:"max_request_bytes"`
+	MaxRequestBytes   int64 `json:"max_request_bytes"`
+	MaxConcurrentRuns int   `json:"max_concurrent_runs,omitempty"`
 }
 
 func toSessionDTO(sess *session.Session) SessionDTO {

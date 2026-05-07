@@ -39,6 +39,8 @@ type AsyncRunManager struct {
 	runEventStore session.RunEventStore
 	eventBus      *RunEventBus
 	now           func() time.Time
+	runSlots      chan struct{}
+	maxConcurrent int
 
 	mu   sync.RWMutex
 	runs map[string]*managedRun
@@ -68,6 +70,32 @@ func NewAsyncRunManagerWithStoreAndBus(starter RunStarter, store session.RunStor
 		manager.runEventStore = eventStore
 	}
 	return manager
+}
+
+// SetMaxConcurrentRuns는 동시에 running 상태로 진입할 background run 수를 제한해요.
+// 0 이하이면 제한 없이 기존처럼 실행해요. 보통 gateway 시작 직후 run 접수 전에 설정해요.
+func (m *AsyncRunManager) SetMaxConcurrentRuns(max int) *AsyncRunManager {
+	if m == nil {
+		return m
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maxConcurrent = max
+	if max > 0 {
+		m.runSlots = make(chan struct{}, max)
+	} else {
+		m.runSlots = nil
+	}
+	return m
+}
+
+func (m *AsyncRunManager) MaxConcurrentRuns() int {
+	if m == nil {
+		return 0
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.maxConcurrent
 }
 
 func (m *AsyncRunManager) Subscribe(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -302,6 +330,16 @@ func (m *AsyncRunManager) Shutdown(ctx context.Context) error {
 func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc, req RunStartRequest) {
 	defer cancel()
 	defer m.wg.Done()
+	release, acquired := m.acquireRunSlot(ctx)
+	if !acquired {
+		m.update(req.RunID, func(run *RunDTO) {
+			run.Status = "cancelled"
+			run.EndedAt = m.timestamp()
+			run.Error = ctx.Err().Error()
+		})
+		return
+	}
+	defer release()
 	m.update(req.RunID, func(run *RunDTO) {
 		run.Status = "running"
 		run.StartedAt = m.timestamp()
@@ -367,6 +405,24 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 			run.Status = "completed"
 		}
 	})
+}
+
+func (m *AsyncRunManager) acquireRunSlot(ctx context.Context) (func(), bool) {
+	if m == nil {
+		return func() {}, true
+	}
+	m.mu.RLock()
+	slots := m.runSlots
+	m.mu.RUnlock()
+	if slots == nil {
+		return func() {}, true
+	}
+	select {
+	case slots <- struct{}{}:
+		return func() { <-slots }, true
+	case <-ctx.Done():
+		return func() {}, false
+	}
 }
 
 func (m *AsyncRunManager) update(runID string, fn func(*RunDTO)) {

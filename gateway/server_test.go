@@ -655,7 +655,7 @@ func TestGatewayListsGetsAndCancelsRuns(t *testing.T) {
 
 func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	store := openTestStore(t)
-	srv, err := New(Config{Store: store, Version: "test", MaxRequestBytes: 1234, Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}, DefaultMCPServers: []ResourceDTO{{Name: "context7", Kind: string(session.ResourceMCPServer), Config: map[string]any{"url": "https://mcp.context7.com/mcp", "headers": map[string]any{"CONTEXT7_API_KEY": "secret-token"}}}}})
+	srv, err := New(Config{Store: store, Version: "test", MaxRequestBytes: 1234, MaxConcurrentRuns: 3, Providers: []ProviderDTO{{Name: "copilot", Capabilities: map[string]any{"skills": true}}}, DefaultMCPServers: []ResourceDTO{{Name: "context7", Kind: string(session.ResourceMCPServer), Config: map[string]any{"url": "https://mcp.context7.com/mcp", "headers": map[string]any{"CONTEXT7_API_KEY": "secret-token"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,7 +669,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	if caps.DefaultMCPServers[0].Name != "context7" || caps.DefaultMCPServers[0].Config["url"] == "" {
@@ -716,6 +716,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		Store:             store,
 		Version:           "test",
 		MaxRequestBytes:   123,
+		MaxConcurrentRuns: 2,
 		Providers:         []ProviderDTO{{Name: "openai"}},
 		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
@@ -738,7 +739,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
 		t.Fatal(err)
 	}
-	if !diagnostics.OK || diagnostics.Providers != 1 || diagnostics.DefaultMCPServers != 1 || diagnostics.MaxRequestBytes != 123 {
+	if !diagnostics.OK || diagnostics.Providers != 1 || diagnostics.DefaultMCPServers != 1 || diagnostics.MaxRequestBytes != 123 || diagnostics.MaxConcurrentRuns != 2 {
 		t.Fatalf("diagnostics 응답이 이상해요: %+v", diagnostics)
 	}
 	var sawStore bool

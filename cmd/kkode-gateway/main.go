@@ -41,6 +41,7 @@ func run(args []string) error {
 	corsOrigins := fs.String("cors-origins", app.EnvDefault("KKODE_CORS_ORIGINS", ""), "쉼표로 구분한 허용 CORS origin 목록이에요")
 	accessLog := fs.Bool("access-log", app.EnvBool("KKODE_ACCESS_LOG"), "JSONL access log를 stderr로 출력해요")
 	maxBodyBytes := fs.Int64("max-body-bytes", app.EnvInt64("KKODE_MAX_BODY_BYTES", 32<<20), "gateway API 요청 body 최대 byte 수예요. 음수면 비활성화해요")
+	maxConcurrentRuns := fs.Int("max-concurrent-runs", app.EnvInt("KKODE_MAX_CONCURRENT_RUNS", 4), "동시에 running 상태로 실행할 background run 최대 개수예요. 0 이하면 제한하지 않아요")
 	readHeaderTimeout := fs.Duration("read-header-timeout", envDuration("KKODE_READ_HEADER_TIMEOUT", 10*time.Second), "HTTP read header timeout이에요")
 	readTimeout := fs.Duration("read-timeout", envDuration("KKODE_READ_TIMEOUT", 0), "HTTP read timeout이에요. 0이면 비활성화해요")
 	writeTimeout := fs.Duration("write-timeout", envDuration("KKODE_WRITE_TIMEOUT", 0), "HTTP write timeout이에요. SSE를 오래 유지하려면 0을 권장해요")
@@ -67,7 +68,7 @@ func run(args []string) error {
 		return err
 	}
 	defer store.Close()
-	runManager := gateway.NewAsyncRunManagerWithStore(syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}), store)
+	runManager := gateway.NewAsyncRunManagerWithStore(syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}), store).SetMaxConcurrentRuns(*maxConcurrentRuns)
 	if err := runManager.RecoverStaleRuns(context.Background()); err != nil {
 		return err
 	}
@@ -78,6 +79,7 @@ func run(args []string) error {
 		AllowLocalhostNoAuth: *allowLocalhostNoAuth,
 		CORSOrigins:          splitCSV(*corsOrigins),
 		MaxRequestBytes:      *maxBodyBytes,
+		MaxConcurrentRuns:    runManager.MaxConcurrentRuns(),
 		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
 		RunPreviewer:         syncRunPreviewer(store),

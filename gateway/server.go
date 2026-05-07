@@ -31,6 +31,7 @@ type Config struct {
 	CORSOrigins          []string
 	RequestIDGenerator   func() string
 	MaxRequestBytes      int64
+	MaxConcurrentRuns    int
 	AccessLogger         AccessLogger
 	Providers            []ProviderDTO
 	DefaultMCPServers    []ResourceDTO
@@ -455,7 +456,7 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 	if len(features) == 0 {
 		features = DefaultFeatureCatalog()
 	}
-	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes}})
+	writeJSON(w, CapabilityResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Features: features, Providers: s.cfg.Providers, DefaultMCPServers: RedactResourceDTOs(s.cfg.DefaultMCPServers), Limits: LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns}})
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -493,7 +494,7 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 	} else {
 		checks = append(checks, DiagnosticCheckDTO{Name: "run_previewer", Status: "ok"})
 	}
-	writeJSON(w, DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes})
+	writeJSON(w, DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns})
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []string) {

@@ -96,6 +96,48 @@ func TestAsyncRunManagerCancelsRun(t *testing.T) {
 	waitForRunStatus(t, manager, run.ID, "cancelled")
 }
 
+func TestAsyncRunManagerLimitsConcurrentRunningRuns(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan string, 2)
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		started <- req.RunID
+		<-release
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
+	}).SetMaxConcurrentRuns(1)
+	first, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runningID string
+	select {
+	case runningID = <-started:
+	case <-time.After(time.Second):
+		t.Fatal("첫 run은 시작해야 해요")
+	}
+	queuedID := second.ID
+	if runningID == second.ID {
+		queuedID = first.ID
+	}
+	if queued, err := manager.Get(context.Background(), queuedID); err != nil || queued.Status != "queued" {
+		t.Fatalf("다른 run은 slot이 빌 때까지 queued여야 해요: run=%+v err=%v", queued, err)
+	}
+	select {
+	case id := <-started:
+		t.Fatalf("slot이 꽉 찼는데 두 번째 run이 시작되면 안 돼요: %s", id)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	waitForRunStatus(t, manager, first.ID, "completed")
+	waitForRunStatus(t, manager, second.ID, "completed")
+	if manager.MaxConcurrentRuns() != 1 {
+		t.Fatalf("concurrency limit가 유지돼야 해요: %d", manager.MaxConcurrentRuns())
+	}
+}
+
 func TestAsyncRunManagerShutdownCancelsActiveRuns(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		<-ctx.Done()
