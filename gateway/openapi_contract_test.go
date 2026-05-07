@@ -177,6 +177,8 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "ErrorEnvelope", dto: ErrorEnvelope{}},
 		{schema: "Error", dto: ErrorDTO{}},
 		{schema: "CapabilityResponse", dto: CapabilityResponse{}},
+		{schema: "ProviderCapabilityKey", dto: ProviderCapabilityKeyDTO{}},
+		{schema: "ProviderPipelineStage", dto: ProviderPipelineStageDTO{}},
 		{schema: "DiagnosticsResponse", dto: DiagnosticsResponse{}},
 		{schema: "DiagnosticCheck", dto: DiagnosticCheckDTO{}},
 		{schema: "RunRuntimeStats", dto: RunRuntimeStatsDTO{}},

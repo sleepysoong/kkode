@@ -1964,12 +1964,42 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Provider'
+        provider_capabilities:
+          type: array
+          description: provider capability map에 나올 수 있는 key와 의미예요. 각 provider map은 true 값만 노출하므로 빠진 key는 이 catalog로 해석해요.
+          items:
+            $ref: '#/components/schemas/ProviderCapabilityKey'
+        provider_pipeline:
+          type: array
+          description: 요청에서 변환 레이어와 API/source 호출을 거쳐 응답으로 돌아오는 표준 provider 단계예요.
+          items:
+            $ref: '#/components/schemas/ProviderPipelineStage'
         default_mcp_servers:
           type: array
           items:
             $ref: '#/components/schemas/Resource'
         limits:
           $ref: '#/components/schemas/Limit'
+    ProviderCapabilityKey:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    ProviderPipelineStage:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        input:
+          type: string
+        output:
+          type: string
+        description:
+          type: string
     Limit:
       type: object
       required: [max_request_bytes]

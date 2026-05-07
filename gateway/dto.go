@@ -368,12 +368,30 @@ type FeatureDTO struct {
 
 // CapabilityResponse는 gateway feature discovery 응답이에요.
 type CapabilityResponse struct {
-	Version           string        `json:"version"`
-	Commit            string        `json:"commit,omitempty"`
-	Features          []FeatureDTO  `json:"features"`
-	Providers         []ProviderDTO `json:"providers"`
-	DefaultMCPServers []ResourceDTO `json:"default_mcp_servers,omitempty"`
-	Limits            LimitDTO      `json:"limits"`
+	Version              string                     `json:"version"`
+	Commit               string                     `json:"commit,omitempty"`
+	Features             []FeatureDTO               `json:"features"`
+	Providers            []ProviderDTO              `json:"providers"`
+	ProviderCapabilities []ProviderCapabilityKeyDTO `json:"provider_capabilities,omitempty"`
+	ProviderPipeline     []ProviderPipelineStageDTO `json:"provider_pipeline,omitempty"`
+	DefaultMCPServers    []ResourceDTO              `json:"default_mcp_servers,omitempty"`
+	Limits               LimitDTO                   `json:"limits"`
+}
+
+// ProviderCapabilityKeyDTO는 provider capability map에 나올 수 있는 key와 의미를 설명해요.
+// 각 provider의 capability map은 true 값만 짧게 노출하므로, adapter는 이 catalog를 기준으로 빠진 key를 false처럼 해석하면 돼요.
+type ProviderCapabilityKeyDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// ProviderPipelineStageDTO는 표준 요청이 source 호출까지 지나가는 변환 단계를 설명해요.
+// 외부 adapter는 이 순서를 기준으로 preview, live test, 실제 run UI를 같은 mental model로 그리면 돼요.
+type ProviderPipelineStageDTO struct {
+	Name        string `json:"name"`
+	Input       string `json:"input,omitempty"`
+	Output      string `json:"output,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // DiagnosticsResponse는 배포/adapter 연결 상태를 한 번에 점검하는 운영 응답이에요.

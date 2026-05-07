@@ -1135,6 +1135,18 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
+	capKeys := map[string]bool{}
+	for _, item := range caps.ProviderCapabilities {
+		capKeys[item.Name] = item.Description != ""
+	}
+	for _, name := range []string{"tools", "mcp", "custom_agents", "routing"} {
+		if !capKeys[name] {
+			t.Fatalf("provider capability catalog에 %s 설명이 필요해요: %+v", name, caps.ProviderCapabilities)
+		}
+	}
+	if len(caps.ProviderPipeline) < 4 || caps.ProviderPipeline[0].Name != "request" || caps.ProviderPipeline[1].Name != "convert_request" || caps.ProviderPipeline[2].Name != "api_call" || caps.ProviderPipeline[3].Name != "convert_response" {
+		t.Fatalf("provider pipeline catalog는 요청→변환→API 호출→응답 변환 순서를 노출해야 해요: %+v", caps.ProviderPipeline)
+	}
 	if caps.DefaultMCPServers[0].Name != "context7" || caps.DefaultMCPServers[0].Config["url"] == "" {
 		t.Fatalf("기본 MCP discovery가 필요해요: %+v", caps.DefaultMCPServers)
 	}
