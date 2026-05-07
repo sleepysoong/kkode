@@ -2431,6 +2431,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GitStatusEntry'
+        total_entries:
+          type: integer
+          description: limit 적용 전 git status entry 수예요. output_truncated가 true면 실제 값보다 작을 수 있어요.
+        limit:
+          type: integer
+          description: 이번 응답에 적용된 entry 제한이에요.
+        entries_truncated:
+          type: boolean
+          description: limit 또는 git 출력 byte 제한 때문에 entries가 잘렸는지 알려줘요.
+        output_truncated:
+          type: boolean
+          description: git status 원시 출력이 gateway byte 제한에 걸렸는지 알려줘요.
     GitStatusEntry:
       type: object
       required: [xy, path, raw]

@@ -2628,6 +2628,20 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 		t.Fatalf("git status 응답이 이상해요: %+v", status)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/status?project_root="+url.QueryEscape(root)+"&limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("limited status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	status = GitStatusResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Entries) != 1 || status.TotalEntries < 2 || status.Limit != 1 || !status.EntriesTruncated {
+		t.Fatalf("git status 제한 metadata가 이상해요: %+v", status)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&path=README.md", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

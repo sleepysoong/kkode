@@ -17,9 +17,13 @@ type GitStatusEntryDTO struct {
 }
 
 type GitStatusResponse struct {
-	ProjectRoot string              `json:"project_root"`
-	Branch      string              `json:"branch,omitempty"`
-	Entries     []GitStatusEntryDTO `json:"entries"`
+	ProjectRoot      string              `json:"project_root"`
+	Branch           string              `json:"branch,omitempty"`
+	Entries          []GitStatusEntryDTO `json:"entries"`
+	TotalEntries     int                 `json:"total_entries,omitempty"`
+	Limit            int                 `json:"limit,omitempty"`
+	EntriesTruncated bool                `json:"entries_truncated,omitempty"`
+	OutputTruncated  bool                `json:"output_truncated,omitempty"`
 }
 
 type GitDiffResponse struct {
@@ -66,12 +70,13 @@ func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, _, err := runGitCommand(r.Context(), root, []string{"status", "--short", "--branch"}, 256*1024)
+	limit := queryLimit(r, "limit", 500, 5000)
+	out, outputTruncated, err := runGitCommand(r.Context(), root, []string{"status", "--short", "--branch"}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_status_failed", err.Error())
 		return
 	}
-	writeJSON(w, parseGitStatus(root, out))
+	writeJSON(w, limitGitStatus(parseGitStatus(root, out), limit, outputTruncated))
 }
 
 func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +137,20 @@ func parseGitStatus(root string, out string) GitStatusResponse {
 			path = strings.TrimSpace(line[3:])
 		}
 		resp.Entries = append(resp.Entries, GitStatusEntryDTO{XY: xy, Path: path, Raw: line})
+	}
+	return resp
+}
+
+func limitGitStatus(resp GitStatusResponse, limit int, outputTruncated bool) GitStatusResponse {
+	resp.TotalEntries = len(resp.Entries)
+	resp.Limit = limit
+	resp.OutputTruncated = outputTruncated
+	if limit > 0 && len(resp.Entries) > limit {
+		resp.Entries = resp.Entries[:limit]
+		resp.EntriesTruncated = true
+	}
+	if outputTruncated {
+		resp.EntriesTruncated = true
 	}
 	return resp
 }
