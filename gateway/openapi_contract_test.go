@@ -160,6 +160,37 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "CheckpointListResponse", dto: CheckpointListResponse{}},
 		{schema: "ResourceListResponse", dto: ResourceListResponse{}},
 		{schema: "Resource", dto: ResourceDTO{}},
+
+		{schema: "Checkpoint", dto: CheckpointDTO{}},
+		{schema: "SessionCompactRequest", dto: SessionCompactRequest{}},
+		{schema: "SessionCompactResponse", dto: SessionCompactResponse{}},
+		{schema: "FileListResponse", dto: FileListResponse{}},
+		{schema: "FileEntry", dto: FileEntryDTO{}},
+		{schema: "FileContentResponse", dto: FileContentResponse{}},
+		{schema: "LSPSymbol", dto: LSPSymbolDTO{}},
+		{schema: "LSPReference", dto: LSPReferenceDTO{}},
+		{schema: "LSPDiagnostic", dto: LSPDiagnosticDTO{}},
+		{schema: "MCPToolListResponse", dto: MCPToolListResponse{}},
+		{schema: "MCPTool", dto: MCPToolDTO{}},
+		{schema: "MCPResourceListResponse", dto: MCPResourceListResponse{}},
+		{schema: "MCPResource", dto: MCPResourceDTO{}},
+		{schema: "MCPResourceReadResponse", dto: MCPResourceReadResponse{}},
+		{schema: "MCPResourceContent", dto: MCPResourceContentDTO{}},
+		{schema: "MCPPromptListResponse", dto: MCPPromptListResponse{}},
+		{schema: "MCPPrompt", dto: MCPPromptDTO{}},
+		{schema: "MCPPromptArgument", dto: MCPPromptArgumentDTO{}},
+		{schema: "MCPPromptGetRequest", dto: MCPPromptGetRequest{}},
+		{schema: "MCPPromptGetResponse", dto: MCPPromptGetResponse{}},
+		{schema: "MCPPromptMessage", dto: MCPPromptMessageDTO{}},
+		{schema: "MCPToolCallRequest", dto: MCPToolCallRequest{}},
+		{schema: "MCPToolCallResponse", dto: MCPToolCallResponse{}},
+		{schema: "PromptTemplateListResponse", dto: PromptTemplateListResponse{}},
+		{schema: "PromptTemplate", dto: PromptTemplateDTO{}},
+		{schema: "PromptTemplateResponse", dto: PromptTemplateResponse{}},
+		{schema: "PromptRenderRequest", dto: PromptRenderRequest{}},
+		{schema: "PromptRenderResponse", dto: PromptRenderResponse{}},
+		{schema: "SkillPreviewResponse", dto: SkillPreviewResponse{}},
+		{schema: "SubagentPreviewResponse", dto: SubagentPreviewResponse{}},
 		{schema: "GitStatusResponse", dto: GitStatusResponse{}},
 		{schema: "GitStatusEntry", dto: GitStatusEntryDTO{}},
 		{schema: "GitDiffResponse", dto: GitDiffResponse{}},
@@ -295,18 +326,27 @@ func readOpenAPISchemaProperties(t *testing.T) map[string]map[string]bool {
 
 func exportedGatewayDTOTypeNames(t *testing.T) []string {
 	t.Helper()
-	data, err := os.ReadFile("dto.go")
+	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
 	typeRe := regexp.MustCompile(`(?m)^type\s+([A-Z][A-Za-z0-9]*(?:Response|Request|DTO))\s+struct\s+\{`)
-	matches := typeRe.FindAllStringSubmatch(string(data), -1)
-	if len(matches) == 0 {
-		t.Fatal("gateway dto.go에서 공개 DTO 타입을 찾지 못했어요")
+	out := []string{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range typeRe.FindAllStringSubmatch(string(data), -1) {
+			out = append(out, match[1])
+		}
 	}
-	out := make([]string, 0, len(matches))
-	for _, match := range matches {
-		out = append(out, match[1])
+	if len(out) == 0 {
+		t.Fatal("gateway 공개 DTO 타입을 찾지 못했어요")
 	}
 	return out
 }
