@@ -460,7 +460,7 @@ func providerDTOs() []gateway.ProviderDTO {
 }
 
 func conversionDTO(spec app.ProviderConversionSpec) *gateway.ConversionDTO {
-	if spec.RequestConverter == "" && spec.ResponseConverter == "" && spec.Call == "" && spec.Stream == "" && spec.Source == "" && len(spec.Operations) == 0 {
+	if spec.RequestConverter == "" && spec.ResponseConverter == "" && spec.Call == "" && spec.Stream == "" && spec.Source == "" && len(spec.Operations) == 0 && len(spec.Routes) == 0 {
 		return nil
 	}
 	return &gateway.ConversionDTO{
@@ -470,7 +470,19 @@ func conversionDTO(spec app.ProviderConversionSpec) *gateway.ConversionDTO {
 		Stream:            spec.Stream,
 		Source:            spec.Source,
 		Operations:        append([]string(nil), spec.Operations...),
+		Routes:            routeDTOs(spec.Routes),
 	}
+}
+
+func routeDTOs(routes []app.ProviderRouteSpec) []gateway.RouteDTO {
+	if len(routes) == 0 {
+		return nil
+	}
+	out := make([]gateway.RouteDTO, 0, len(routes))
+	for _, route := range routes {
+		out = append(out, gateway.RouteDTO{Operation: route.Operation, Method: route.Method, Path: route.Path, Accept: route.Accept})
+	}
+	return out
 }
 
 func defaultMCPDTOs() []gateway.ResourceDTO {

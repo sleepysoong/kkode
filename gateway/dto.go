@@ -239,12 +239,21 @@ type ProviderDTO struct {
 
 // ConversionDTO는 provider가 표준 요청을 어떤 converter/caller/source로 실행하는지 알려줘요.
 type ConversionDTO struct {
-	RequestConverter  string   `json:"request_converter,omitempty"`
-	ResponseConverter string   `json:"response_converter,omitempty"`
-	Call              string   `json:"call,omitempty"`
-	Stream            string   `json:"stream,omitempty"`
-	Source            string   `json:"source,omitempty"`
-	Operations        []string `json:"operations,omitempty"`
+	RequestConverter  string     `json:"request_converter,omitempty"`
+	ResponseConverter string     `json:"response_converter,omitempty"`
+	Call              string     `json:"call,omitempty"`
+	Stream            string     `json:"stream,omitempty"`
+	Source            string     `json:"source,omitempty"`
+	Operations        []string   `json:"operations,omitempty"`
+	Routes            []RouteDTO `json:"routes,omitempty"`
+}
+
+// RouteDTO는 provider conversion operation이 HTTP source에서 어떤 route를 쓰는지 보여줘요.
+type RouteDTO struct {
+	Operation string `json:"operation"`
+	Method    string `json:"method,omitempty"`
+	Path      string `json:"path"`
+	Accept    string `json:"accept,omitempty"`
 }
 
 type ProviderListResponse struct {

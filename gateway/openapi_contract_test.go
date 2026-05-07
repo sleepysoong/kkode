@@ -41,6 +41,7 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		{schema: "ProviderListResponse", dto: ProviderListResponse{}},
 		{schema: "Provider", dto: ProviderDTO{}},
 		{schema: "Conversion", dto: ConversionDTO{}},
+		{schema: "Route", dto: RouteDTO{}},
 		{schema: "ModelListResponse", dto: ModelListResponse{}},
 		{schema: "Model", dto: ModelDTO{}},
 		{schema: "SessionCreateRequest", dto: SessionCreateRequest{}},

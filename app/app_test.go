@@ -73,6 +73,7 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	specs[0].Models = append(specs[0].Models, "mutated-model")
 	specs[0].Capabilities["tools"] = false
 	specs[0].Conversion.Operations = append(specs[0].Conversion.Operations, "mutated-operation")
+	specs[0].Conversion.Routes = append(specs[0].Conversion.Routes, ProviderRouteSpec{Operation: "mutated-route"})
 	fresh := ProviderSpecs()
 	if len(fresh[0].Aliases) > 0 && fresh[0].Aliases[len(fresh[0].Aliases)-1] == "mutated" {
 		t.Fatal("ProviderSpecs는 alias slice를 방어 복사해야 해요")
@@ -86,6 +87,9 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	if len(fresh[0].Conversion.Operations) > 0 && fresh[0].Conversion.Operations[len(fresh[0].Conversion.Operations)-1] == "mutated-operation" {
 		t.Fatal("ProviderSpecs는 conversion operation slice를 방어 복사해야 해요")
 	}
+	if len(fresh[0].Conversion.Routes) > 0 && fresh[0].Conversion.Routes[len(fresh[0].Conversion.Routes)-1].Operation == "mutated-route" {
+		t.Fatal("ProviderSpecs는 conversion route slice를 방어 복사해야 해요")
+	}
 }
 
 func TestProviderSpecsExposeConversionProfiles(t *testing.T) {
@@ -95,6 +99,9 @@ func TestProviderSpecsExposeConversionProfiles(t *testing.T) {
 		}
 		if len(spec.Conversion.Operations) == 0 {
 			t.Fatalf("%s provider는 operation 힌트를 노출해야 해요", spec.Name)
+		}
+		if (spec.Name == "openai" || spec.Name == "omniroute") && (len(spec.Conversion.Routes) == 0 || spec.Conversion.Routes[0].Path != "/responses") {
+			t.Fatalf("%s HTTP provider는 route 힌트를 노출해야 해요: %+v", spec.Name, spec.Conversion.Routes)
 		}
 	}
 }
@@ -279,6 +286,49 @@ func TestBuildProviderAdapterWrapsCustomSource(t *testing.T) {
 	}
 	if caller.got.Operation != "responses.create" || resp.Text != "source-only 응답이에요" {
 		t.Fatalf("adapter가 변환 레이어와 source caller를 연결하지 못했어요: got=%+v resp=%+v", caller.got, resp)
+	}
+}
+
+func TestBuildProviderAdapterAllowsCustomProviderName(t *testing.T) {
+	caller := &sourceOnlyCaller{}
+	provider, err := BuildProviderAdapter("openai", ProviderAdapterOptions{ProviderName: "custom-source", Caller: caller})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := provider.Generate(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("커스텀")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.Name() != "custom-source" || resp.Provider != "custom-source" {
+		t.Fatalf("custom provider label이 표준 응답까지 유지돼야 해요: name=%s resp=%+v", provider.Name(), resp)
+	}
+}
+
+func TestBuildHTTPJSONProviderAdapterUsesRegistryRoutes(t *testing.T) {
+	var gotPath string
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"id":"resp_http_adapter","model":"gpt-5-mini","status":"completed","output_text":"adapter 응답이에요"}`))
+	}))
+	defer server.Close()
+
+	provider, err := BuildHTTPJSONProviderAdapter("openai-compatible", HTTPJSONProviderOptions{
+		ProviderName: "custom-http",
+		BaseURL:      server.URL + "/v1",
+		APIKey:       "sk-test",
+		HTTPClient:   server.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := provider.Generate(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v1/responses" || gotAuth == "" || provider.Name() != "custom-http" || resp.Provider != "custom-http" || resp.Text != "adapter 응답이에요" {
+		t.Fatalf("HTTP JSON adapter가 registry route/source label을 재사용하지 못했어요: path=%s auth=%s name=%s resp=%+v", gotPath, gotAuth, provider.Name(), resp)
 	}
 }
 

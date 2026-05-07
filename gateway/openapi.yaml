@@ -1917,6 +1917,22 @@ components:
           type: array
           items:
             type: string
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Route'
+    Route:
+      type: object
+      required: [operation, path]
+      properties:
+        operation:
+          type: string
+        method:
+          type: string
+        path:
+          type: string
+        accept:
+          type: string
     ModelListResponse:
       type: object
       required: [models]

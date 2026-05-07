@@ -2,12 +2,14 @@ package app
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/codexcli"
 	"github.com/sleepysoong/kkode/providers/copilot"
+	"github.com/sleepysoong/kkode/providers/httpjson"
 	"github.com/sleepysoong/kkode/providers/omniroute"
 	"github.com/sleepysoong/kkode/providers/openai"
 )
@@ -43,6 +45,16 @@ type ProviderConversionSpec struct {
 	Stream            string
 	Source            string
 	Operations        []string
+	Routes            []ProviderRouteSpec
+}
+
+// ProviderRouteSpec은 변환 operation이 HTTP source에서 어떤 route로 나가는지 설명해요.
+// secret header 값은 담지 않고, 외부 패널과 테스트가 endpoint 계약만 발견하게 해요.
+type ProviderRouteSpec struct {
+	Operation string
+	Method    string
+	Path      string
+	Accept    string
 }
 
 // ProviderConversionSet은 실제 변환기와 operation 기본값을 묶은 실행형 변환 profile이에요.
@@ -73,9 +85,26 @@ func (c ProviderConversionSet) Pipeline(providerName string, caller llm.Provider
 
 // ProviderAdapterOptions는 기존 source caller를 llm.Provider로 감쌀 때 쓰는 옵션이에요.
 type ProviderAdapterOptions struct {
+	ProviderName string
 	Caller       llm.ProviderCaller
 	Streamer     llm.ProviderStreamCaller
 	Capabilities llm.Capabilities
+}
+
+// HTTPJSONProviderOptions는 OpenAI-compatible 파생 HTTP API처럼 route만 다른 source를 붙일 때 쓰는 옵션이에요.
+// Routes를 비워두면 registry conversion profile의 route metadata를 기본값으로 써요.
+type HTTPJSONProviderOptions struct {
+	ProviderName      string
+	BaseURL           string
+	APIKey            string
+	Headers           map[string]string
+	HTTPClient        *http.Client
+	Retry             httpjson.RetryConfig
+	DefaultOperation  string
+	Routes            map[string]httpjson.Route
+	Capabilities      llm.Capabilities
+	DisableStreaming  bool
+	AdditionalHeaders map[string]string
 }
 
 type providerConversionFactory func(spec ProviderSpec) ProviderConversionSet
@@ -117,12 +146,16 @@ func BuildProviderAdapter(provider string, opts ProviderAdapterOptions) (*llm.Ad
 	if err != nil {
 		return nil, err
 	}
+	providerName := strings.TrimSpace(opts.ProviderName)
+	if providerName == "" {
+		providerName = spec.Name
+	}
 	caps := opts.Capabilities
 	if caps == (llm.Capabilities{}) {
 		caps = capabilitiesFromMap(spec.Capabilities)
 	}
 	return &llm.AdaptedProvider{
-		ProviderName:         spec.Name,
+		ProviderName:         providerName,
 		ProviderCapabilities: caps,
 		RequestConverter:     conversion.RequestConverter,
 		ResponseConverter:    conversion.ResponseConverter,
@@ -131,6 +164,57 @@ func BuildProviderAdapter(provider string, opts ProviderAdapterOptions) (*llm.Ad
 		Options:              conversion.Options,
 		StreamOptions:        conversion.StreamOptions,
 	}, nil
+}
+
+// BuildHTTPJSONProviderAdapter는 registry 변환 profile에 범용 HTTP JSON source를 꽂아 llm.Provider를 만들어요.
+// 새 OpenAI-compatible gateway나 사내 proxy는 converter를 새로 만들지 않고 base URL/API key/route만 넘기면 돼요.
+func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) (*llm.AdaptedProvider, error) {
+	spec, _, err := resolveProviderConversion(profile)
+	if err != nil {
+		return nil, err
+	}
+	providerName := strings.TrimSpace(opts.ProviderName)
+	if providerName == "" {
+		providerName = spec.Name
+	}
+	routes := cloneHTTPJSONRoutes(opts.Routes)
+	if len(routes) == 0 {
+		routes = httpJSONRoutesFromSpec(spec.Conversion.Routes)
+	}
+	if len(routes) == 0 {
+		return nil, fmt.Errorf("http json route가 필요해요: %s", spec.Name)
+	}
+	headers := cloneStringMap(opts.Headers)
+	if len(opts.AdditionalHeaders) > 0 && headers == nil {
+		headers = map[string]string{}
+	}
+	for key, value := range opts.AdditionalHeaders {
+		headers[key] = value
+	}
+	defaultOperation := strings.TrimSpace(opts.DefaultOperation)
+	if defaultOperation == "" {
+		defaultOperation = firstOperation(spec)
+	}
+	caller := httpjson.New(httpjson.Config{
+		ProviderName:     providerName,
+		BaseURL:          opts.BaseURL,
+		APIKey:           opts.APIKey,
+		Headers:          headers,
+		HTTPClient:       opts.HTTPClient,
+		Retry:            opts.Retry,
+		DefaultOperation: defaultOperation,
+		Routes:           routes,
+	})
+	var streamer llm.ProviderStreamCaller
+	if !opts.DisableStreaming {
+		streamer = caller
+	}
+	return BuildProviderAdapter(profile, ProviderAdapterOptions{
+		ProviderName: providerName,
+		Caller:       caller,
+		Streamer:     streamer,
+		Capabilities: opts.Capabilities,
+	})
 }
 
 // DefaultModel은 provider별 기본 모델을 정해요.
@@ -157,6 +241,7 @@ var providerRegistry = []providerRegistryEntry{
 				Stream:            "openai.Client.StreamProvider",
 				Source:            "http-json+sse",
 				Operations:        []string{"responses.create"},
+				Routes:            []ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
 			},
 		},
 		Conversion: openAICompatibleConversion("openai"),
@@ -178,6 +263,7 @@ var providerRegistry = []providerRegistryEntry{
 				Stream:            "openai.Client.StreamProvider via omniroute headers",
 				Source:            "http-gateway",
 				Operations:        []string{"responses.create", "omniroute.management", "omniroute.a2a"},
+				Routes:            []ProviderRouteSpec{{Operation: "responses.create", Method: http.MethodPost, Path: "/responses", Accept: "application/json"}},
 			},
 		},
 		Conversion: openAICompatibleConversion("omniroute"),
@@ -344,6 +430,7 @@ func cloneProviderSpec(spec ProviderSpec) ProviderSpec {
 	spec.Models = append([]string(nil), spec.Models...)
 	spec.AuthEnv = append([]string(nil), spec.AuthEnv...)
 	spec.Conversion.Operations = append([]string(nil), spec.Conversion.Operations...)
+	spec.Conversion.Routes = append([]ProviderRouteSpec(nil), spec.Conversion.Routes...)
 	if spec.Capabilities != nil {
 		capabilities := make(map[string]any, len(spec.Capabilities))
 		for key, value := range spec.Capabilities {
@@ -371,4 +458,39 @@ func ProviderAuthStatus(spec ProviderSpec) string {
 		}
 	}
 	return "missing"
+}
+
+func httpJSONRoutesFromSpec(routes []ProviderRouteSpec) map[string]httpjson.Route {
+	out := make(map[string]httpjson.Route, len(routes))
+	for _, route := range routes {
+		operation := strings.TrimSpace(route.Operation)
+		if operation == "" {
+			continue
+		}
+		out[operation] = httpjson.Route{Method: route.Method, Path: route.Path, Accept: route.Accept}
+	}
+	return out
+}
+
+func cloneHTTPJSONRoutes(routes map[string]httpjson.Route) map[string]httpjson.Route {
+	if len(routes) == 0 {
+		return nil
+	}
+	out := make(map[string]httpjson.Route, len(routes))
+	for operation, route := range routes {
+		route.Headers = cloneStringMap(route.Headers)
+		out[operation] = route
+	}
+	return out
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
