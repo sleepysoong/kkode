@@ -374,7 +374,7 @@ curl -X POST http://127.0.0.1:41234/api/v1/runs \
   }'
 ```
 
-run 상태와 상태 변경 SSE는 아래처럼 읽어요. `events_url`은 session event replay URL이라서 최종 tool/event log를 따라갈 때 같이 쓰면 돼요.
+run 상태와 상태 변경 SSE는 아래처럼 읽어요. `events_url`은 run event replay URL이라서 외부 패널이 그대로 따라가면 돼요.
 
 ```bash
 curl http://127.0.0.1:41234/api/v1/runs/run_...

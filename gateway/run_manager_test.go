@@ -22,7 +22,7 @@ func TestAsyncRunManagerStartsAndCompletesRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.ID == "" || run.Status != "queued" || run.EventsURL != "/api/v1/sessions/sess_1/events" {
+	if run.ID == "" || run.Status != "queued" || run.EventsURL != runEventsURL(run.ID) {
 		t.Fatalf("접수 run이 이상해요: %+v", run)
 	}
 	select {
@@ -392,7 +392,7 @@ func TestAsyncRunManagerRecoversStaleRuns(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	stale, err := store.SaveRun(ctx, session.Run{ID: "run_stale", SessionID: sess.ID, Status: "running", Prompt: "go", EventsURL: "/api/v1/sessions/" + sess.ID + "/events"})
+	stale, err := store.SaveRun(ctx, session.Run{ID: "run_stale", SessionID: sess.ID, Status: "running", Prompt: "go", EventsURL: runEventsURL("run_stale")})
 	if err != nil {
 		t.Fatal(err)
 	}

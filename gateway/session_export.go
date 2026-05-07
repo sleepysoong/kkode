@@ -195,9 +195,7 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 		for _, item := range req.Runs {
 			run := sessionRunFromDTO(item)
 			run.SessionID = imported.ID
-			if run.EventsURL == "" || originalID != imported.ID {
-				run.EventsURL = "/api/v1/sessions/" + imported.ID + "/events"
-			}
+			run.EventsURL = runEventsURL(run.ID)
 			if _, err := runStore.SaveRun(r.Context(), run); err != nil {
 				writeError(w, r, http.StatusInternalServerError, "import_run_failed", err.Error())
 				return

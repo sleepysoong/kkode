@@ -3115,6 +3115,7 @@ components:
             type: string
         events_url:
           type: string
+          description: Run event replay/SSE URL이에요. `/api/v1/runs/{run_id}/events` 형식으로 제공해요.
         started_at:
           type: string
           format: date-time

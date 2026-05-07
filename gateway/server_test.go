@@ -875,7 +875,7 @@ func newTestServer(t *testing.T, store session.Store, apiKey string) *Server {
 func TestGatewayListsGetsAndCancelsRuns(t *testing.T) {
 	store := openTestStore(t)
 	runs := map[string]RunDTO{
-		"run_1": {ID: "run_1", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"},
+		"run_1": {ID: "run_1", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_1")},
 	}
 	srv, err := New(Config{
 		Store: store,
@@ -1477,7 +1477,7 @@ func writeTestFile(t *testing.T, path string, content string) {
 func TestGatewayStreamsRunEvents(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
-	run := RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"}
+	run := RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_stream")}
 	srv, err := New(Config{
 		Store: store,
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
@@ -1518,7 +1518,7 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 func TestGatewayRunSSESendsHeartbeat(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
-	run := RunDTO{ID: "run_heartbeat", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"}
+	run := RunDTO{ID: "run_heartbeat", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_heartbeat")}
 	srv, err := New(Config{
 		Store: store,
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
@@ -1558,7 +1558,7 @@ func TestGatewayRunSSESendsHeartbeat(t *testing.T) {
 func TestGatewayRunSSEStreamsProgressEvents(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
-	run := RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "running", EventsURL: "/api/v1/sessions/sess_1/events"}
+	run := RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_progress")}
 	srv, err := New(Config{
 		Store: store,
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
@@ -2600,7 +2600,7 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 		t.Fatalf("import된 checkpoint가 이상해요: %+v err=%v", checkpoint, err)
 	}
 	run, err := targetStore.LoadRun(ctx, "run_import")
-	if err != nil || run.SessionID != "sess_imported" || !strings.Contains(run.EventsURL, "sess_imported") {
+	if err != nil || run.SessionID != "sess_imported" || run.EventsURL != runEventsURL("run_import") {
 		t.Fatalf("import된 run이 이상해요: %+v err=%v", run, err)
 	}
 	loadedResource, err := targetStore.LoadResource(ctx, session.ResourceMCPServer, mcpResource.ID)

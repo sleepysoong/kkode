@@ -252,11 +252,8 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
-			run.EventsURL = "/api/v1/sessions/" + result.Session.ID + "/events"
 		}
-		if run.EventsURL == "" {
-			run.EventsURL = "/api/v1/sessions/" + req.SessionID + "/events"
-		}
+		run.EventsURL = "/api/v1/runs/" + runID + "/events"
 		if runErr != nil {
 			run.Status = "failed"
 			run.Error = runErr.Error()

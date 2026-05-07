@@ -224,7 +224,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		runID = session.NewID("run")
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
-	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "queued", EventsURL: "/api/v1/sessions/" + req.SessionID + "/events", StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
+	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "queued", EventsURL: runEventsURL(runID), StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
 	m.mu.Lock()
 	if existing, exists := m.runs[runID]; exists {
 		if sameIdempotencyKey(existing.run.Metadata, req.Metadata) {
@@ -523,9 +523,7 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 			run.Subagents = cloneStringSlice(req.Subagents)
 		}
 		run.Metadata = withRequestIDMetadata(run.Metadata, req.Metadata[RequestIDMetadataKey])
-		if run.EventsURL == "" {
-			run.EventsURL = "/api/v1/sessions/" + run.SessionID + "/events"
-		}
+		run.EventsURL = runEventsURL(run.ID)
 		if run.EndedAt.IsZero() {
 			run.EndedAt = m.timestamp()
 		}
