@@ -2797,7 +2797,7 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &content); err != nil {
 		t.Fatal(err)
 	}
-	if content.Content != "two" {
+	if content.Content != "two" || content.ContentBytes != len("two") || content.FileBytes != int64(len("one\ntwo\nthree")) || !content.ContentTruncated {
 		t.Fatalf("file content range가 이상해요: %+v", content)
 	}
 
@@ -2815,6 +2815,20 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	}
 	if string(data) != "new" {
 		t.Fatalf("file write가 이상해요: %q", data)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/b.md&max_bytes=2", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	content = FileContentResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &content); err != nil {
+		t.Fatal(err)
+	}
+	if content.Content != "ne" || content.ContentBytes != 2 || content.FileBytes != 3 || !content.ContentTruncated {
+		t.Fatalf("file content byte 제한 metadata가 이상해요: %+v", content)
 	}
 }
 

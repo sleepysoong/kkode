@@ -25,9 +25,12 @@ type FileListResponse struct {
 }
 
 type FileContentResponse struct {
-	ProjectRoot string `json:"project_root"`
-	Path        string `json:"path"`
-	Content     string `json:"content"`
+	ProjectRoot      string `json:"project_root"`
+	Path             string `json:"path"`
+	Content          string `json:"content"`
+	ContentBytes     int    `json:"content_bytes,omitempty"`
+	FileBytes        int64  `json:"file_bytes,omitempty"`
+	ContentTruncated bool   `json:"content_truncated,omitempty"`
 }
 
 // FileGlobResponse는 웹 패널 파일 팔레트가 glob 결과를 바로 쓰게 해요.
@@ -148,12 +151,18 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rel := strings.TrimSpace(r.URL.Query().Get("path"))
-	content, err := ws.ReadFileRange(rel, workspace.ReadOptions{OffsetLine: queryInt(r, "offset_line", 0), LimitLines: queryInt(r, "limit_lines", 0), MaxBytes: queryInt(r, "max_bytes", 0)})
+	opts := workspace.ReadOptions{OffsetLine: queryInt(r, "offset_line", 0), LimitLines: queryInt(r, "limit_lines", 0), MaxBytes: queryInt(r, "max_bytes", 0)}
+	fileBytes, statErr := fileSize(ws, rel)
+	if statErr != nil {
+		writeError(w, r, http.StatusBadRequest, "read_file_failed", statErr.Error())
+		return
+	}
+	content, err := ws.ReadFileRange(rel, opts)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "read_file_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: rel, Content: content})
+	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: rel, Content: content, ContentBytes: len(content), FileBytes: fileBytes, ContentTruncated: fileContentTruncated(fileBytes, content, opts)})
 }
 
 func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +180,7 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "write_file_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content})
+	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content, ContentBytes: len(req.Content), FileBytes: int64(len(req.Content))})
 }
 
 func (s *Server) applyFilePatch(w http.ResponseWriter, r *http.Request) {
@@ -248,6 +257,28 @@ func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {
 		out = append(out, FileGrepMatchDTO{Path: match.Path, Line: match.Line, Excerpt: match.Excerpt})
 	}
 	return out
+}
+
+func fileSize(ws *workspace.Workspace, rel string) (int64, error) {
+	path, err := ws.Resolve(rel)
+	if err != nil {
+		return 0, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
+func fileContentTruncated(fileBytes int64, content string, opts workspace.ReadOptions) bool {
+	if opts.MaxBytes > 0 && fileBytes > int64(opts.MaxBytes) {
+		return true
+	}
+	if opts.OffsetLine > 0 || opts.LimitLines > 0 {
+		return int64(len(content)) < fileBytes
+	}
+	return false
 }
 
 func workspaceFromQuery(w http.ResponseWriter, r *http.Request) (*workspace.Workspace, string, bool) {

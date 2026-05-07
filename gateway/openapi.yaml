@@ -2003,6 +2003,16 @@ components:
           type: string
         content:
           type: string
+        content_bytes:
+          type: integer
+          description: 응답 content의 byte 수예요.
+        file_bytes:
+          type: integer
+          format: int64
+          description: 원본 파일 전체 byte 수예요.
+        content_truncated:
+          type: boolean
+          description: max_bytes나 line range 때문에 content가 파일 전체보다 작게 반환됐는지 알려줘요.
     FileGlobResponse:
       type: object
       required: [project_root, pattern, paths]
