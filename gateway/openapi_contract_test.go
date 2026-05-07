@@ -35,12 +35,44 @@ func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
 	}
 }
 
+type dtoSchemaCase struct {
+	schema string
+	dto    any
+}
+
 func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 	schemas := readOpenAPISchemaProperties(t)
-	cases := []struct {
-		schema string
-		dto    any
-	}{
+	for _, tc := range coreDTOSchemaCases() {
+		props := schemas[tc.schema]
+		if len(props) == 0 {
+			t.Fatalf("OpenAPI schema %s properties를 찾지 못했어요", tc.schema)
+		}
+		for _, field := range jsonFieldNames(tc.dto) {
+			if !props[field] {
+				t.Fatalf("OpenAPI schema %s에 DTO json field %s가 빠졌어요", tc.schema, field)
+			}
+		}
+	}
+}
+
+func TestOpenAPISchemaContractCoversGatewayDTOs(t *testing.T) {
+	covered := map[string]bool{}
+	for _, tc := range coreDTOSchemaCases() {
+		typeName := reflect.TypeOf(tc.dto).Name()
+		covered[typeName] = true
+		if strings.HasSuffix(typeName, "DTO") {
+			covered[strings.TrimSuffix(typeName, "DTO")] = true
+		}
+	}
+	for _, typeName := range exportedGatewayDTOTypeNames(t) {
+		if !covered[typeName] {
+			t.Fatalf("gateway DTO %s가 OpenAPI schema property 계약 테스트에 빠졌어요", typeName)
+		}
+	}
+}
+
+func coreDTOSchemaCases() []dtoSchemaCase {
+	return []dtoSchemaCase{
 		{schema: "HealthResponse", dto: HealthResponse{}},
 		{schema: "ReadyResponse", dto: ReadyResponse{}},
 		{schema: "VersionResponse", dto: VersionResponse{}},
@@ -114,17 +146,6 @@ func TestOpenAPISchemaPropertiesMatchCoreDTOs(t *testing.T) {
 		{schema: "GitLogResponse", dto: GitLogResponse{}},
 		{schema: "GitLogEntry", dto: GitLogEntryDTO{}},
 		{schema: "StatsResponse", dto: StatsResponse{}},
-	}
-	for _, tc := range cases {
-		props := schemas[tc.schema]
-		if len(props) == 0 {
-			t.Fatalf("OpenAPI schema %s properties를 찾지 못했어요", tc.schema)
-		}
-		for _, field := range jsonFieldNames(tc.dto) {
-			if !props[field] {
-				t.Fatalf("OpenAPI schema %s에 DTO json field %s가 빠졌어요", tc.schema, field)
-			}
-		}
 	}
 }
 
@@ -248,6 +269,24 @@ func readOpenAPISchemaProperties(t *testing.T) map[string]map[string]bool {
 		if m := propRe.FindStringSubmatch(line); m != nil {
 			out[current][m[1]] = true
 		}
+	}
+	return out
+}
+
+func exportedGatewayDTOTypeNames(t *testing.T) []string {
+	t.Helper()
+	data, err := os.ReadFile("dto.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	typeRe := regexp.MustCompile(`(?m)^type\s+([A-Z][A-Za-z0-9]*(?:Response|Request|DTO))\s+struct\s+\{`)
+	matches := typeRe.FindAllStringSubmatch(string(data), -1)
+	if len(matches) == 0 {
+		t.Fatal("gateway dto.go에서 공개 DTO 타입을 찾지 못했어요")
+	}
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		out = append(out, match[1])
 	}
 	return out
 }
