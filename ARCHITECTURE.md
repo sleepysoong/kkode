@@ -22,6 +22,8 @@ kkode/
 ├── go.mod
 ├── go.sum
 ├── app/                             # CLI/gateway가 공유하는 provider/agent 조립 도우미예요
+│   ├── provider_registry.go          # provider spec, converter profile, source factory registry예요
+│   └── provider_conversion.go        # 실행 없이 provider 요청 preview를 만드는 변환 도우미예요
 ├── agent/                           # 실제 coding agent loop와 guardrail/trace예요
 ├── session/                         # SQLite session store와 resume/fork 상태예요
 ├── runtime/                         # agent와 session store를 묶는 실행 runtime이에요
@@ -206,7 +208,7 @@ type AdaptedProvider struct {
 
 단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. 이 흐름은 `ProviderPipeline`이 실제 단계로 나눠서 실행해요. `Prepare`는 변환 preview나 debug UI가 재사용하고, `Call`은 API/SDK/CLI source 경계만 담당하며, `Decode`는 source 결과를 다시 표준 응답으로 맞춰요. 그래서 새 API를 붙일 때 core 타입을 수정하지 않고 converter와 caller만 추가하거나, OpenAI-compatible request builder와 별도 API caller/response parser를 조합하면 돼요. `AdaptedProvider`는 이 pipeline을 감싼 `llm.Provider` 구현체라서 기존 provider는 간단한 struct 조립만 유지해요.
 
-Streaming 흐름은 `PrepareStream → ProviderStreamCaller → EventStream`이에요. SSE/JSONL/SDK event stream처럼 응답이 event 단위인 provider는 response converter 없이도 stream provider를 구현할 수 있어요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
+Streaming 흐름은 `PrepareStream → ProviderStreamCaller → EventStream`이에요. SSE/JSONL/SDK event stream처럼 응답이 event 단위인 provider는 response converter 없이도 stream provider를 구현할 수 있어요. `app.ProviderConversionSet.Pipeline`은 registry에 등록된 변환기와 source caller를 조합하는 표준 진입점이에요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
 
 ### `llm.Response`
 
@@ -255,6 +257,8 @@ func ResolveProviderSpec(name string) (ProviderSpec, bool)
 func ProviderAuthStatus(spec ProviderSpec) string
 func BuildProvider(name, root string) (ProviderHandle, error)
 func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error)
+func BuildProviderPipeline(provider string, caller llm.ProviderCaller, streamer llm.ProviderStreamCaller) (llm.ProviderPipeline, error)
+func BuildProviderAdapter(provider string, opts ProviderAdapterOptions) (*llm.AdaptedProvider, error)
 func DefaultProviderOptions(root string) ProviderOptions
 func DefaultMCPServers(root string) map[string]llm.MCPServer
 func MergeProviderOptions(defaults ProviderOptions, explicit ProviderOptions) ProviderOptions
@@ -265,7 +269,7 @@ func NewRuntime(store session.Store, ag *agent.Agent, opts RuntimeOptions) *runt
 func DefaultCompactionPolicy() session.CompactionPolicy
 ```
 
-`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델, 인증 상태, 변환 profile 표시를 공유해요. `BuildProviderWithOptions`는 `DefaultProviderOptions(root)`와 저장 resource manifest를 `MergeProviderOptions`로 합친 뒤 같은 registry entry의 factory를 실행하므로 새 provider를 추가할 때 spec, alias, capability, 생성 로직을 한 곳에서 맞추면 돼요. 기본 MCP는 Context7 원격 HTTP MCP(`https://mcp.context7.com/mcp`)와 Serena stdio MCP예요. Serena는 `uvx` 또는 `KKODE_SERENA_COMMAND`가 있을 때만 붙여서 실행 환경에 없는 바이너리 때문에 기본 run이 깨지지 않게 해요. `KKODE_DEFAULT_MCP=off`면 기본 MCP를 붙이지 않아요. `ProviderHandle.BaseRequest`는 OpenAI-compatible HTTP MCP를 hosted `mcp` tool로 넘기고, Copilot은 stdio/http MCP를 SDK session config로 넘겨요. CLI와 gateway는 `MergeBaseRequest` 또는 `AgentOptions.BaseRequest`로 이 기본 request를 agent에 전달해요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
+`ProviderSpecs`는 provider registry에서 방어 복사한 spec을 돌려줘서 CLI/gateway/provider 기본 모델, 인증 상태, 변환 profile 표시를 공유해요. 같은 registry entry는 실행형 `ProviderConversionSet`도 들고 있어서 `PreviewProviderRequest`, `BuildProviderPipeline`, `BuildProviderAdapter`가 모두 같은 converter와 operation 기본값을 써요. 그래서 새 provider를 추가할 때 spec, alias, capability, 변환 profile, source 생성 로직을 한 entry에 맞추면 되고, OpenAI-compatible 파생 API는 converter를 재사용한 뒤 `ProviderCaller`/`ProviderStreamCaller` source만 바꾸면 돼요. `BuildProviderWithOptions`는 `DefaultProviderOptions(root)`와 저장 resource manifest를 `MergeProviderOptions`로 합친 뒤 같은 registry entry의 factory를 실행해요. 기본 MCP는 Context7 원격 HTTP MCP(`https://mcp.context7.com/mcp`)와 Serena stdio MCP예요. Serena는 `uvx` 또는 `KKODE_SERENA_COMMAND`가 있을 때만 붙여서 실행 환경에 없는 바이너리 때문에 기본 run이 깨지지 않게 해요. `KKODE_DEFAULT_MCP=off`면 기본 MCP를 붙이지 않아요. `ProviderHandle.BaseRequest`는 OpenAI-compatible HTTP MCP를 hosted `mcp` tool로 넘기고, Copilot은 stdio/http MCP를 SDK session config로 넘겨요. CLI와 gateway는 `MergeBaseRequest` 또는 `AgentOptions.BaseRequest`로 이 기본 request를 agent에 전달해요. `NewRuntime`은 history/todo/compaction 기본값을 CLI와 gateway가 같은 방식으로 쓰게 해요. `NewAgent`는 `tools.StandardTools`를 통해 `tools.FileTools`와 선택적 `tools.WebTools`를 같은 방식으로 붙여요. 예전 `workspace_*` tool은 `workspace.Workspace.Tools()`로 직접 사용할 수 있지만, 일반 agent 표면에는 `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_list`, `file_glob`, `file_grep`, `shell_run`, `web_fetch`만 노출해요.
 
 ## Prompt 템플릿 구현체
 

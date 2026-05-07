@@ -426,18 +426,17 @@ OPENAI_API_KEY=... OPENAI_TEST_MODEL=gpt-5-mini go test ./providers/openai -run 
 
 ## Provider 변환 파이프라인 예제
 
-새 API를 붙일 때는 아래처럼 표준 request를 provider 요청으로 바꾸는 converter와 실제 source caller를 분리해요. 실제 앱에서는 `AdaptedProvider`가 이 pipeline을 감싸서 `llm.Provider`로 노출해요.
+새 API를 붙일 때는 `llm.Request`를 바로 외부 API에 넘기지 않고, registry 변환 profile과 source caller를 조합해요. 핵심 흐름은 **요청 → 컨버팅 레이어 → API/SDK/CLI 호출 → 표준 응답**이에요. OpenAI-compatible 파생 API라면 converter는 그대로 재사용하고 `ProviderCaller`만 새로 만들면 돼요.
 
 ```go
-pipeline := llm.ProviderPipeline{
-    ProviderName:      "my-gateway",
-    RequestConverter:  openai.ResponsesConverter{ProviderName: "my-gateway"},
-    ResponseConverter: openai.ResponsesConverter{ProviderName: "my-gateway"},
-    Caller:            myCaller, // HTTP API, SDK, CLI, fake source 모두 가능해요.
-    Options:           llm.ConvertOptions{Operation: "responses.create"},
+// myCaller는 HTTP API, SDK, CLI, fake source 어디든 가능해요.
+// 해야 할 일은 변환된 ProviderRequest를 받아 ProviderResult를 돌려주는 것뿐이에요.
+pipeline, err := app.BuildProviderPipeline("openai-compatible", myCaller, myStreamer)
+if err != nil {
+    return err
 }
 
-preq, err := pipeline.Prepare(ctx, req) // preview/debug에서 재사용해요.
+preq, err := pipeline.Prepare(ctx, req) // preview/debug UI도 같은 변환 규칙을 써요.
 if err != nil {
     return err
 }
@@ -446,6 +445,15 @@ if err != nil {
     return err
 }
 resp, err := pipeline.Decode(ctx, result)
+```
+
+`llm.Provider` 구현체가 필요하면 같은 registry를 이렇게 감싸요.
+
+```go
+provider, err := app.BuildProviderAdapter("openai", app.ProviderAdapterOptions{
+    Caller:   myCaller,
+    Streamer: myStreamer,
+})
 ```
 
 ## OpenAI-compatible 예제

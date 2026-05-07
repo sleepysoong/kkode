@@ -211,6 +211,51 @@ func TestPreviewProviderRequestSupportsAliasAndRawPayload(t *testing.T) {
 	}
 }
 
+func TestBuildProviderPipelineLetsSourceOnlyCallerReuseConversion(t *testing.T) {
+	caller := &sourceOnlyCaller{}
+	pipeline, err := BuildProviderPipeline("openai-compatible", caller, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := pipeline.Generate(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caller.got.Operation != "responses.create" || caller.got.Model != "gpt-5-mini" || caller.got.Body == nil {
+		t.Fatalf("표준 요청이 provider 요청으로 변환되지 않았어요: %+v", caller.got)
+	}
+	if resp.Provider != "openai" || resp.Text != "source-only 응답이에요" {
+		t.Fatalf("source 응답이 표준 응답으로 복원되지 않았어요: %+v", resp)
+	}
+}
+
+func TestBuildProviderAdapterWrapsCustomSource(t *testing.T) {
+	caller := &sourceOnlyCaller{}
+	provider, err := BuildProviderAdapter("openai", ProviderAdapterOptions{Caller: caller})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := provider.Generate(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("어댑터")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.Name() != "openai" || !provider.Capabilities().Tools || !provider.Capabilities().Streaming {
+		t.Fatalf("registry capability가 adapter에 전파되어야 해요: %s %+v", provider.Name(), provider.Capabilities())
+	}
+	if caller.got.Operation != "responses.create" || resp.Text != "source-only 응답이에요" {
+		t.Fatalf("adapter가 변환 레이어와 source caller를 연결하지 못했어요: got=%+v resp=%+v", caller.got, resp)
+	}
+}
+
+type sourceOnlyCaller struct {
+	got llm.ProviderRequest
+}
+
+func (c *sourceOnlyCaller) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm.ProviderResult, error) {
+	c.got = req
+	return llm.ProviderResult{Body: []byte(`{"id":"resp_source","model":"gpt-5-mini","status":"completed","output_text":"source-only 응답이에요"}`)}, nil
+}
+
 func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	ws, _, err := NewWorkspace(WorkspaceOptions{Root: t.TempDir()})
 	if err != nil {

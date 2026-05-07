@@ -8,9 +8,6 @@ import (
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
-	"github.com/sleepysoong/kkode/providers/codexcli"
-	"github.com/sleepysoong/kkode/providers/copilot"
-	"github.com/sleepysoong/kkode/providers/openai"
 )
 
 const defaultProviderPreviewBytes = 64 << 10
@@ -33,24 +30,11 @@ type ProviderRequestPreview struct {
 
 // PreviewProviderRequest는 표준 llm.Request를 provider별 API/source 요청으로 변환하지만 실제 호출은 하지 않아요.
 func PreviewProviderRequest(ctx context.Context, provider string, req llm.Request, stream bool, maxBytes int) (*ProviderRequestPreview, error) {
-	spec, ok := ResolveProviderSpec(provider)
-	if !ok {
-		return nil, fmt.Errorf("unknown provider: %s", provider)
-	}
-	converter, err := requestConverterForProvider(spec.Name)
+	spec, conversion, err := resolveProviderConversion(provider)
 	if err != nil {
 		return nil, err
 	}
-	opts := llm.ConvertOptions{Stream: stream}
-	if len(spec.Conversion.Operations) > 0 {
-		opts.Operation = spec.Conversion.Operations[0]
-	}
-	pipeline := llm.ProviderPipeline{
-		ProviderName:     spec.Name,
-		RequestConverter: converter,
-		Options:          opts,
-		StreamOptions:    opts,
-	}
+	pipeline := conversion.Pipeline(spec.Name, nil, nil)
 	var preq llm.ProviderRequest
 	if stream {
 		preq, err = pipeline.PrepareStream(ctx, req)
@@ -82,21 +66,6 @@ func PreviewProviderRequest(ctx context.Context, provider string, req llm.Reques
 		RawJSON:       raw,
 		RawTruncated:  rawTruncated,
 	}, nil
-}
-
-func requestConverterForProvider(name string) (llm.RequestConverter, error) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "openai":
-		return openai.ResponsesConverter{ProviderName: "openai"}, nil
-	case "omniroute":
-		return openai.ResponsesConverter{ProviderName: "omniroute"}, nil
-	case "copilot":
-		return copilot.SessionConverter{}, nil
-	case "codex":
-		return codexcli.ExecConverter{}, nil
-	default:
-		return nil, fmt.Errorf("provider request converter가 등록되지 않았어요: %s", name)
-	}
 }
 
 func previewRaw(raw any, maxBytes int) (string, string, bool, error) {
