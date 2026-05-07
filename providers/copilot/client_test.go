@@ -87,3 +87,13 @@ func TestCopilotEventToStream(t *testing.T) {
 		t.Fatalf("event=%#v", ev)
 	}
 }
+
+func TestCopilotStreamProviderValidatesConvertedRequest(t *testing.T) {
+	client := New(Config{})
+	if _, err := client.StreamProvider(context.Background(), llm.ProviderRequest{Operation: "other"}); err == nil {
+		t.Fatal("지원하지 않는 stream operation은 거부해야 해요")
+	}
+	if _, err := client.StreamProvider(context.Background(), llm.ProviderRequest{Operation: sessionSendOperation}); err == nil {
+		t.Fatal("변환된 session stream payload가 없으면 거부해야 해요")
+	}
+}

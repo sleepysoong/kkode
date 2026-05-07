@@ -177,11 +177,33 @@ func (c *Client) NewSession(ctx context.Context, req llm.SessionRequest) (llm.Se
 }
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
-	sess, err := c.NewSession(ctx, llm.SessionRequest{Model: req.Model, WorkingDirectory: c.cfg.WorkingDirectory, Reasoning: req.Reasoning})
+	adapter := llm.AdaptedProvider{
+		ProviderName:         c.Name(),
+		ProviderCapabilities: c.Capabilities(),
+		Converter:            SessionConverter{},
+		Streamer:             c,
+		Options:              llm.ConvertOptions{Operation: sessionSendOperation},
+		StreamOptions:        llm.ConvertOptions{Operation: sessionSendOperation, Stream: true},
+	}
+	return adapter.Stream(ctx, req)
+}
+
+func (c *Client) StreamProvider(ctx context.Context, req llm.ProviderRequest) (llm.EventStream, error) {
+	if req.Operation != "" && req.Operation != sessionSendOperation {
+		return nil, fmt.Errorf("지원하지 않는 Copilot SDK stream operation이에요: %s", req.Operation)
+	}
+	payload, ok := req.Raw.(sessionSendPayload)
+	if !ok {
+		return nil, fmt.Errorf("copilot session stream payload가 필요해요")
+	}
+	sess, err := c.NewSession(ctx, llm.SessionRequest{Model: req.Model, WorkingDirectory: c.cfg.WorkingDirectory, Reasoning: payload.Request.Reasoning})
 	if err != nil {
 		return nil, err
 	}
-	return sess.Stream(ctx, req)
+	if concrete, ok := sess.(*Session); ok {
+		return concrete.streamPrompt(ctx, payload.Request, payload.Prompt)
+	}
+	return sess.Stream(ctx, payload.Request)
 }
 
 type Session struct {
@@ -217,6 +239,10 @@ func (s *Session) sendPrompt(ctx context.Context, req llm.Request, prompt string
 }
 
 func (s *Session) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
+	return s.streamPrompt(ctx, req, renderPrompt(req))
+}
+
+func (s *Session) streamPrompt(ctx context.Context, req llm.Request, prompt string) (llm.EventStream, error) {
 	events := make(chan llm.StreamEvent, 64)
 	var closeOnce sync.Once
 	closeEvents := func() { closeOnce.Do(func() { close(events) }) }
@@ -230,7 +256,7 @@ func (s *Session) Stream(ctx context.Context, req llm.Request) (llm.EventStream,
 			closeEvents()
 		}
 	})
-	_, err := s.session.Send(ctx, ghcopilot.MessageOptions{Prompt: renderPrompt(req)})
+	_, err := s.session.Send(ctx, ghcopilot.MessageOptions{Prompt: prompt})
 	if err != nil {
 		unsubscribe()
 		closeEvents()

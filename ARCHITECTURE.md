@@ -782,7 +782,7 @@ func ToCopilotMCPServer(server llm.MCPServer) copilot.MCPServerConfig
 func ToCopilotAgent(agent llm.Agent) copilot.CustomAgentConfig
 ```
 
-`Generate`는 `llm.AdaptedProvider`를 통해 `SessionConverter`와 `Client.CallProvider`를 연결해요. converter는 표준 request를 SDK session prompt payload로 만들고, caller는 Copilot session 생성, send, close lifetime을 관리해요. SDK가 요청하는 실행 확인은 별도 권한 시스템으로 끌어올리지 않고 기존 YOLO 승인 handler로 즉시 승인해요.
+`Generate`는 `llm.AdaptedProvider`를 통해 `SessionConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter와 `ProviderStreamCaller`를 통해 표준 request를 SDK session prompt payload로 먼저 바꾼 뒤 Copilot session event stream에 전달해요. converter는 표준 request를 SDK session prompt payload로 만들고, caller는 Copilot session 생성, send, close lifetime을 관리해요. SDK가 요청하는 실행 확인은 별도 권한 시스템으로 끌어올리지 않고 기존 YOLO 승인 handler로 즉시 승인해요.
 
 예제는 이렇게 써요.
 
@@ -813,7 +813,7 @@ func (ExecConverter) ConvertRequest(ctx context.Context, req llm.Request, opts l
 func (ExecConverter) ConvertResponse(ctx context.Context, result llm.ProviderResult) (*llm.Response, error)
 ```
 
-`Generate`는 `llm.AdaptedProvider`를 통해 `ExecConverter`와 `Client.CallProvider`를 연결해요. converter는 표준 request를 Codex CLI prompt 실행 payload로 만들고, caller는 `codex exec --json -a never --sandbox danger-full-access` 흐름을 유지해요. streaming은 stdout JSONL lifetime을 직접 관리해서 event를 `llm.StreamEvent`로 바꿔요.
+`Generate`는 `llm.AdaptedProvider`를 통해 `ExecConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter와 `ProviderStreamCaller`를 통해 표준 request를 Codex CLI prompt 실행 payload로 먼저 바꾼 뒤 JSONL subprocess에 전달해요. converter는 표준 request를 Codex CLI prompt 실행 payload로 만들고, caller는 `codex exec --json -a never --sandbox danger-full-access` 흐름을 유지해요. streaming은 stdout JSONL lifetime을 직접 관리해서 event를 `llm.StreamEvent`로 바꿔요.
 
 예제는 이렇게 써요.
 

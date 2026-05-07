@@ -85,7 +85,26 @@ func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 }
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
-	cmd := c.command(ctx, req)
+	adapter := llm.AdaptedProvider{
+		ProviderName:         c.Name(),
+		ProviderCapabilities: c.Capabilities(),
+		Converter:            ExecConverter{},
+		Streamer:             c,
+		Options:              llm.ConvertOptions{Operation: execOperation},
+		StreamOptions:        llm.ConvertOptions{Operation: execOperation, Stream: true},
+	}
+	return adapter.Stream(ctx, req)
+}
+
+func (c *Client) StreamProvider(ctx context.Context, req llm.ProviderRequest) (llm.EventStream, error) {
+	if req.Operation != "" && req.Operation != execOperation {
+		return nil, fmt.Errorf("지원하지 않는 Codex CLI stream operation이에요: %s", req.Operation)
+	}
+	payload, ok := req.Raw.(execPayload)
+	if !ok {
+		return nil, fmt.Errorf("codex CLI stream payload가 필요해요")
+	}
+	cmd := c.commandPrompt(ctx, payload.Request, payload.Prompt)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -101,10 +120,6 @@ func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, 
 	closer := &processCloser{cmd: cmd, stdout: stdout, stderr: stderr}
 	go readJSONL(ctx, stdout, stderr, c.Name(), req.Model, events, cmd)
 	return llm.NewChannelStream(ctx, events, closer), nil
-}
-
-func (c *Client) command(ctx context.Context, req llm.Request, extra ...string) *exec.Cmd {
-	return c.commandPrompt(ctx, req, renderPrompt(req), extra...)
 }
 
 func (c *Client) commandPrompt(ctx context.Context, req llm.Request, prompt string, extra ...string) *exec.Cmd {
