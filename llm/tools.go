@@ -128,6 +128,9 @@ type ToolLoopOptions struct {
 // provider를 호출하고, 요청된 tool을 실행하고, provider output item과 tool output을 붙인 뒤 반복해요.
 // Response.Output에 reasoning item을 보존하는 provider라면 reasoning context도 계속 유지할 수 있어요.
 func RunToolLoop(ctx context.Context, p Provider, req Request, tools ToolRegistry, opts ToolLoopOptions) (*Response, error) {
+	if p == nil {
+		return nil, fmt.Errorf("provider is required")
+	}
 	max := opts.MaxIterations
 	if max <= 0 {
 		max = 8
@@ -137,6 +140,9 @@ func RunToolLoop(ctx context.Context, p Provider, req Request, tools ToolRegistr
 		resp, err := p.Generate(ctx, current)
 		if err != nil {
 			return nil, err
+		}
+		if resp == nil {
+			return nil, fmt.Errorf("provider returned nil response")
 		}
 		if len(resp.ToolCalls) == 0 {
 			return resp, nil

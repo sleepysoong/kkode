@@ -140,6 +140,18 @@ func TestRunToolLoopPreservesProviderItemsAndAppendsToolOutput(t *testing.T) {
 	}
 }
 
+func TestRunToolLoopRejectsNilProviderResponse(t *testing.T) {
+	_, err := RunToolLoop(context.Background(), nil, Request{Model: "test"}, nil, ToolLoopOptions{})
+	if err == nil || !strings.Contains(err.Error(), "provider is required") {
+		t.Fatalf("nil provider 오류가 필요해요: %v", err)
+	}
+	p := nilResponseProvider{}
+	_, err = RunToolLoop(context.Background(), p, Request{Model: "test"}, nil, ToolLoopOptions{})
+	if err == nil || !strings.Contains(err.Error(), "nil response") {
+		t.Fatalf("nil response 오류가 필요해요: %v", err)
+	}
+}
+
 func TestRunToolLoopConvertsParallelToolPanicToToolOutput(t *testing.T) {
 	p := &panicToolProvider{}
 	reg := ToolRegistry{
@@ -229,6 +241,16 @@ type manyToolProvider struct {
 type panicToolProvider struct {
 	calls    int
 	sawPanic bool
+}
+
+type nilResponseProvider struct{}
+
+func (nilResponseProvider) Name() string { return "nil-provider" }
+func (nilResponseProvider) Capabilities() Capabilities {
+	return Capabilities{}
+}
+func (nilResponseProvider) Generate(ctx context.Context, req Request) (*Response, error) {
+	return nil, nil
 }
 
 func (p *panicToolProvider) Name() string { return "panic-provider" }
