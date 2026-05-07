@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -66,6 +67,22 @@ func TestOpenAPIOperationsExposeUniqueOperationIDs(t *testing.T) {
 			t.Fatalf("OpenAPI operationId가 중복됐어요: id=%s first=%s second=%s", id, previous, op)
 		}
 		seen[id] = op
+	}
+}
+
+func TestOpenAPIPathParametersAreDeclared(t *testing.T) {
+	operations := readOpenAPIPathParameterDeclarations(t)
+	for op, contract := range operations {
+		for _, name := range sortedKeys(contract.expected) {
+			if !contract.declared[name] {
+				t.Fatalf("OpenAPI operation %s 경로 변수 {%s}가 parameters에 선언되지 않았어요", op, name)
+			}
+		}
+		for _, name := range sortedKeys(contract.declared) {
+			if !contract.expected[name] {
+				t.Fatalf("OpenAPI operation %s에 경로에 없는 path parameter %s가 선언됐어요", op, name)
+			}
+		}
 	}
 }
 
@@ -316,6 +333,130 @@ func readOpenAPIOperationIDs(t *testing.T) map[string]string {
 	return out
 }
 
+type openAPIPathParameterContract struct {
+	expected map[string]bool
+	declared map[string]bool
+}
+
+func readOpenAPIPathParameterDeclarations(t *testing.T) map[string]openAPIPathParameterContract {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathRe := regexp.MustCompile(`^  (/[^:]+):$`)
+	methodRe := regexp.MustCompile(`^    (get|post|put|delete|patch|options):$`)
+	pathParamRe := regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
+	nameRe := regexp.MustCompile(`^\s*name:\s*([A-Za-z0-9_]+)\s*$`)
+	refRe := regexp.MustCompile(`\$ref:\s*'?#/components/parameters/([A-Za-z0-9_]+)'?`)
+	parameterRefs := readOpenAPIPathParameterComponents(t, string(data))
+	out := map[string]openAPIPathParameterContract{}
+	currentPath := ""
+	currentOp := ""
+	pathParamItem := false
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "components:" {
+			break
+		}
+		if m := pathRe.FindStringSubmatch(line); m != nil {
+			currentPath = m[1]
+			currentOp = ""
+			pathParamItem = false
+			continue
+		}
+		if currentPath == "" {
+			continue
+		}
+		if m := methodRe.FindStringSubmatch(line); m != nil {
+			currentOp = m[1] + " " + currentPath
+			contract := openAPIPathParameterContract{expected: map[string]bool{}, declared: map[string]bool{}}
+			for _, param := range pathParamRe.FindAllStringSubmatch(currentPath, -1) {
+				contract.expected[param[1]] = true
+			}
+			if len(contract.expected) > 0 {
+				out[currentOp] = contract
+			}
+			pathParamItem = false
+			continue
+		}
+		if currentOp == "" {
+			continue
+		}
+		contract, ok := out[currentOp]
+		if !ok {
+			continue
+		}
+		if m := refRe.FindStringSubmatch(line); m != nil {
+			if name := parameterRefs[m[1]]; name != "" {
+				contract.declared[name] = true
+				out[currentOp] = contract
+			}
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ") {
+			pathParamItem = false
+		}
+		if trimmed == "- in: path" || trimmed == "in: path" {
+			pathParamItem = true
+			continue
+		}
+		if pathParamItem {
+			if m := nameRe.FindStringSubmatch(line); m != nil {
+				contract.declared[m[1]] = true
+				out[currentOp] = contract
+				pathParamItem = false
+			}
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("OpenAPI path parameter operation을 읽지 못했어요")
+	}
+	return out
+}
+
+func readOpenAPIPathParameterComponents(t *testing.T, text string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	inParameters := false
+	current := ""
+	currentIsPath := false
+	componentRe := regexp.MustCompile(`^    ([A-Za-z0-9_]+):$`)
+	nameRe := regexp.MustCompile(`^\s*name:\s*([A-Za-z0-9_]+)\s*$`)
+	for _, line := range strings.Split(text, "\n") {
+		if line == "  parameters:" {
+			inParameters = true
+			current = ""
+			currentIsPath = false
+			continue
+		}
+		if !inParameters {
+			continue
+		}
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") {
+			break
+		}
+		if m := componentRe.FindStringSubmatch(line); m != nil {
+			current = m[1]
+			currentIsPath = false
+			continue
+		}
+		if current == "" {
+			continue
+		}
+		if strings.TrimSpace(line) == "in: path" {
+			currentIsPath = true
+			continue
+		}
+		if currentIsPath {
+			if m := nameRe.FindStringSubmatch(line); m != nil {
+				out[current] = m[1]
+			}
+		}
+	}
+	return out
+}
+
 func readOpenAPIPaths(t *testing.T) map[string]map[string]bool {
 	t.Helper()
 	data, err := os.ReadFile("openapi.yaml")
@@ -345,6 +486,15 @@ func readOpenAPIPaths(t *testing.T) map[string]map[string]bool {
 		t.Fatal("OpenAPI paths를 읽지 못했어요")
 	}
 	return paths
+}
+
+func sortedKeys(values map[string]bool) []string {
+	out := make([]string, 0, len(values))
+	for key := range values {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func readOpenAPISchemaProperties(t *testing.T) map[string]map[string]bool {
