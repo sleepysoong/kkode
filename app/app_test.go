@@ -74,6 +74,12 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	specs[0].Capabilities["tools"] = false
 	specs[0].Conversion.Operations = append(specs[0].Conversion.Operations, "mutated-operation")
 	specs[0].Conversion.Routes = append(specs[0].Conversion.Routes, ProviderRouteSpec{Operation: "mutated-route"})
+	if len(specs[0].Conversion.Routes) > 0 {
+		if specs[0].Conversion.Routes[0].Query == nil {
+			specs[0].Conversion.Routes[0].Query = map[string]string{}
+		}
+		specs[0].Conversion.Routes[0].Query["mutated"] = "yes"
+	}
 	fresh := ProviderSpecs()
 	if len(fresh[0].Aliases) > 0 && fresh[0].Aliases[len(fresh[0].Aliases)-1] == "mutated" {
 		t.Fatal("ProviderSpecs는 alias slice를 방어 복사해야 해요")
@@ -89,6 +95,9 @@ func TestProviderSpecsAreDefensiveCopies(t *testing.T) {
 	}
 	if len(fresh[0].Conversion.Routes) > 0 && fresh[0].Conversion.Routes[len(fresh[0].Conversion.Routes)-1].Operation == "mutated-route" {
 		t.Fatal("ProviderSpecs는 conversion route slice를 방어 복사해야 해요")
+	}
+	if len(fresh[0].Conversion.Routes) > 0 && fresh[0].Conversion.Routes[0].Query["mutated"] == "yes" {
+		t.Fatal("ProviderSpecs는 conversion route query map을 방어 복사해야 해요")
 	}
 }
 
@@ -500,7 +509,8 @@ func TestRegisterHTTPJSONProvidersFromJSONAndEnv(t *testing.T) {
 		"base_url": "https://json.example.test/v1",
 		"api_key_env": ["CUSTOM_JSON_KEY"],
 		"disable_streaming": true,
-		"source": "json-config"
+		"source": "json-config",
+		"routes": [{"operation":"responses.create","method":"POST","path":"/responses/{model}","query":{"api-version":"{metadata.api_version}"}}]
 	}`
 	unregister, err := RegisterHTTPJSONProvidersFromJSON(raw)
 	if err != nil {
@@ -509,7 +519,7 @@ func TestRegisterHTTPJSONProvidersFromJSONAndEnv(t *testing.T) {
 	defer unregister()
 
 	spec, ok := ResolveProviderSpec("registered-json-compatible")
-	if !ok || spec.Name != "registered-json-http" || spec.DefaultModel != "json-model" || spec.Conversion.Source != "json-config" || spec.Capabilities["streaming"] != false {
+	if !ok || spec.Name != "registered-json-http" || spec.DefaultModel != "json-model" || spec.Conversion.Source != "json-config" || spec.Capabilities["streaming"] != false || len(spec.Conversion.Routes) != 1 || spec.Conversion.Routes[0].Query["api-version"] != "{metadata.api_version}" {
 		t.Fatalf("JSON provider 등록이 discovery에 반영돼야 해요: spec=%+v ok=%v", spec, ok)
 	}
 	if ProviderAuthStatus(spec) != "configured" {

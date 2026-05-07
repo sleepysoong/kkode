@@ -107,6 +107,19 @@ func (f ProviderStreamCallerFunc) StreamProvider(ctx context.Context, req Provid
 	return f(ctx, req)
 }
 
+// CloneMetadata는 요청 변환 경계에서 metadata map을 방어 복사해요.
+// converter가 원본 Request.Metadata를 그대로 공유하지 않게 해서 route template와 source adapter가 안전하게 값을 읽게 해요.
+func CloneMetadata(metadata map[string]string) map[string]string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		out[key] = value
+	}
+	return out
+}
+
 // AdaptedProvider는 "내부 요청 -> 변환 -> source 호출 -> 내부 응답" 흐름을 재사용하는 Provider 구현체예요.
 // provider별 차이는 converter/caller/streamer에 격리해요.
 type AdaptedProvider struct {

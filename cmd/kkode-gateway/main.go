@@ -635,7 +635,7 @@ func routeDTOs(routes []app.ProviderRouteSpec) []gateway.RouteDTO {
 	}
 	out := make([]gateway.RouteDTO, 0, len(routes))
 	for _, route := range routes {
-		out = append(out, gateway.RouteDTO{Operation: route.Operation, Method: route.Method, Path: route.Path, Accept: route.Accept})
+		out = append(out, gateway.RouteDTO{Operation: route.Operation, Method: route.Method, Path: route.Path, Accept: route.Accept, Query: cloneStringMap(route.Query)})
 	}
 	return out
 }

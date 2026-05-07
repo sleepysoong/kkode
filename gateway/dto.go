@@ -281,10 +281,11 @@ type ConversionDTO struct {
 
 // RouteDTO는 provider conversion operation이 HTTP source에서 어떤 route를 쓰는지 보여줘요.
 type RouteDTO struct {
-	Operation string `json:"operation"`
-	Method    string `json:"method,omitempty"`
-	Path      string `json:"path"`
-	Accept    string `json:"accept,omitempty"`
+	Operation string            `json:"operation"`
+	Method    string            `json:"method,omitempty"`
+	Path      string            `json:"path"`
+	Accept    string            `json:"accept,omitempty"`
+	Query     map[string]string `json:"query,omitempty"`
 }
 
 type ProviderListResponse struct {

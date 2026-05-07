@@ -19,8 +19,12 @@ func TestResponsesConverterMapsStandardRequestToProviderRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preq.Operation != responsesOperation || preq.Model != "gpt-5-mini" || !preq.Stream {
+	if preq.Operation != responsesOperation || preq.Model != "gpt-5-mini" || !preq.Stream || preq.Metadata["request_id"] != "req_1" {
 		t.Fatalf("provider request metadata가 이상해요: %+v", preq)
+	}
+	preq.Metadata["request_id"] = "mutated"
+	if preq.Body.(map[string]any)["metadata"].(map[string]string)["request_id"] != "req_1" {
+		t.Fatalf("ProviderRequest.Metadata는 body metadata와 독립된 복사본이어야 해요: %+v", preq.Metadata)
 	}
 	body := preq.Body.(map[string]any)
 	if body["previous_response_id"] != "resp_prev" || body["metadata"].(map[string]string)["request_id"] != "req_1" || body["parallel_tool_calls"] != true {

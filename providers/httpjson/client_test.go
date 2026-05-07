@@ -111,3 +111,50 @@ func TestCallerRequiresMappedOperation(t *testing.T) {
 		t.Fatal("operation 기본값도 route도 없으면 실패해야 해요")
 	}
 }
+
+func TestCallerExpandsRoutePathAndQueryTemplates(t *testing.T) {
+	var gotEscapedPath string
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotEscapedPath = r.URL.EscapedPath()
+		gotQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	caller := New(Config{
+		ProviderName:     "templated-api",
+		BaseURL:          server.URL,
+		HTTPClient:       server.Client(),
+		DefaultOperation: "model.generate",
+		Routes: map[string]Route{
+			"model.generate": {
+				Path:  "/v1/providers/{provider}/models/{model}/generate",
+				Query: map[string]string{"api-version": "{metadata.api_version}", "operation": "{operation}", "static": "yes"},
+			},
+		},
+	})
+	_, err := caller.CallProvider(context.Background(), llm.ProviderRequest{
+		Operation: "model.generate",
+		Model:     "claude/sonnet",
+		Body:      map[string]any{"prompt": "안녕"},
+		Metadata:  map[string]string{"provider": "anthropic", "api_version": "2026-05-07"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotEscapedPath != "/v1/providers/anthropic/models/claude%2Fsonnet/generate" {
+		t.Fatalf("path template가 path escaping과 함께 확장돼야 해요: %s", gotEscapedPath)
+	}
+	if !strings.Contains(gotQuery, "api-version=2026-05-07") || !strings.Contains(gotQuery, "operation=model.generate") || !strings.Contains(gotQuery, "static=yes") {
+		t.Fatalf("query template가 확장돼야 해요: %s", gotQuery)
+	}
+}
+
+func TestCallerReportsMissingRouteTemplateValue(t *testing.T) {
+	caller := New(Config{BaseURL: "https://example.test", Routes: map[string]Route{"model.generate": {Path: "/v1/providers/{provider}/generate"}}})
+	_, err := caller.CallProvider(context.Background(), llm.ProviderRequest{Operation: "model.generate", Body: map[string]any{"ok": true}})
+	if err == nil || !strings.Contains(err.Error(), "provider") {
+		t.Fatalf("누락된 template 값은 명확히 실패해야 해요: %v", err)
+	}
+}

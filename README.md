@@ -505,6 +505,31 @@ resp, err := pipeline.Generate(ctx, req)
 
 SSE source도 같은 caller를 `Streamer`로 넘기면 raw SSE frame을 `llm.StreamEvent`로 받을 수 있어요. provider별 text delta/tool call 의미 해석이 필요하면 전용 `ProviderStreamCaller`를 추가하면 돼요.
 
+고정 `/responses`가 아닌 API도 route template로 처리해요. `Path`와 `Query` 값에는 `{model}`, `{operation}`, `{metadata.key}` 또는 `{key}`를 쓸 수 있고, 값은 `llm.ProviderRequest.Metadata`에서 가져와요. path 값은 자동으로 escape되므로 provider/model 이름에 `/`가 있어도 route가 깨지지 않아요.
+
+```go
+caller := httpjson.New(httpjson.Config{
+    ProviderName:     "templated-api",
+    BaseURL:          "https://api.example.com",
+    DefaultOperation: "model.generate",
+    Routes: map[string]httpjson.Route{
+        "model.generate": {
+            Method: http.MethodPost,
+            Path:   "/v1/providers/{provider}/models/{model}/generate",
+            Query:  map[string]string{"api-version": "{metadata.api_version}"},
+        },
+    },
+})
+
+preq := llm.ProviderRequest{
+    Operation: "model.generate",
+    Model:     "claude/sonnet",
+    Body:      map[string]any{"prompt": "안녕"},
+    Metadata:  map[string]string{"provider": "anthropic", "api_version": "2026-05-07"},
+}
+result, err := caller.CallProvider(ctx, preq)
+```
+
 `llm.Provider` 구현체가 필요하면 같은 registry를 이렇게 감싸요.
 
 ```go
@@ -542,6 +567,14 @@ unregister, err := app.RegisterHTTPJSONProvider(app.HTTPJSONProviderRegistration
     BaseURL:      "https://api.example.com/v1",
     APIKeyEnv:    []string{"MY_GATEWAY_API_KEY"},
     Source:       "my-http-json-gateway",
+    Routes: []app.ProviderRouteSpec{
+        {
+            Operation: "responses.create",
+            Method:    http.MethodPost,
+            Path:      "/responses",
+            Query:     map[string]string{"trace": "{metadata.trace_id}"},
+        },
+    },
 })
 if err != nil {
     return err

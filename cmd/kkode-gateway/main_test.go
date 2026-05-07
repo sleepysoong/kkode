@@ -69,7 +69,7 @@ func TestProviderDTOsExposeConversionProfile(t *testing.T) {
 }
 
 func TestProviderDTOsIncludeEnvRegisteredHTTPJSONProviders(t *testing.T) {
-	t.Setenv("KKODE_TEST_HTTPJSON_PROVIDERS", `{"name":"gateway-env-http","aliases":["gateway-env-compatible"],"default_model":"env-model","base_url":"https://env.example.test/v1","source":"env-http-json"}`)
+	t.Setenv("KKODE_TEST_HTTPJSON_PROVIDERS", `{"name":"gateway-env-http","aliases":["gateway-env-compatible"],"default_model":"env-model","base_url":"https://env.example.test/v1","source":"env-http-json","routes":[{"operation":"responses.create","path":"/responses/{model}","query":{"trace":"{metadata.trace_id}"}}]}`)
 	unregister, err := app.RegisterHTTPJSONProvidersFromEnv("KKODE_TEST_HTTPJSON_PROVIDERS")
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestProviderDTOsIncludeEnvRegisteredHTTPJSONProviders(t *testing.T) {
 			break
 		}
 	}
-	if found.Name == "" || found.DefaultModel != "env-model" || found.Conversion == nil || found.Conversion.Source != "env-http-json" || len(found.Aliases) != 1 || found.Aliases[0] != "gateway-env-compatible" {
+	if found.Name == "" || found.DefaultModel != "env-model" || found.Conversion == nil || found.Conversion.Source != "env-http-json" || len(found.Aliases) != 1 || found.Aliases[0] != "gateway-env-compatible" || len(found.Conversion.Routes) != 1 || found.Conversion.Routes[0].Query["trace"] != "{metadata.trace_id}" {
 		t.Fatalf("env 등록 provider가 gateway discovery에 필요해요: %+v", found)
 	}
 }

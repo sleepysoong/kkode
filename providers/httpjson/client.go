@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -16,11 +17,13 @@ import (
 type RetryConfig = httptransport.RetryConfig
 
 // Route는 provider operation을 실제 HTTP endpoint로 바꾸는 설정이에요.
+// Path와 Query 값에는 {model}, {operation}, {metadata.key}, {key} template를 쓸 수 있어요.
 type Route struct {
 	Method  string
 	Path    string
 	Accept  string
 	Headers map[string]string
+	Query   map[string]string
 }
 
 // Config는 HTTP JSON caller가 endpoint, 인증, route를 조립할 때 쓰는 설정이에요.
@@ -135,7 +138,7 @@ func (c *Caller) StreamProvider(ctx context.Context, req llm.ProviderRequest) (l
 }
 
 func (c *Caller) newRequest(ctx context.Context, route Route, req llm.ProviderRequest, body any) (*http.Request, []byte, error) {
-	endpoint, err := c.endpoint(route)
+	endpoint, err := c.endpoint(route, req)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -163,18 +166,43 @@ func (c *Caller) route(operation string) (Route, error) {
 	return Route{}, fmt.Errorf("지원하지 않는 provider operation이에요: %s", operation)
 }
 
-func (c *Caller) endpoint(route Route) (string, error) {
+func (c *Caller) endpoint(route Route, req llm.ProviderRequest) (string, error) {
 	path := strings.TrimSpace(route.Path)
 	if path == "" {
 		return "", fmt.Errorf("httpjson route path가 필요해요")
 	}
-	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		return path, nil
+	expandedPath, err := expandRouteTemplate(path, req, true)
+	if err != nil {
+		return "", err
 	}
-	if c.baseURL == "" {
-		return "", fmt.Errorf("httpjson base URL이 필요해요")
+	endpoint := expandedPath
+	if !strings.HasPrefix(expandedPath, "http://") && !strings.HasPrefix(expandedPath, "https://") {
+		if c.baseURL == "" {
+			return "", fmt.Errorf("httpjson base URL이 필요해요")
+		}
+		endpoint = c.baseURL + "/" + strings.TrimLeft(expandedPath, "/")
 	}
-	return c.baseURL + "/" + strings.TrimLeft(path, "/"), nil
+	if len(route.Query) == 0 {
+		return endpoint, nil
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("httpjson endpoint URL이 올바르지 않아요: %w", err)
+	}
+	query := parsed.Query()
+	for key, valueTemplate := range route.Query {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value, err := expandRouteTemplate(valueTemplate, req, false)
+		if err != nil {
+			return "", err
+		}
+		query.Set(key, value)
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
 }
 
 func (c *Caller) readSSE(ctx context.Context, operation string, r io.Reader, out chan<- llm.StreamEvent) {
@@ -215,7 +243,63 @@ func cloneRoutes(routes map[string]Route) map[string]Route {
 	out := make(map[string]Route, len(routes))
 	for operation, route := range routes {
 		route.Headers = httptransport.CloneHeaders(route.Headers)
+		route.Query = cloneQuery(route.Query)
 		out[operation] = route
+	}
+	return out
+}
+
+func expandRouteTemplate(template string, req llm.ProviderRequest, escapePath bool) (string, error) {
+	var out strings.Builder
+	for i := 0; i < len(template); {
+		start := strings.IndexByte(template[i:], '{')
+		if start < 0 {
+			out.WriteString(template[i:])
+			break
+		}
+		start += i
+		out.WriteString(template[i:start])
+		end := strings.IndexByte(template[start+1:], '}')
+		if end < 0 {
+			return "", fmt.Errorf("httpjson route template가 닫히지 않았어요: %s", template)
+		}
+		end += start + 1
+		name := strings.TrimSpace(template[start+1 : end])
+		value, ok := routeTemplateValue(name, req)
+		if !ok {
+			return "", fmt.Errorf("httpjson route template 값이 필요해요: %s", name)
+		}
+		if escapePath {
+			value = url.PathEscape(value)
+		}
+		out.WriteString(value)
+		i = end + 1
+	}
+	return out.String(), nil
+}
+
+func routeTemplateValue(name string, req llm.ProviderRequest) (string, bool) {
+	switch name {
+	case "model":
+		return req.Model, req.Model != ""
+	case "operation":
+		return req.Operation, req.Operation != ""
+	}
+	name = strings.TrimPrefix(name, "metadata.")
+	if req.Metadata == nil {
+		return "", false
+	}
+	value, ok := req.Metadata[name]
+	return value, ok
+}
+
+func cloneQuery(query map[string]string) map[string]string {
+	if len(query) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(query))
+	for key, value := range query {
+		out[key] = value
 	}
 	return out
 }

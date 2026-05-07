@@ -27,6 +27,7 @@ func (c ResponsesConverter) ConvertRequest(ctx context.Context, req llm.Request,
 	return llm.ProviderRequest{
 		Operation: operation,
 		Model:     req.Model,
+		Metadata:  llm.CloneMetadata(req.Metadata),
 		Body:      body,
 		Stream:    opts.Stream,
 	}, nil

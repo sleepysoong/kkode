@@ -2184,6 +2184,10 @@ components:
           type: string
         accept:
           type: string
+        query:
+          type: object
+          additionalProperties:
+            type: string
     ModelListResponse:
       type: object
       required: [models]

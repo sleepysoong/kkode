@@ -30,6 +30,7 @@ func (SessionConverter) ConvertRequest(ctx context.Context, req llm.Request, opt
 	return llm.ProviderRequest{
 		Operation: operation,
 		Model:     req.Model,
+		Metadata:  llm.CloneMetadata(req.Metadata),
 		Raw:       sessionSendPayload{Request: req, Prompt: prompt},
 	}, nil
 }

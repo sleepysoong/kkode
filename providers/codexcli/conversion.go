@@ -30,6 +30,7 @@ func (ExecConverter) ConvertRequest(ctx context.Context, req llm.Request, opts l
 	return llm.ProviderRequest{
 		Operation: operation,
 		Model:     req.Model,
+		Metadata:  llm.CloneMetadata(req.Metadata),
 		Raw:       execPayload{Request: req, Prompt: prompt},
 	}, nil
 }

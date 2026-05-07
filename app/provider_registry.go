@@ -53,10 +53,11 @@ type ProviderConversionSpec struct {
 // ProviderRouteSpec은 변환 operation이 HTTP source에서 어떤 route로 나가는지 설명해요.
 // secret header 값은 담지 않고, 외부 패널과 테스트가 endpoint 계약만 발견하게 해요.
 type ProviderRouteSpec struct {
-	Operation string `json:"operation"`
-	Method    string `json:"method,omitempty"`
-	Path      string `json:"path"`
-	Accept    string `json:"accept,omitempty"`
+	Operation string            `json:"operation"`
+	Method    string            `json:"method,omitempty"`
+	Path      string            `json:"path"`
+	Accept    string            `json:"accept,omitempty"`
+	Query     map[string]string `json:"query,omitempty"`
 }
 
 // ProviderConversionSet은 실제 변환기와 operation 기본값을 묶은 실행형 변환 profile이에요.
@@ -786,7 +787,7 @@ func httpJSONRoutesFromSpec(routes []ProviderRouteSpec) map[string]httpjson.Rout
 		if operation == "" {
 			continue
 		}
-		out[operation] = httpjson.Route{Method: route.Method, Path: route.Path, Accept: route.Accept}
+		out[operation] = httpjson.Route{Method: route.Method, Path: route.Path, Accept: route.Accept, Query: cloneStringMap(route.Query)}
 	}
 	return out
 }
@@ -798,6 +799,7 @@ func cloneHTTPJSONRoutes(routes map[string]httpjson.Route) map[string]httpjson.R
 	out := make(map[string]httpjson.Route, len(routes))
 	for operation, route := range routes {
 		route.Headers = cloneStringMap(route.Headers)
+		route.Query = cloneStringMap(route.Query)
 		out[operation] = route
 	}
 	return out
@@ -807,7 +809,12 @@ func cloneProviderRoutes(routes []ProviderRouteSpec) []ProviderRouteSpec {
 	if len(routes) == 0 {
 		return nil
 	}
-	return append([]ProviderRouteSpec(nil), routes...)
+	out := make([]ProviderRouteSpec, len(routes))
+	for i, route := range routes {
+		route.Query = cloneStringMap(route.Query)
+		out[i] = route
+	}
+	return out
 }
 
 func cloneStringSlice(values []string) []string {

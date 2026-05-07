@@ -211,7 +211,7 @@ type AdaptedProvider struct {
 }
 ```
 
-단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. 이 흐름은 `ProviderPipeline`이 실제 단계로 나눠서 실행해요. `Prepare`는 변환 preview나 debug UI가 재사용하고, `Call`은 API/SDK/CLI source 경계만 담당하며, `Decode`는 source 결과를 다시 표준 응답으로 맞춰요. 그래서 새 API를 붙일 때 core 타입을 수정하지 않고 converter와 caller만 추가하거나, OpenAI-compatible request builder와 별도 API caller/response parser를 조합하면 돼요. OpenAI-compatible HTTP JSON 파생 API는 `providers/httpjson.Caller`에 base URL과 operation route만 넣어서 source client 중복 없이 붙일 수 있고, `app.BuildHTTPJSONProviderAdapter`는 registry route를 기본값으로 읽어 `BaseURL/APIKey/ProviderName`만으로 `llm.Provider`를 만들어요. `app.RegisterHTTPJSONProvider`는 같은 profile을 별도 provider 이름으로 discovery/routing까지 등록해서 proxy, gateway, 사내 API처럼 converter가 같은 source를 설정만으로 추가하게 해요. `DisableStreaming`을 켜면 registry의 OpenAI-compatible capability에서 `streaming`만 꺼서 JSON-only source가 SSE 지원처럼 광고되지 않게 해요. 기본 OpenAI-compatible client의 단발 호출도 이 caller를 사용해서 새 provider와 같은 transport 경계를 검증해요. `AdaptedProvider`는 이 pipeline을 감싼 `llm.Provider` 구현체라서 기존 provider는 간단한 struct 조립만 유지해요.
+단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. 이 흐름은 `ProviderPipeline`이 실제 단계로 나눠서 실행해요. `Prepare`는 변환 preview나 debug UI가 재사용하고, `Call`은 API/SDK/CLI source 경계만 담당하며, `Decode`는 source 결과를 다시 표준 응답으로 맞춰요. 그래서 새 API를 붙일 때 core 타입을 수정하지 않고 converter와 caller만 추가하거나, OpenAI-compatible request builder와 별도 API caller/response parser를 조합하면 돼요. OpenAI-compatible HTTP JSON 파생 API는 `providers/httpjson.Caller`에 base URL과 operation route만 넣어서 source client 중복 없이 붙일 수 있고, `app.BuildHTTPJSONProviderAdapter`는 registry route를 기본값으로 읽어 `BaseURL/APIKey/ProviderName`만으로 `llm.Provider`를 만들어요. `app.RegisterHTTPJSONProvider`는 같은 profile을 별도 provider 이름으로 discovery/routing까지 등록해서 proxy, gateway, 사내 API처럼 converter가 같은 source를 설정만으로 추가하게 해요. HTTP JSON route는 `Path`와 `Query` template를 지원해서 `{model}`, `{operation}`, `{metadata.key}` 또는 `{key}` 값을 `ProviderRequest.Metadata`에서 꺼내 endpoint를 만들어요. 그래서 `/providers/{provider}/models/{model}/generate?api-version={metadata.api_version}`처럼 OpenAI-compatible이 아닌 HTTP API도 caller를 새로 쓰지 않고 converter metadata만 채워 붙일 수 있어요. `DisableStreaming`을 켜면 registry의 OpenAI-compatible capability에서 `streaming`만 꺼서 JSON-only source가 SSE 지원처럼 광고되지 않게 해요. 기본 OpenAI-compatible client의 단발 호출도 이 caller를 사용해서 새 provider와 같은 transport 경계를 검증해요. `AdaptedProvider`는 이 pipeline을 감싼 `llm.Provider` 구현체라서 기존 provider는 간단한 struct 조립만 유지해요.
 
 `RequestConverterFunc`, `ResponseConverterFunc`, `ProviderCallerFunc`, `ProviderStreamCallerFunc`는 작은 API source나 plugin을 빠르게 붙이는 함수형 adapter예요. 완전한 provider 패키지를 만들기 전에는 `ProviderPipeline`에 이 함수들을 바로 넣어서 `요청 → 컨버팅 레이어 → API 호출 → 표준 응답`을 검증하고, 나중에 source가 커지면 같은 함수 내용을 struct 구현체로 옮기면 돼요. nil 함수 adapter는 명확한 오류를 돌려주므로 잘못 조립된 plugin이 panic으로 죽지 않아요.
 
@@ -316,7 +316,7 @@ type HTTPJSONProviderRegistration struct {
     APIKeyEnv         []string
     Headers           map[string]string
     AdditionalHeaders map[string]string
-    Routes            []ProviderRouteSpec
+    Routes            []ProviderRouteSpec // route별 Path/Query template를 포함해요
     DefaultOperation  string
     Capabilities      map[string]any
     Local             bool
@@ -324,6 +324,14 @@ type HTTPJSONProviderRegistration struct {
     HTTPClient        *http.Client
     Retry             httpjson.RetryConfig
     Source            string
+}
+
+type ProviderRouteSpec struct {
+    Operation string
+    Method    string
+    Path      string
+    Accept    string
+    Query     map[string]string
 }
 ```
 
