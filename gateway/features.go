@@ -34,6 +34,8 @@ func APIIndexLinks() map[string]string {
 		"models":         "/api/v1/models",
 		"stats":          "/api/v1/stats",
 		"sessions":       "/api/v1/sessions",
+		"session_import": "/api/v1/sessions/import",
+		"session_export": "/api/v1/sessions/{session_id}/export",
 		"runs":           "/api/v1/runs",
 		"request_runs":   "/api/v1/requests/{request_id}/runs",
 		"request_events": "/api/v1/requests/{request_id}/events",
