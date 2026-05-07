@@ -2111,6 +2111,34 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	}
 }
 
+func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "src", "a.go"), "package main\n// TODO: wire api\n")
+	writeTestFile(t, filepath.Join(root, "notes.txt"), "TODO outside\n")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&path_glob=src/**&max_matches=10", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var grep FileGrepResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &grep); err != nil {
+		t.Fatal(err)
+	}
+	if grep.ProjectRoot != root || grep.Pattern != "todo" || grep.PathGlob != "src/**" || len(grep.Matches) != 1 || grep.Matches[0].Path != "src/a.go" || grep.Matches[0].Line != 2 {
+		t.Fatalf("grep 결과가 이상해요: %+v", grep)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("pattern 없는 grep은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "web", session.AgentModeBuild)

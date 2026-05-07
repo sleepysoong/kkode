@@ -1124,6 +1124,14 @@ func queryLimit(r *http.Request, key string, fallback int, maxValue int) int {
 	return limit
 }
 
+func queryBool(r *http.Request, key string, fallback bool) bool {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return fallback
+	}
+	return strings.EqualFold(value, "true") || value == "1" || strings.EqualFold(value, "yes")
+}
+
 func wantsSSE(r *http.Request) bool {
 	if strings.EqualFold(r.URL.Query().Get("stream"), "true") || r.URL.Query().Get("stream") == "1" {
 		return true

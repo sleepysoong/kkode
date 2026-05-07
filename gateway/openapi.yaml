@@ -186,6 +186,49 @@ paths:
                 $ref: '#/components/schemas/FileContentResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/files/grep:
+    get:
+      summary: workspace 파일에서 문자열 또는 regex를 검색해요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pattern
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path_glob
+          schema:
+            type: string
+        - in: query
+          name: regex
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: case_sensitive
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: max_matches
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+      responses:
+        '200':
+          description: grep 검색 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileGrepResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/git/status:
     get:
       summary: workspace git status를 반환해요.
@@ -1714,6 +1757,32 @@ components:
         path:
           type: string
         content:
+          type: string
+    FileGrepResponse:
+      type: object
+      required: [project_root, pattern, matches]
+      properties:
+        project_root:
+          type: string
+        pattern:
+          type: string
+        path_glob:
+          type: string
+        regex:
+          type: boolean
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileGrepMatch'
+    FileGrepMatch:
+      type: object
+      required: [path, line, excerpt]
+      properties:
+        path:
+          type: string
+        line:
+          type: integer
+        excerpt:
           type: string
     FileWriteRequest:
       type: object

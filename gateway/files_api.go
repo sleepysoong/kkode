@@ -30,6 +30,21 @@ type FileContentResponse struct {
 	Content     string `json:"content"`
 }
 
+// FileGrepResponse는 웹 패널 검색 결과를 file_grep tool과 같은 의미로 반환해요.
+type FileGrepResponse struct {
+	ProjectRoot string             `json:"project_root"`
+	Pattern     string             `json:"pattern"`
+	PathGlob    string             `json:"path_glob,omitempty"`
+	Regex       bool               `json:"regex,omitempty"`
+	Matches     []FileGrepMatchDTO `json:"matches"`
+}
+
+type FileGrepMatchDTO struct {
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Excerpt string `json:"excerpt"`
+}
+
 type FileWriteRequest struct {
 	ProjectRoot string `json:"project_root"`
 	Path        string `json:"path"`
@@ -43,6 +58,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 	}
 	if len(parts) == 2 && parts[1] == "content" {
 		s.handleFileContent(w, r)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "grep" && r.Method == http.MethodGet {
+		s.grepFiles(w, r)
 		return
 	}
 	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "content") {
@@ -128,6 +147,38 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content})
+}
+
+func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
+	ws, projectRoot, ok := workspaceFromQuery(w, r)
+	if !ok {
+		return
+	}
+	pattern := strings.TrimSpace(r.URL.Query().Get("pattern"))
+	if pattern == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_grep", "pattern이 필요해요")
+		return
+	}
+	opts := workspace.GrepOptions{
+		PathGlob:      strings.TrimSpace(r.URL.Query().Get("path_glob")),
+		Regex:         queryBool(r, "regex", false),
+		CaseSensitive: queryBool(r, "case_sensitive", false),
+		MaxMatches:    queryLimit(r, "max_matches", 100, 1000),
+	}
+	matches, err := ws.Grep(pattern, opts)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "grep_files_failed", err.Error())
+		return
+	}
+	writeJSON(w, FileGrepResponse{ProjectRoot: projectRoot, Pattern: pattern, PathGlob: opts.PathGlob, Regex: opts.Regex, Matches: fileGrepMatchDTOs(matches)})
+}
+
+func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {
+	out := make([]FileGrepMatchDTO, 0, len(matches))
+	for _, match := range matches {
+		out = append(out, FileGrepMatchDTO{Path: match.Path, Line: match.Line, Excerpt: match.Excerpt})
+	}
+	return out
 }
 
 func workspaceFromQuery(w http.ResponseWriter, r *http.Request) (*workspace.Workspace, string, bool) {
