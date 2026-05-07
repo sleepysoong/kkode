@@ -8,15 +8,17 @@ import (
 
 	"github.com/sleepysoong/kkode/llm"
 	ktools "github.com/sleepysoong/kkode/tools"
+	"github.com/sleepysoong/kkode/workspace"
 )
 
 // ToolDTO는 gateway가 외부 adapter에 노출하는 표준 tool 정의예요.
 type ToolDTO struct {
-	Kind        string         `json:"kind"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Parameters  map[string]any `json:"parameters,omitempty"`
-	Strict      *bool          `json:"strict,omitempty"`
+	Kind              string         `json:"kind"`
+	Name              string         `json:"name"`
+	Description       string         `json:"description,omitempty"`
+	Parameters        map[string]any `json:"parameters,omitempty"`
+	Strict            *bool          `json:"strict,omitempty"`
+	RequiresWorkspace bool           `json:"requires_workspace,omitempty"`
 }
 
 type ToolListResponse struct {
@@ -74,14 +76,28 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Tool = strings.TrimSpace(req.Tool)
-	if req.ProjectRoot == "" || req.Tool == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "project_root와 tool이 필요해요")
+	if req.Tool == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "tool이 필요해요")
 		return
 	}
-	ws, _, err := newWorkspace(req.ProjectRoot)
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
-		return
+	var ws *workspace.Workspace
+	var err error
+	if toolRequiresWorkspace(req.Tool) {
+		if req.ProjectRoot == "" {
+			writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "이 tool은 project_root가 필요해요")
+			return
+		}
+		ws, _, err = newWorkspace(req.ProjectRoot)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+			return
+		}
+	} else if req.ProjectRoot != "" {
+		ws, _, err = newWorkspace(req.ProjectRoot)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+			return
+		}
 	}
 	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes}).Parts()
 	args, err := json.Marshal(req.Arguments)
@@ -99,7 +115,12 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 }
 
 func toToolDTO(tool llm.Tool) ToolDTO {
-	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, Strict: tool.Strict}
+	return ToolDTO{Kind: string(tool.Kind), Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, Strict: tool.Strict, RequiresWorkspace: toolRequiresWorkspace(tool.Name)}
+}
+
+func toolRequiresWorkspace(name string) bool {
+	name = strings.TrimSpace(name)
+	return name == "shell_run" || strings.HasPrefix(name, "file_")
 }
 
 func truncateToolOutput(output string, maxBytes int) (string, int, bool) {

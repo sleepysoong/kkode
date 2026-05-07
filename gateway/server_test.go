@@ -2286,6 +2286,9 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
 		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
 	}
+	if !findTool(listed.Tools, "file_write").RequiresWorkspace || findTool(listed.Tools, "web_fetch").RequiresWorkspace {
+		t.Fatalf("tool별 workspace 요구 여부를 discovery해야 해요: %+v", listed.Tools)
+	}
 
 	root := t.TempDir()
 	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":"call_1"}`
@@ -2334,8 +2337,7 @@ func TestGatewayCallsWebFetchTool(t *testing.T) {
 		_, _ = w.Write([]byte("pong"))
 	}))
 	defer upstream.Close()
-	root := t.TempDir()
-	body := `{"project_root":"` + root + `","tool":"web_fetch","arguments":{"url":"` + upstream.URL + `","max_bytes":4}}`
+	body := `{"tool":"web_fetch","arguments":{"url":"` + upstream.URL + `","max_bytes":4}}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -2353,12 +2355,16 @@ func TestGatewayCallsWebFetchTool(t *testing.T) {
 }
 
 func hasTool(tools []ToolDTO, name string) bool {
+	return findTool(tools, name).Name != ""
+}
+
+func findTool(tools []ToolDTO, name string) ToolDTO {
 	for _, tool := range tools {
 		if tool.Name == name {
-			return true
+			return tool
 		}
 	}
-	return false
+	return ToolDTO{}
 }
 
 func TestGatewayMutatesSessionTodos(t *testing.T) {

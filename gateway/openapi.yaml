@@ -377,7 +377,7 @@ paths:
   /api/v1/tools/call:
     post:
       summary: 표준 tool을 직접 실행해요.
-      description: 권한 프롬프트 없이 project_root 안에서 file/shell/web tool을 바로 실행해요.
+      description: 권한 프롬프트 없이 표준 tool을 바로 실행해요. file/shell tool은 project_root가 필요하고 web_fetch는 project_root 없이도 실행할 수 있어요.
       requestBody:
         required: true
         content:
@@ -2126,9 +2126,12 @@ components:
           additionalProperties: true
         strict:
           type: boolean
+        requires_workspace:
+          type: boolean
+          description: 직접 호출할 때 project_root가 필요한 tool인지 알려줘요.
     ToolCallRequest:
       type: object
-      required: [project_root, tool]
+      required: [tool]
       properties:
         project_root:
           type: string
