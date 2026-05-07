@@ -152,7 +152,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 method예요")
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true, "time": s.cfg.Now()})
+	writeJSON(w, HealthResponse{OK: true, Time: s.cfg.Now()})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +172,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		writeErrorDetails(w, r, http.StatusServiceUnavailable, "not_ready", "runtime wiring이 준비되지 않았어요", map[string]any{"missing_runtime_wiring": missing})
 		return
 	}
-	writeJSON(w, map[string]any{"ready": true})
+	writeJSON(w, ReadyResponse{Ready: true, Time: s.cfg.Now()})
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {

@@ -84,6 +84,24 @@ func TestGatewayAPIIndex(t *testing.T) {
 	}
 }
 
+func TestGatewayHealthUsesTypedDTO(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var health HealthResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
+		t.Fatal(err)
+	}
+	if !health.OK || health.Time.IsZero() {
+		t.Fatalf("health DTO가 이상해요: %+v", health)
+	}
+}
+
 func TestGatewayReadyChecksStoreHealth(t *testing.T) {
 	store := openTestStore(t)
 	srv := newReadyTestServer(t, store)
@@ -92,6 +110,13 @@ func TestGatewayReadyChecksStoreHealth(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("ready status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var ready ReadyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &ready); err != nil {
+		t.Fatal(err)
+	}
+	if !ready.Ready || ready.Time.IsZero() {
+		t.Fatalf("ready DTO가 이상해요: %+v", ready)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)

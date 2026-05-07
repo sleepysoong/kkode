@@ -566,7 +566,7 @@ POST /api/v1/runs/{run_id}/retry
 curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
 ```
 
-`cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `/readyz`는 `session.HealthChecker`를 구현한 store ping과 run starter/previewer/validator/provider tester와 run 조회/취소/event stream wiring을 확인해서 SQLite 연결이 닫히거나 필수 runtime 경계가 빠진 경우 503을 반환해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요. file/shell/web tool surface가 외부에 노출될 수 있기 때문이에요.
+`cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `/readyz`는 `session.HealthChecker`를 구현한 store ping과 run starter/previewer/validator/provider tester와 run 조회/취소/event stream wiring을 확인해서 SQLite 연결이 닫히거나 필수 runtime 경계가 빠진 경우 503을 반환하고, health/ready 성공 응답은 OpenAPI DTO로 고정해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요. file/shell/web tool surface가 외부에 노출될 수 있기 때문이에요.
 
 ```bash
 go run ./cmd/kkode-gateway -addr 127.0.0.1:41234 -state .kkode/state.db -cors-origins http://localhost:3000

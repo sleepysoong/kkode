@@ -8,6 +8,18 @@ import (
 	"github.com/sleepysoong/kkode/session"
 )
 
+// HealthResponse는 process liveness probe 응답이에요.
+type HealthResponse struct {
+	OK   bool      `json:"ok"`
+	Time time.Time `json:"time"`
+}
+
+// ReadyResponse는 gateway가 사용자 요청을 받을 준비가 된 상태를 나타내요.
+type ReadyResponse struct {
+	Ready bool      `json:"ready"`
+	Time  time.Time `json:"time"`
+}
+
 // VersionResponse는 gateway 서버와 연결된 runtime 정보를 알려줘요.
 type VersionResponse struct {
 	Version   string   `json:"version"`

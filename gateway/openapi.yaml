@@ -19,6 +19,10 @@ paths:
           $ref: '#/components/responses/Error'
         '200':
           description: 정상이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
   /readyz:
     get:
       summary: gateway 준비 상태를 확인해요.
@@ -28,6 +32,10 @@ paths:
           $ref: '#/components/responses/Error'
         '200':
           description: 준비됐어요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
   /api/v1:
     get:
       summary: API discovery index를 반환해요.
@@ -1813,6 +1821,24 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    HealthResponse:
+      type: object
+      required: [ok, time]
+      properties:
+        ok:
+          type: boolean
+        time:
+          type: string
+          format: date-time
+    ReadyResponse:
+      type: object
+      required: [ready, time]
+      properties:
+        ready:
+          type: boolean
+        time:
+          type: string
+          format: date-time
     APIIndexResponse:
       type: object
       required: [version, links]
