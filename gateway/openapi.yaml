@@ -2506,6 +2506,9 @@ components:
           additionalProperties: true
         call_id:
           type: string
+        timeout_ms:
+          type: integer
+          description: 직접 tool 호출 전체에 적용할 timeout이에요. 0이면 gateway request context만 사용해요.
         web_max_bytes:
           type: integer
           format: int64

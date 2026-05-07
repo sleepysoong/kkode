@@ -2777,6 +2777,20 @@ func TestGatewayCallsWebFetchTool(t *testing.T) {
 	if called.Tool != "web_fetch" || !strings.Contains(called.Output, "pong") {
 		t.Fatalf("web_fetch 결과가 이상해요: %+v", called)
 	}
+
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		_, _ = w.Write([]byte("slow"))
+	}))
+	defer slow.Close()
+	body = `{"tool":"web_fetch","arguments":{"url":"` + slow.URL + `"},"timeout_ms":5}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "context deadline exceeded") {
+		t.Fatalf("tool 직접 호출 timeout이 적용돼야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func hasTool(tools []ToolDTO, name string) bool {

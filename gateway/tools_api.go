@@ -1,9 +1,12 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -34,6 +37,7 @@ type ToolCallRequest struct {
 	Tool           string         `json:"tool"`
 	Arguments      map[string]any `json:"arguments,omitempty"`
 	CallID         string         `json:"call_id,omitempty"`
+	TimeoutMS      int            `json:"timeout_ms,omitempty"`
 	WebMaxBytes    int64          `json:"web_max_bytes,omitempty"`
 	MaxOutputBytes int            `json:"max_output_bytes,omitempty"`
 }
@@ -100,8 +104,13 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "tool이 필요해요")
 		return
 	}
+	execCtx, cancel, err := toolCallContext(r.Context(), req.TimeoutMS)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", err.Error())
+		return
+	}
+	defer cancel()
 	var ws *workspace.Workspace
-	var err error
 	if toolRequiresWorkspace(req.Tool) {
 		if req.ProjectRoot == "" {
 			writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "이 tool은 project_root가 필요해요")
@@ -119,19 +128,42 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes}).Parts()
+	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes, Timeout: toolCallTimeout(req.TimeoutMS)}).Parts()
 	args, err := json.Marshal(req.Arguments)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_arguments", err.Error())
 		return
 	}
-	result, err := handlers.Execute(r.Context(), llm.ToolCall{CallID: req.CallID, Name: req.Tool, Arguments: args})
+	result, err := handlers.Execute(execCtx, llm.ToolCall{CallID: req.CallID, Name: req.Tool, Arguments: args})
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
 		return
 	}
 	output, outputBytes, truncated := truncateToolOutput(result.Output, req.MaxOutputBytes)
 	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated})
+}
+
+func toolCallContext(parent context.Context, timeoutMS int) (context.Context, context.CancelFunc, error) {
+	if timeoutMS < 0 {
+		return nil, nil, errNegativeToolTimeout()
+	}
+	timeout := toolCallTimeout(timeoutMS)
+	if timeout <= 0 {
+		return parent, func() {}, nil
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	return ctx, cancel, nil
+}
+
+func toolCallTimeout(timeoutMS int) time.Duration {
+	if timeoutMS <= 0 {
+		return 0
+	}
+	return time.Duration(timeoutMS) * time.Millisecond
+}
+
+func errNegativeToolTimeout() error {
+	return errors.New("timeout_ms는 0 이상이어야 해요")
 }
 
 func toToolDTO(tool llm.Tool) ToolDTO {
