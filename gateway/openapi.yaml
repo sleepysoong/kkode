@@ -1397,6 +1397,23 @@ paths:
                 $ref: '#/components/schemas/RunPreviewResponse'
         '501':
           $ref: '#/components/responses/Error'
+  /api/v1/runs/validate:
+    post:
+      summary: background run을 queue에 넣기 전 preflight만 실행해요.
+      description: session/provider/resource/workspace/provider factory를 검증하지만 run은 만들지 않아요. 외부 패널이 실행 버튼 전 오류를 보여줄 때 사용해요. 실패도 200 응답의 ok=false로 반환해서 UI가 같은 schema로 처리하게 해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunStartRequest'
+      responses:
+        '200':
+          description: run preflight 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunValidateResponse'
   /api/v1/requests/{request_id}/runs:
     get:
       summary: request id로 연결된 background run 목록을 반환해요.
@@ -2505,6 +2522,34 @@ components:
           type: boolean
           default: false
           description: /runs/preview에서 provider streaming 요청 payload를 미리 볼지 정해요. 실제 background run 실행 방식은 바꾸지 않아요.
+    RunValidateResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        code:
+          type: string
+          description: ok=false일 때 오류 code예요.
+        message:
+          type: string
+          description: ok=false일 때 사람이 읽을 수 있는 오류예요.
+        request_id:
+          type: string
+          description: X-Request-Id 또는 gateway가 생성한 request id예요.
+        idempotency_key:
+          type: string
+          description: header/body metadata에서 해석한 idempotency key예요.
+        run_id:
+          type: string
+          description: idempotency key가 있을 때 예측되는 결정적 run id예요.
+        existing_run:
+          $ref: '#/components/schemas/Run'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: request_id/idempotency_key가 반영된 metadata예요.
     RunPreviewResponse:
       type: object
       required: [session_id, provider, model]

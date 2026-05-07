@@ -868,6 +868,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		s.previewRun(w, r)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "validate" && r.Method == http.MethodPost {
+		s.validateRun(w, r)
+		return
+	}
 	runID := parts[1]
 	if len(parts) == 2 && r.Method == http.MethodGet {
 		s.getRun(w, r, runID)
@@ -977,6 +981,47 @@ func (s *Server) findIdempotentRun(ctx context.Context, req RunStartRequest) *Ru
 
 func isIdempotencyReplay(run *RunDTO) bool {
 	return run != nil && strings.EqualFold(strings.TrimSpace(run.Metadata[IdempotencyReusedMetadataKey]), "true")
+}
+
+func (s *Server) validateRun(w http.ResponseWriter, r *http.Request) {
+	var req RunStartRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	requestID := requestIDFromRequest(r)
+	idempotencyKey := idempotencyKeyFromRequest(r, req.Metadata)
+	req.Metadata = withRequestIDMetadata(req.Metadata, requestID)
+	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKey)
+	resp := RunValidateResponse{OK: true, RequestID: requestID, IdempotencyKey: strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]), Metadata: cloneMap(req.Metadata)}
+	if key := strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]); key != "" {
+		resp.RunID = idempotentRunID(req.SessionID, key)
+	}
+	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
+		resp.ExistingRun = existing
+	}
+	if err := validateRunStartRequest(req); err != nil {
+		resp.OK = false
+		resp.Code = "invalid_run"
+		resp.Message = err.Error()
+		writeJSON(w, resp)
+		return
+	}
+	if s.cfg.RunValidator == nil {
+		resp.OK = false
+		resp.Code = "run_validator_missing"
+		resp.Message = "이 gateway에는 RunValidator가 연결되지 않았어요"
+		writeJSON(w, resp)
+		return
+	}
+	if err := s.cfg.RunValidator(r.Context(), req); err != nil {
+		resp.OK = false
+		resp.Code = "invalid_run_preflight"
+		resp.Message = err.Error()
+		writeJSON(w, resp)
+		return
+	}
+	writeJSON(w, resp)
 }
 
 func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {

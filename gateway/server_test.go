@@ -430,6 +430,76 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	}
 }
 
+func TestGatewayValidatesRunWithoutStarting(t *testing.T) {
+	store := openTestStore(t)
+	started := false
+	var validated RunStartRequest
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			if q.IdempotencyKey == "idem_validate" {
+				return []RunDTO{{ID: "run_existing", SessionID: q.SessionID, Status: "queued", Metadata: map[string]string{IdempotencyMetadataKey: q.IdempotencyKey}}}, nil
+			}
+			return nil, nil
+		},
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			validated = req
+			return nil
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			started = true
+			return &RunDTO{ID: "run_should_not_start", SessionID: req.SessionID, Status: "queued"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/validate", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test"}`))
+	req.Header.Set(RequestIDHeader, "req_validate")
+	req.Header.Set(IdempotencyKeyHeader, "idem_validate")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got RunValidateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.OK || got.RequestID != "req_validate" || got.IdempotencyKey != "idem_validate" || got.RunID == "" || got.ExistingRun == nil || got.ExistingRun.ID != "run_existing" || validated.Metadata[RequestIDMetadataKey] != "req_validate" || validated.Metadata[IdempotencyMetadataKey] != "idem_validate" {
+		t.Fatalf("validate 응답이 이상해요: got=%+v validated=%+v", got, validated)
+	}
+	if started {
+		t.Fatal("/runs/validate는 RunStarter를 호출하면 안 돼요")
+	}
+}
+
+func TestGatewayValidateRunReportsPreflightError(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store: store,
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			return errors.New("skill missing")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/validate", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test"}`))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("validate 실패도 panel-friendly JSON이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got RunValidateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || got.Code != "invalid_run_preflight" || !strings.Contains(got.Message, "skill missing") {
+		t.Fatalf("preflight 실패 응답이 이상해요: %+v", got)
+	}
+}
+
 func TestGatewayRunValidatorRejectsBeforeStarter(t *testing.T) {
 	store := openTestStore(t)
 	started := false

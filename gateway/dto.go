@@ -151,6 +151,18 @@ type RunDTO struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
+// RunValidateResponse는 background run queue에 넣기 전 preflight 결과를 외부 adapter에 보여줘요.
+type RunValidateResponse struct {
+	OK             bool              `json:"ok"`
+	Code           string            `json:"code,omitempty"`
+	Message        string            `json:"message,omitempty"`
+	RequestID      string            `json:"request_id,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	RunID          string            `json:"run_id,omitempty"`
+	ExistingRun    *RunDTO           `json:"existing_run,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+}
+
 // RunPreviewResponse는 실제 실행 없이 run 조립 결과를 외부 adapter에 보여줘요.
 type RunPreviewResponse struct {
 	SessionID         string                     `json:"session_id"`
