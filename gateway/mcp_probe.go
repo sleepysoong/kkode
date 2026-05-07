@@ -105,6 +105,8 @@ type mcpProbeConfig struct {
 	Env     map[string]string `json:"env"`
 	Cwd     string            `json:"cwd"`
 	Timeout int               `json:"timeout"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
 }
 
 func (s *Server) listMCPServerTools(w http.ResponseWriter, r *http.Request, serverID string) {
@@ -204,7 +206,7 @@ func (s *Server) withMCPServer(w http.ResponseWriter, r *http.Request, serverID 
 }
 
 func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO, error) {
-	resp, err := runStdioMCPRequest(ctx, resource, "tools/list", map[string]any{})
+	resp, err := runMCPRequest(ctx, resource, "tools/list", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +214,7 @@ func probeMCPTools(ctx context.Context, resource session.Resource) ([]MCPToolDTO
 }
 
 func probeMCPResources(ctx context.Context, resource session.Resource) ([]MCPResourceDTO, error) {
-	resp, err := runStdioMCPRequest(ctx, resource, "resources/list", map[string]any{})
+	resp, err := runMCPRequest(ctx, resource, "resources/list", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +222,7 @@ func probeMCPResources(ctx context.Context, resource session.Resource) ([]MCPRes
 }
 
 func probeMCPPrompts(ctx context.Context, resource session.Resource) ([]MCPPromptDTO, error) {
-	resp, err := runStdioMCPRequest(ctx, resource, "prompts/list", map[string]any{})
+	resp, err := runMCPRequest(ctx, resource, "prompts/list", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +234,7 @@ func readMCPResource(ctx context.Context, resource session.Resource, uri string)
 	if uri == "" {
 		return nil, fmt.Errorf("MCP resource uri가 필요해요")
 	}
-	resp, err := runStdioMCPRequest(ctx, resource, "resources/read", map[string]any{"uri": uri})
+	resp, err := runMCPRequest(ctx, resource, "resources/read", map[string]any{"uri": uri})
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +249,7 @@ func getMCPPrompt(ctx context.Context, resource session.Resource, promptName str
 	if arguments == nil {
 		arguments = map[string]any{}
 	}
-	resp, err := runStdioMCPRequest(ctx, resource, "prompts/get", map[string]any{"name": promptName, "arguments": arguments})
+	resp, err := runMCPRequest(ctx, resource, "prompts/get", map[string]any{"name": promptName, "arguments": arguments})
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +264,7 @@ func callMCPTool(ctx context.Context, resource session.Resource, toolName string
 	if arguments == nil {
 		arguments = map[string]any{}
 	}
-	resp, err := runStdioMCPRequest(ctx, resource, "tools/call", map[string]any{"name": toolName, "arguments": arguments})
+	resp, err := runMCPRequest(ctx, resource, "tools/call", map[string]any{"name": toolName, "arguments": arguments})
 	if err != nil {
 		return nil, err
 	}
@@ -273,14 +275,22 @@ func callMCPTool(ctx context.Context, resource session.Resource, toolName string
 	return result, nil
 }
 
-func runStdioMCPRequest(ctx context.Context, resource session.Resource, method string, params map[string]any) (map[string]any, error) {
+func runMCPRequest(ctx context.Context, resource session.Resource, method string, params map[string]any) (map[string]any, error) {
 	cfg, err := parseMCPProbeConfig(resource)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Kind != "" && cfg.Kind != "stdio" {
-		return nil, fmt.Errorf("현재 gateway MCP probe/call은 stdio manifest만 지원해요: %s", cfg.Kind)
+	switch strings.ToLower(strings.TrimSpace(cfg.Kind)) {
+	case "", "stdio":
+		return runStdioMCPRequestWithConfig(ctx, cfg, method, params)
+	case "http", "streamable_http", "streamable-http":
+		return runHTTPMCPRequest(ctx, cfg, method, params)
+	default:
+		return nil, fmt.Errorf("지원하지 않는 MCP probe kind예요: %s", cfg.Kind)
 	}
+}
+
+func runStdioMCPRequestWithConfig(ctx context.Context, cfg mcpProbeConfig, method string, params map[string]any) (map[string]any, error) {
 	if cfg.Command == "" {
 		return nil, fmt.Errorf("stdio MCP command가 필요해요")
 	}
@@ -327,6 +337,129 @@ func runStdioMCPRequest(ctx context.Context, resource session.Resource, method s
 		return nil, withStderr(err, stderr.String())
 	}
 	return resp, nil
+}
+
+func runHTTPMCPRequest(ctx context.Context, cfg mcpProbeConfig, method string, params map[string]any) (map[string]any, error) {
+	if strings.TrimSpace(cfg.URL) == "" {
+		return nil, fmt.Errorf("HTTP MCP url이 필요해요")
+	}
+	timeout := time.Duration(cfg.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	initResp, sessionID, err := postHTTPMCP(ctx, cfg, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "kkode", "version": "dev"}}}, 1, "")
+	if err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		sessionID = stringValue(initResp["Mcp-Session-Id"])
+	}
+	_ = postHTTPMCPNotification(ctx, cfg, map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized", "params": map[string]any{}}, sessionID)
+	resp, _, err := postHTTPMCP(ctx, cfg, map[string]any{"jsonrpc": "2.0", "id": 2, "method": method, "params": params}, 2, sessionID)
+	return resp, err
+}
+
+func postHTTPMCPNotification(ctx context.Context, cfg mcpProbeConfig, payload map[string]any, sessionID string) error {
+	_, _, err := postHTTPMCP(ctx, cfg, payload, 0, sessionID)
+	return err
+}
+
+func postHTTPMCP(ctx context.Context, cfg mcpProbeConfig, payload map[string]any, id int, sessionID string) (map[string]any, string, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-03-26")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
+	for k, v := range cfg.Headers {
+		req.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer res.Body.Close()
+	nextSessionID := res.Header.Get("Mcp-Session-Id")
+	if nextSessionID == "" {
+		nextSessionID = res.Header.Get("MCP-Session-Id")
+	}
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, nextSessionID, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, nextSessionID, fmt.Errorf("HTTP MCP %s failed: status=%d body=%s", stringValue(payload["method"]), res.StatusCode, strings.TrimSpace(string(data)))
+	}
+	if id == 0 || len(strings.TrimSpace(string(data))) == 0 {
+		return map[string]any{}, nextSessionID, nil
+	}
+	if strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "text/event-stream") {
+		msg, err := readHTTPSSEMCPResponse(data, id)
+		return msg, nextSessionID, err
+	}
+	var msg map[string]any
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, nextSessionID, err
+	}
+	if rawErr, ok := msg["error"]; ok {
+		return nil, nextSessionID, fmt.Errorf("mcp error: %v", rawErr)
+	}
+	return msg, nextSessionID, nil
+}
+
+func readHTTPSSEMCPResponse(data []byte, id int) (map[string]any, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	var eventData strings.Builder
+	flush := func() (map[string]any, bool, error) {
+		if eventData.Len() == 0 {
+			return nil, false, nil
+		}
+		raw := strings.TrimSpace(eventData.String())
+		eventData.Reset()
+		var msg map[string]any
+		if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+			return nil, false, err
+		}
+		if numericID(msg["id"]) != id {
+			return nil, false, nil
+		}
+		if rawErr, ok := msg["error"]; ok {
+			return nil, false, fmt.Errorf("mcp error: %v", rawErr)
+		}
+		return msg, true, nil
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			if msg, ok, err := flush(); ok || err != nil {
+				return msg, err
+			}
+			continue
+		}
+		if value, ok := strings.CutPrefix(line, "data:"); ok {
+			if eventData.Len() > 0 {
+				eventData.WriteByte('\n')
+			}
+			eventData.WriteString(strings.TrimSpace(value))
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if msg, ok, err := flush(); ok || err != nil {
+		return msg, err
+	}
+	return nil, fmt.Errorf("HTTP MCP SSE response id %d를 찾지 못했어요", id)
 }
 
 func parseMCPProbeConfig(resource session.Resource) (mcpProbeConfig, error) {

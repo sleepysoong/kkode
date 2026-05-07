@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1763,6 +1764,58 @@ while True:
 	}
 	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "echo" {
 		t.Fatalf("MCP tools/list 결과가 이상해요: %+v", tools)
+	}
+}
+
+func TestGatewayProbesHTTPMCPServerTools(t *testing.T) {
+	var sawSession bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.Contains(r.Header.Get("Accept"), "text/event-stream") || r.Header.Get("X-Test-Token") != "secret" {
+			t.Fatalf("HTTP MCP request header가 이상해요: method=%s accept=%s token=%s", r.Method, r.Header.Get("Accept"), r.Header.Get("X-Test-Token"))
+		}
+		var msg map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+			t.Fatal(err)
+		}
+		switch msg["method"] {
+		case "initialize":
+			w.Header().Set("Mcp-Session-Id", "sess_http_mcp")
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": msg["id"], "result": map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}}})
+		case "notifications/initialized":
+			if r.Header.Get("Mcp-Session-Id") != "sess_http_mcp" {
+				t.Fatalf("HTTP MCP session header가 이어져야 해요: %s", r.Header.Get("Mcp-Session-Id"))
+			}
+			sawSession = true
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			if !sawSession || r.Header.Get("Mcp-Session-Id") != "sess_http_mcp" {
+				t.Fatalf("tools/list도 session header를 이어야 해요: saw=%v header=%s", sawSession, r.Header.Get("Mcp-Session-Id"))
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "event: message\ndata: %s\n\n", `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"http_echo","description":"HTTP echo","inputSchema":{"type":"object"}}]}}`)
+		default:
+			t.Fatalf("unexpected HTTP MCP method: %v", msg["method"])
+		}
+	}))
+	defer upstream.Close()
+	store := openTestStore(t)
+	resource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceMCPServer, Name: "http", Enabled: true, Config: []byte(`{"kind":"http","url":"` + upstream.URL + `","headers":{"X-Test-Token":"secret"},"timeout":3}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/tools", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var tools MCPToolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &tools); err != nil {
+		t.Fatal(err)
+	}
+	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "http_echo" {
+		t.Fatalf("HTTP MCP tools/list 결과가 이상해요: %+v", tools)
 	}
 }
 

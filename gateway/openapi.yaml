@@ -853,7 +853,7 @@ paths:
 
   /api/v1/mcp/servers/{resource_id}/tools:
     get:
-      summary: MCP stdio server를 probe해서 tools/list 결과를 반환해요.
+      summary: MCP stdio/http server를 probe해서 tools/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
       responses:
@@ -869,7 +869,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/resources:
     get:
-      summary: MCP stdio server를 probe해서 resources/list 결과를 반환해요.
+      summary: MCP stdio/http server를 probe해서 resources/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
       responses:
@@ -885,7 +885,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/resources/read:
     get:
-      summary: MCP stdio server resource를 resources/read로 읽어요.
+      summary: MCP stdio/http server resource를 resources/read로 읽어요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
         - in: query
@@ -906,7 +906,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/prompts:
     get:
-      summary: MCP stdio server를 probe해서 prompts/list 결과를 반환해요.
+      summary: MCP stdio/http server를 probe해서 prompts/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
       responses:
@@ -922,7 +922,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/prompts/{prompt_name}/get:
     post:
-      summary: MCP stdio server prompt를 prompts/get으로 가져와요.
+      summary: MCP stdio/http server prompt를 prompts/get으로 가져와요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
         - in: path
@@ -949,7 +949,7 @@ paths:
           $ref: '#/components/responses/Error'
   /api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call:
     post:
-      summary: MCP stdio server tool을 직접 호출해요.
+      summary: MCP stdio/http server tool을 직접 호출해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
         - in: path
