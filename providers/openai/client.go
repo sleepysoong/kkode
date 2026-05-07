@@ -116,25 +116,6 @@ func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 	return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Body: data, Headers: res.Header}, nil
 }
 
-func (c *Client) newResponsesRequest(ctx context.Context, req llm.Request, stream bool) (*http.Request, []byte, error) {
-	body, err := BuildResponsesRequest(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	if stream {
-		body["stream"] = true
-	}
-	u, err := url.JoinPath(c.baseURL, "responses")
-	if err != nil {
-		return nil, nil, err
-	}
-	accept := ""
-	if stream {
-		accept = "text/event-stream"
-	}
-	return httptransport.NewJSONRequest(ctx, http.MethodPost, u, c.apiKey, c.headers, body, accept)
-}
-
 func BuildResponsesRequest(req llm.Request) (map[string]any, error) {
 	if req.Model == "" {
 		return nil, errors.New("model is required")

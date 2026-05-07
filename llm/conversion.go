@@ -56,6 +56,12 @@ type ProviderCaller interface {
 	CallProvider(ctx context.Context, req ProviderRequest) (ProviderResult, error)
 }
 
+// ProviderStreamCaller는 변환된 ProviderRequest를 streaming source에 보내는 경계예요.
+// SSE, JSONL, SDK event stream 모두 여기서 내부 EventStream으로 정규화해요.
+type ProviderStreamCaller interface {
+	StreamProvider(ctx context.Context, req ProviderRequest) (EventStream, error)
+}
+
 // AdaptedProvider는 "내부 요청 -> 변환 -> source 호출 -> 내부 응답" 흐름을 재사용하는 Provider 구현체예요.
 // provider별 차이는 Converter와 ProviderCaller에만 격리해요.
 type AdaptedProvider struct {
@@ -63,7 +69,9 @@ type AdaptedProvider struct {
 	ProviderCapabilities Capabilities
 	Converter            Converter
 	Caller               ProviderCaller
+	Streamer             ProviderStreamCaller
 	Options              ConvertOptions
+	StreamOptions        ConvertOptions
 }
 
 func (p *AdaptedProvider) Name() string {
@@ -108,4 +116,30 @@ func (p *AdaptedProvider) Generate(ctx context.Context, req Request) (*Response,
 		result.Model = preq.Model
 	}
 	return p.Converter.ConvertResponse(ctx, result)
+}
+
+func (p *AdaptedProvider) Stream(ctx context.Context, req Request) (EventStream, error) {
+	if p == nil {
+		return nil, fmt.Errorf("provider adapter가 필요해요")
+	}
+	if p.Converter == nil {
+		return nil, fmt.Errorf("provider converter가 필요해요")
+	}
+	if p.Streamer == nil {
+		return nil, fmt.Errorf("provider stream caller가 필요해요")
+	}
+	opts := p.StreamOptions
+	if opts.Operation == "" {
+		opts.Operation = p.Options.Operation
+	}
+	opts.Stream = true
+	preq, err := p.Converter.ConvertRequest(ctx, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	if preq.Model == "" {
+		preq.Model = req.Model
+	}
+	preq.Stream = true
+	return p.Streamer.StreamProvider(ctx, preq)
 }

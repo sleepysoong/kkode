@@ -169,16 +169,22 @@ type ProviderCaller interface {
     CallProvider(ctx context.Context, req ProviderRequest) (ProviderResult, error)
 }
 
+type ProviderStreamCaller interface {
+    StreamProvider(ctx context.Context, req ProviderRequest) (EventStream, error)
+}
+
 type AdaptedProvider struct {
     ProviderName         string
     ProviderCapabilities Capabilities
     Converter            Converter
     Caller               ProviderCaller
+    Streamer             ProviderStreamCaller
     Options              ConvertOptions
+    StreamOptions        ConvertOptions
 }
 ```
 
-흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. HTTP API, subprocess, SDK session, in-memory fake 모두 `ProviderCaller` 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
+단발성 흐름은 `llm.Request → RequestConverter → ProviderRequest → ProviderCaller → ProviderResult → ResponseConverter → llm.Response`예요. Streaming 흐름도 같은 converter를 먼저 거쳐 `ProviderStreamCaller`로 들어가요. 그래서 OpenAI SSE, Codex JSONL, Copilot SDK event stream처럼 source 모양이 달라도 app/agent/gateway는 계속 `llm.StreamEvent`만 보면 돼요. HTTP API, subprocess, SDK session, in-memory fake 모두 caller 뒤에 숨길 수 있어요. 권한/승인 레이어는 이 흐름에 넣지 않고, workspace/tool/provider는 요청을 받으면 즉시 실행해요.
 
 ### `llm.Response`
 
@@ -712,7 +718,7 @@ func BuildResponsesRequest(req llm.Request) (map[string]any, error)
 func ParseResponsesResponse(data []byte, providerName string) (*llm.Response, error)
 ```
 
-`Generate`는 `llm.AdaptedProvider`를 통해 `ResponsesConverter`와 `Client.CallProvider`를 연결해요. 그래서 새 OpenAI-compatible 파생 provider는 converter를 재사용하고 caller 설정만 바꾸면 돼요. `Stream`은 같은 request builder와 retry 경로를 공유하되 SSE body lifetime을 직접 관리해요. JSON request 생성, bearer auth, custom header 복사, retry/backoff, `Retry-After` backoff 반영, SSE line framing, HTTP 실패 분류는 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. provider 오류는 `httptransport.HTTPError`로 감싸서 gateway나 외부 adapter가 `errors.As`로 status code와 body를 일관되게 읽을 수 있어요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
+`Generate`는 `llm.AdaptedProvider`를 통해 `ResponsesConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter의 `ProviderStreamCaller` 경로를 써서 표준 request를 먼저 OpenAI-compatible payload로 변환한 뒤 SSE API를 호출해요. 그래서 새 OpenAI-compatible 파생 provider는 converter를 재사용하고 caller/stream caller 설정만 바꾸면 돼요. JSON request 생성, bearer auth, custom header 복사, retry/backoff, `Retry-After` backoff 반영, SSE line framing, HTTP 실패 분류는 `providers/internal/httptransport`를 써서 OmniRoute 같은 파생 provider와 같은 HTTP 처리 규칙을 재사용해요. provider 오류는 `httptransport.HTTPError`로 감싸서 gateway나 외부 adapter가 `errors.As`로 status code와 body를 일관되게 읽을 수 있어요. `ProviderName`을 지정하면 OpenAI-compatible 파생 provider가 response와 stream event provider label을 자기 이름으로 고정할 수 있어요.
 
 built-in tool helper도 제공해요.
 

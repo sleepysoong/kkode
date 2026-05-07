@@ -29,6 +29,30 @@ func TestAdaptedProviderRunsConversionCallerAndResponseMapping(t *testing.T) {
 	}
 }
 
+func TestAdaptedProviderRunsStreamingConversionAndCaller(t *testing.T) {
+	converter := fakeConverter{}
+	streamer := &fakeStreamer{}
+	provider := &AdaptedProvider{
+		ProviderName:  "fake-api",
+		Converter:     converter,
+		Streamer:      streamer,
+		Options:       ConvertOptions{Operation: "responses.create"},
+		StreamOptions: ConvertOptions{Operation: "responses.stream"},
+	}
+	stream, err := provider.Stream(context.Background(), Request{Model: "fake-model", Messages: []Message{UserText("안녕")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if streamer.got.Operation != "responses.stream" || streamer.got.Model != "fake-model" || !streamer.got.Stream {
+		t.Fatalf("stream 변환 요청이 이상해요: %+v", streamer.got)
+	}
+	ev, err := stream.Recv()
+	if err != nil || ev.Type != StreamEventCompleted {
+		t.Fatalf("stream event가 이상해요: %+v err=%v", ev, err)
+	}
+}
+
 type fakeConverter struct{}
 
 func (fakeConverter) ConvertRequest(ctx context.Context, req Request, opts ConvertOptions) (ProviderRequest, error) {
@@ -36,7 +60,7 @@ func (fakeConverter) ConvertRequest(ctx context.Context, req Request, opts Conve
 	if operation == "" {
 		operation = "responses.create"
 	}
-	return ProviderRequest{Operation: operation, Model: req.Model, Body: map[string]any{"model": req.Model}}, nil
+	return ProviderRequest{Operation: operation, Model: req.Model, Body: map[string]any{"model": req.Model}, Stream: opts.Stream}, nil
 }
 
 func (fakeConverter) ConvertResponse(ctx context.Context, result ProviderResult) (*Response, error) {
@@ -48,4 +72,14 @@ type fakeCaller struct{ got ProviderRequest }
 func (f *fakeCaller) CallProvider(ctx context.Context, req ProviderRequest) (ProviderResult, error) {
 	f.got = req
 	return ProviderResult{}, nil
+}
+
+type fakeStreamer struct{ got ProviderRequest }
+
+func (f *fakeStreamer) StreamProvider(ctx context.Context, req ProviderRequest) (EventStream, error) {
+	f.got = req
+	events := make(chan StreamEvent, 1)
+	events <- StreamEvent{Type: StreamEventCompleted}
+	close(events)
+	return NewChannelStream(ctx, events, nil), nil
 }

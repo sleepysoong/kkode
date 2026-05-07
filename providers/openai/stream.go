@@ -3,14 +3,49 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/internal/httptransport"
 )
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
-	hreq, payload, err := c.newResponsesRequest(ctx, req, true)
+	adapter := llm.AdaptedProvider{
+		ProviderName:         c.Name(),
+		ProviderCapabilities: c.Capabilities(),
+		Converter:            ResponsesConverter{ProviderName: c.Name()},
+		Streamer:             c,
+		Options:              llm.ConvertOptions{Operation: responsesOperation},
+		StreamOptions:        llm.ConvertOptions{Operation: responsesOperation, Stream: true},
+	}
+	return adapter.Stream(ctx, req)
+}
+
+func (c *Client) StreamProvider(ctx context.Context, req llm.ProviderRequest) (llm.EventStream, error) {
+	if req.Operation != "" && req.Operation != responsesOperation {
+		return nil, fmt.Errorf("지원하지 않는 OpenAI-compatible stream operation이에요: %s", req.Operation)
+	}
+	body, ok := req.Body.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("OpenAI-compatible stream body는 map이어야 해요")
+	}
+	streamBody := make(map[string]any, len(body)+1)
+	for k, v := range body {
+		streamBody[k] = v
+	}
+	streamBody["stream"] = true
+	u, err := url.JoinPath(c.baseURL, "responses")
+	if err != nil {
+		return nil, err
+	}
+	headers := httptransport.CloneHeaders(c.headers)
+	for k, v := range req.Headers {
+		headers[k] = v
+	}
+	hreq, payload, err := httptransport.NewJSONRequest(ctx, http.MethodPost, u, c.apiKey, headers, streamBody, "text/event-stream")
 	if err != nil {
 		return nil, err
 	}

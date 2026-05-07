@@ -168,7 +168,11 @@ func TestBuildResponsesRequestBuiltinTool(t *testing.T) {
 }
 
 func TestStreamParsesSSE(t *testing.T) {
+	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatal(err)
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"he\"}\n\n"))
 		_, _ = w.Write([]byte("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"model\":\"gpt\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}]}}\n\n"))
@@ -187,6 +191,9 @@ func TestStreamParsesSSE(t *testing.T) {
 	ev, err = stream.Recv()
 	if err != nil || ev.Type != llm.StreamEventCompleted || ev.Response.Text != "hello" {
 		t.Fatalf("ev=%#v err=%v", ev, err)
+	}
+	if gotBody["stream"] != true || gotBody["model"] != "gpt" {
+		t.Fatalf("stream 요청도 변환 레이어 payload를 써야 해요: %#v", gotBody)
 	}
 }
 
