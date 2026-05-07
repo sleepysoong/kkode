@@ -8,13 +8,15 @@ import (
 
 // StatsResponse는 외부 dashboard adapter가 gateway 저장소 상태를 한 번에 그릴 때 쓰는 응답이에요.
 type StatsResponse struct {
-	Sessions    int            `json:"sessions"`
-	Turns       int            `json:"turns"`
-	Events      int            `json:"events"`
-	Todos       int            `json:"todos"`
-	Checkpoints int            `json:"checkpoints"`
-	Runs        map[string]int `json:"runs"`
-	Resources   map[string]int `json:"resources"`
+	Sessions       int            `json:"sessions"`
+	Turns          int            `json:"turns"`
+	Events         int            `json:"events"`
+	Todos          int            `json:"todos"`
+	Checkpoints    int            `json:"checkpoints"`
+	TotalRuns      int            `json:"total_runs"`
+	Runs           map[string]int `json:"runs"`
+	TotalResources int            `json:"total_resources"`
+	Resources      map[string]int `json:"resources"`
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -37,14 +39,24 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []str
 
 func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 	return StatsResponse{
-		Sessions:    stats.Sessions,
-		Turns:       stats.Turns,
-		Events:      stats.Events,
-		Todos:       stats.Todos,
-		Checkpoints: stats.Checkpoints,
-		Runs:        cloneIntMap(stats.Runs),
-		Resources:   cloneIntMap(stats.Resources),
+		Sessions:       stats.Sessions,
+		Turns:          stats.Turns,
+		Events:         stats.Events,
+		Todos:          stats.Todos,
+		Checkpoints:    stats.Checkpoints,
+		TotalRuns:      sumIntMap(stats.Runs),
+		Runs:           cloneIntMap(stats.Runs),
+		TotalResources: sumIntMap(stats.Resources),
+		Resources:      cloneIntMap(stats.Resources),
 	}
+}
+
+func sumIntMap(in map[string]int) int {
+	total := 0
+	for _, value := range in {
+		total += value
+	}
+	return total
 }
 
 func cloneIntMap(in map[string]int) map[string]int {

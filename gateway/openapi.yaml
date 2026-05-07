@@ -1956,10 +1956,16 @@ components:
           type: integer
         checkpoints:
           type: integer
+        total_runs:
+          type: integer
+          description: 모든 run 상태 카운트의 합계예요.
         runs:
           type: object
           additionalProperties:
             type: integer
+        total_resources:
+          type: integer
+          description: 모든 resource kind 카운트의 합계예요.
         resources:
           type: object
           additionalProperties:

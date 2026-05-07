@@ -181,7 +181,7 @@ func TestGatewayStatsEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &stats); err != nil {
 		t.Fatal(err)
 	}
-	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Runs["running"] != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.TotalRuns != 1 || stats.Runs["running"] != 1 || stats.TotalResources != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
 		t.Fatalf("stats 응답이 이상해요: %+v", stats)
 	}
 }
