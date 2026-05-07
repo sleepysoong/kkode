@@ -1049,6 +1049,12 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
 			return &RunPreviewResponse{}, nil
 		},
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			return nil
+		},
+		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
+			return &ProviderTestResponse{OK: true, Provider: provider}, nil
+		},
 		RunRuntimeStats: func() RunRuntimeStats {
 			return RunRuntimeStats{TrackedRuns: 3, ActiveRuns: 2, QueuedRuns: 1, RunningRuns: 1, MaxConcurrentRuns: 2, OccupiedRunSlots: 1, AvailableRunSlots: 1, RunTimeout: time.Minute}
 		},
@@ -1072,7 +1078,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	if diagnostics.RunRuntime == nil || diagnostics.RunRuntime.TrackedRuns != 3 || diagnostics.RunRuntime.QueuedRuns != 1 || diagnostics.RunRuntime.RunningRuns != 1 || diagnostics.RunRuntime.AvailableRunSlots != 1 || diagnostics.RunRuntime.RunTimeoutSeconds != 60 {
 		t.Fatalf("runtime diagnostics가 이상해요: %+v", diagnostics.RunRuntime)
 	}
-	var sawStore, sawDefaultMCP bool
+	var sawStore, sawDefaultMCP, sawRunValidator, sawProviderTester bool
 	for _, check := range diagnostics.Checks {
 		if check.Name == "store" && check.Status == "ok" {
 			sawStore = true
@@ -1080,9 +1086,15 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		if check.Name == "default_mcp.context7" && check.Status == "configured" {
 			sawDefaultMCP = true
 		}
+		if check.Name == "run_validator" && check.Status == "ok" {
+			sawRunValidator = true
+		}
+		if check.Name == "provider_tester" && check.Status == "ok" {
+			sawProviderTester = true
+		}
 	}
-	if !sawStore || !sawDefaultMCP {
-		t.Fatalf("store/default MCP check가 필요해요: %+v", diagnostics.Checks)
+	if !sawStore || !sawDefaultMCP || !sawRunValidator || !sawProviderTester {
+		t.Fatalf("store/default MCP/runtime wiring check가 필요해요: %+v", diagnostics.Checks)
 	}
 }
 
