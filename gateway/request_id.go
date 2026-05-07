@@ -16,11 +16,17 @@ const RequestIDHeader = "X-Request-Id"
 // IdempotencyKeyHeader는 외부 adapter가 같은 run 생성 요청의 재시도를 묶을 때 쓰는 header예요.
 const IdempotencyKeyHeader = "Idempotency-Key"
 
+// IdempotencyReplayHeader는 idempotency key 때문에 기존 run을 반환했음을 알려줘요.
+const IdempotencyReplayHeader = "X-Idempotent-Replay"
+
 // RequestIDMetadataKey는 HTTP 요청과 background run/event를 연결하는 metadata key예요.
 const RequestIDMetadataKey = "request_id"
 
 // IdempotencyMetadataKey는 같은 run 생성 요청을 중복 접수하지 않도록 저장하는 metadata key예요.
 const IdempotencyMetadataKey = "idempotency_key"
+
+// IdempotencyReusedMetadataKey는 응답 metadata에서 기존 run 재사용 여부를 알려줘요.
+const IdempotencyReusedMetadataKey = "idempotency_reused"
 
 type requestIDContextKey struct{}
 

@@ -876,6 +876,7 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
 	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKeyFromRequest(r, req.Metadata))
 	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
+		w.Header().Set(IdempotencyReplayHeader, "true")
 		writeJSON(w, existing)
 		return
 	}
@@ -891,6 +892,11 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	run, err := s.cfg.RunStarter(r.Context(), req)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "start_run_failed", err.Error())
+		return
+	}
+	if isIdempotencyReplay(run) {
+		w.Header().Set(IdempotencyReplayHeader, "true")
+		writeJSON(w, run)
 		return
 	}
 	writeJSONStatus(w, http.StatusAccepted, run)
@@ -919,7 +925,11 @@ func (s *Server) findIdempotentRun(ctx context.Context, req RunStartRequest) *Ru
 	if err != nil || len(runs) == 0 {
 		return nil
 	}
-	return cloneRun(&runs[0])
+	return markIdempotencyReused(cloneRun(&runs[0]))
+}
+
+func isIdempotencyReplay(run *RunDTO) bool {
+	return run != nil && strings.EqualFold(strings.TrimSpace(run.Metadata[IdempotencyReusedMetadataKey]), "true")
 }
 
 func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {

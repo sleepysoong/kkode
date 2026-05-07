@@ -120,7 +120,7 @@ func TestAsyncRunManagerReusesInMemoryIdempotentRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.ID != first.ID || atomic.LoadInt32(&starts) != 1 {
+	if second.ID != first.ID || second.Metadata[IdempotencyReusedMetadataKey] != "true" || atomic.LoadInt32(&starts) != 1 {
 		t.Fatalf("같은 in-memory idempotent run은 재사용해야 해요: first=%+v second=%+v starts=%d", first, second, starts)
 	}
 }
@@ -352,7 +352,7 @@ func TestAsyncRunManagerUsesDurableClaimForDuplicateRunID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.ID != first.ID || atomic.LoadInt32(&starts) > 1 {
+	if second.ID != first.ID || second.Metadata[IdempotencyReusedMetadataKey] != "true" || atomic.LoadInt32(&starts) > 1 {
 		t.Fatalf("durable claim이 있으면 두 번째 manager는 실행하지 않아야 해요: first=%+v second=%+v starts=%d", first, second, starts)
 	}
 }

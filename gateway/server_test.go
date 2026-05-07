@@ -439,12 +439,18 @@ func TestGatewayRunStartIsIdempotent(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("idempotent 재시도는 기존 run을 200으로 돌려야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if rec.Header().Get(IdempotencyReplayHeader) != "true" {
+		t.Fatalf("idempotent 재사용 응답 header가 필요해요: %s", rec.Header().Get(IdempotencyReplayHeader))
+	}
 	var run RunDTO
 	if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
 		t.Fatal(err)
 	}
 	if run.ID != "run_existing" || listed.IdempotencyKey != "idem_1" || listed.SessionID != "sess_1" {
 		t.Fatalf("기존 run 조회가 이상해요: run=%+v query=%+v", run, listed)
+	}
+	if run.Metadata[IdempotencyReusedMetadataKey] != "true" {
+		t.Fatalf("idempotent 재사용 metadata가 필요해요: %+v", run.Metadata)
 	}
 	if started {
 		t.Fatal("idempotency key로 기존 run을 찾으면 새 run을 시작하면 안 돼요")
@@ -478,6 +484,26 @@ func TestGatewayRunStartStoresIdempotencyKey(t *testing.T) {
 	}
 	if !strings.HasPrefix(started.RunID, "run_idem_") {
 		t.Fatalf("idempotency key가 있으면 결정적 run id를 써야 해요: %s", started.RunID)
+	}
+}
+
+func TestGatewayRunStartReturnsReplayFromStarter(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store: store,
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "queued", Metadata: map[string]string{IdempotencyMetadataKey: req.Metadata[IdempotencyMetadataKey], IdempotencyReusedMetadataKey: "true"}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test"}`))
+	req.Header.Set(IdempotencyKeyHeader, "idem_2")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get(IdempotencyReplayHeader) != "true" {
+		t.Fatalf("RunStarter가 재사용 run을 돌려주면 200 replay여야 해요: status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
 }
 

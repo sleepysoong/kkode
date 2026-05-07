@@ -1359,6 +1359,17 @@ paths:
             schema:
               $ref: '#/components/schemas/RunStartRequest'
       responses:
+        '200':
+          description: 같은 idempotency key의 기존 run을 반환했어요.
+          headers:
+            X-Idempotent-Replay:
+              schema:
+                type: string
+              description: 기존 run 재사용이면 `true`예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
         '202':
           description: run이 접수됐어요.
           content:

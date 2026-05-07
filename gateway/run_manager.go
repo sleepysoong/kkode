@@ -221,10 +221,10 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	m.mu.Lock()
 	if existing, exists := m.runs[runID]; exists {
 		if sameIdempotencyKey(existing.run.Metadata, req.Metadata) {
-			run := *cloneRun(&existing.run)
+			run := markIdempotencyReused(cloneRun(&existing.run))
 			m.mu.Unlock()
 			cancel()
-			return &run, nil
+			return run, nil
 		}
 		m.mu.Unlock()
 		cancel()
@@ -245,7 +245,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		m.mu.Lock()
 		delete(m.runs, runID)
 		m.mu.Unlock()
-		return cloneRun(&accepted), nil
+		return markIdempotencyReused(cloneRun(&accepted)), nil
 	}
 	m.publish(accepted)
 	m.wg.Add(1)
@@ -275,6 +275,17 @@ func (m *AsyncRunManager) claimAcceptedRun(ctx context.Context, run *RunDTO) (bo
 func sameIdempotencyKey(existing, requested map[string]string) bool {
 	key := strings.TrimSpace(requested[IdempotencyMetadataKey])
 	return key != "" && strings.TrimSpace(existing[IdempotencyMetadataKey]) == key
+}
+
+func markIdempotencyReused(run *RunDTO) *RunDTO {
+	if run == nil {
+		return nil
+	}
+	if run.Metadata == nil {
+		run.Metadata = map[string]string{}
+	}
+	run.Metadata[IdempotencyReusedMetadataKey] = "true"
+	return run
 }
 
 // Get은 run 상태를 반환해요.
