@@ -219,7 +219,13 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	runCtx, cancel := context.WithCancel(context.Background())
 	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), Status: "queued", EventsURL: "/api/v1/sessions/" + req.SessionID + "/events", StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
 	m.mu.Lock()
-	if _, exists := m.runs[runID]; exists {
+	if existing, exists := m.runs[runID]; exists {
+		if sameIdempotencyKey(existing.run.Metadata, req.Metadata) {
+			run := *cloneRun(&existing.run)
+			m.mu.Unlock()
+			cancel()
+			return &run, nil
+		}
 		m.mu.Unlock()
 		cancel()
 		return nil, errors.New("run id가 이미 존재해요")
@@ -237,6 +243,11 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	m.wg.Add(1)
 	go m.execute(runCtx, cancel, req.withRunID(runID))
 	return cloneRun(&accepted), nil
+}
+
+func sameIdempotencyKey(existing, requested map[string]string) bool {
+	key := strings.TrimSpace(requested[IdempotencyMetadataKey])
+	return key != "" && strings.TrimSpace(existing[IdempotencyMetadataKey]) == key
 }
 
 // Get은 run 상태를 반환해요.

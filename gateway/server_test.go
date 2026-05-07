@@ -476,6 +476,9 @@ func TestGatewayRunStartStoresIdempotencyKey(t *testing.T) {
 	if started.Metadata[IdempotencyMetadataKey] != "body_key" {
 		t.Fatalf("idempotency key를 run metadata에 저장해야 해요: %+v", started.Metadata)
 	}
+	if !strings.HasPrefix(started.RunID, "run_idem_") {
+		t.Fatalf("idempotency key가 있으면 결정적 run id를 써야 해요: %s", started.RunID)
+	}
 }
 
 func TestGatewayListsRunsByRequestID(t *testing.T) {

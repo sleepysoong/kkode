@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -878,6 +879,9 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, existing)
 		return
 	}
+	if key := strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]); key != "" {
+		req.RunID = idempotentRunID(req.SessionID, key)
+	}
 	if s.cfg.RunValidator != nil {
 		if err := s.cfg.RunValidator(r.Context(), req); err != nil {
 			writeError(w, r, http.StatusBadRequest, "invalid_run_preflight", err.Error())
@@ -899,6 +903,11 @@ func idempotencyKeyFromRequest(r *http.Request, metadata map[string]string) stri
 		}
 	}
 	return strings.TrimSpace(metadata[IdempotencyMetadataKey])
+}
+
+func idempotentRunID(sessionID, idempotencyKey string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(sessionID) + "\x00" + strings.TrimSpace(idempotencyKey)))
+	return "run_idem_" + fmt.Sprintf("%x", sum[:16])
 }
 
 func (s *Server) findIdempotentRun(ctx context.Context, req RunStartRequest) *RunDTO {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -95,6 +96,32 @@ func TestAsyncRunManagerListsRunsByIdempotencyKey(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].ID != first.ID || listed[0].Metadata[IdempotencyMetadataKey] != "idem_one" {
 		t.Fatalf("idempotency_key run 목록이 이상해요: %+v", listed)
+	}
+}
+
+func TestAsyncRunManagerReusesInMemoryIdempotentRun(t *testing.T) {
+	block := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var starts int32
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		atomic.AddInt32(&starts, 1)
+		started <- struct{}{}
+		<-block
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	})
+	defer close(block)
+	req := RunStartRequest{RunID: "run_idem_test", SessionID: "sess_1", Prompt: "go", Metadata: map[string]string{IdempotencyMetadataKey: "idem_same"}}
+	first, err := manager.Start(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	second, err := manager.Start(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID || atomic.LoadInt32(&starts) != 1 {
+		t.Fatalf("같은 in-memory idempotent run은 재사용해야 해요: first=%+v second=%+v starts=%d", first, second, starts)
 	}
 }
 
