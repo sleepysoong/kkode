@@ -969,8 +969,13 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.Model = strings.TrimSpace(req.Model)
 	req.Agent = strings.TrimSpace(req.Agent)
+	req.Metadata = sanitizeRunMetadata(req.Metadata)
 	if req.ProjectRoot == "" || req.Provider == "" || req.Model == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_session", "project_root, provider, model이 필요해요")
+		return
+	}
+	if err := validateRunMetadata(req.Metadata); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_session", err.Error())
 		return
 	}
 	mode := session.AgentMode(strings.TrimSpace(req.Mode))

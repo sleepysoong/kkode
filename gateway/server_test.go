@@ -253,7 +253,7 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
 
-	body := bytes.NewBufferString(`{"project_root":" /tmp/repo ","provider":" openai ","model":" gpt-5-mini ","agent":" web ","mode":" plan ","metadata":{"source":"test"}}`)
+	body := bytes.NewBufferString(`{"project_root":" /tmp/repo ","provider":" openai ","model":" gpt-5-mini ","agent":" web ","mode":" plan ","metadata":{"source":"test"," trace-id ":" abc ","empty":" "}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", body)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -264,8 +264,15 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == "" || created.ProjectRoot != "/tmp/repo" || created.ProviderName != "openai" || created.Model != "gpt-5-mini" || created.AgentName != "web" || created.Mode != "plan" || created.Metadata["source"] != "test" {
+	if created.ID == "" || created.ProjectRoot != "/tmp/repo" || created.ProviderName != "openai" || created.Model != "gpt-5-mini" || created.AgentName != "web" || created.Mode != "plan" || created.Metadata["source"] != "test" || created.Metadata["trace-id"] != "abc" || created.Metadata[" trace-id "] != "" || created.Metadata["empty"] != "" {
 		t.Fatalf("unexpected session: %+v", created)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"project_root":"/tmp/repo","provider":"openai","model":"gpt-5-mini","metadata":{"bad key":"value"}}`))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "metadata") {
+		t.Fatalf("invalid session metadata는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"project_root":"/tmp/repo","provider":"openai","model":"gpt-5-mini","mode":"debug"}`))

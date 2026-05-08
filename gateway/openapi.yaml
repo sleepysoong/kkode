@@ -2922,8 +2922,15 @@ components:
           enum: [build, plan, ask]
         metadata:
           type: object
+          maxProperties: 64
+          propertyNames:
+            type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
           additionalProperties:
             type: string
+            maxLength: 1024
+          description: session metadata예요. key/value는 trim되고 빈 항목은 제거되며, key는 영문/숫자/._-만 허용해요.
     SessionListResponse:
       type: object
       required: [sessions]
