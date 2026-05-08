@@ -5253,4 +5253,21 @@ func TestGatewayCompactsSessionAndCreatesCheckpoint(t *testing.T) {
 	if !strings.Contains(string(cp.Payload), "session.compaction") {
 		t.Fatalf("checkpoint payload가 이상해요: %s", cp.Payload)
 	}
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "negative first preserve", body: `{"preserve_first_n_turns":-1}`, want: "preserve_first_n_turns"},
+		{name: "negative last preserve", body: `{"preserve_last_n_turns":-1}`, want: "preserve_last_n_turns"},
+	} {
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/compact", bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
 }

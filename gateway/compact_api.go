@@ -45,10 +45,15 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionI
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
 	}
-	preserveFirst := req.PreserveFirstNTurns
-	if preserveFirst < 0 {
-		preserveFirst = 0
+	if req.PreserveFirstNTurns < 0 {
+		writeError(w, r, http.StatusBadRequest, "invalid_session_compact", "preserve_first_n_turns는 0 이상이어야 해요")
+		return
 	}
+	if req.PreserveLastNTurns < 0 {
+		writeError(w, r, http.StatusBadRequest, "invalid_session_compact", "preserve_last_n_turns는 0 이상이어야 해요")
+		return
+	}
+	preserveFirst := req.PreserveFirstNTurns
 	preserveLast := req.PreserveLastNTurns
 	if preserveLast <= 0 {
 		preserveLast = 4
