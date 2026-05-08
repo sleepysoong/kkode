@@ -666,10 +666,8 @@ func (m *AsyncRunManager) recordProgressEvent(ctx context.Context, runID string,
 	if event.At.IsZero() {
 		event.At = m.timestamp()
 	}
-	event.Message = llm.RedactSecrets(event.Message)
-	event.Error = llm.RedactSecrets(event.Error)
-	event.Payload = redactRawJSON(event.Payload)
-	event.Run = redactRunEventSnapshot(run)
+	event.Run = run
+	event = redactRunEvent(event)
 	saved, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{
 		RunID:   runID,
 		Type:    event.Type,
@@ -697,7 +695,7 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 		}
 		out := make([]RunEventDTO, 0, len(events))
 		for _, event := range events {
-			out = append(out, RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Tool: event.Tool, Message: event.Message, Error: event.Error, Payload: append([]byte(nil), event.Payload...), Run: redactRunEventSnapshot(*runDTOFromSession(event.Run))})
+			out = append(out, redactRunEvent(RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Tool: event.Tool, Message: event.Message, Error: event.Error, Payload: append([]byte(nil), event.Payload...), Run: *runDTOFromSession(event.Run)}))
 		}
 		return out, nil
 	}
@@ -708,7 +706,15 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 	if afterSeq >= 1 {
 		return []RunEventDTO{}, nil
 	}
-	return []RunEventDTO{{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: redactRunEventSnapshot(*run)}}, nil
+	return []RunEventDTO{redactRunEvent(RunEventDTO{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: *run})}, nil
+}
+
+func redactRunEvent(event RunEventDTO) RunEventDTO {
+	event.Message = llm.RedactSecrets(event.Message)
+	event.Error = llm.RedactSecrets(event.Error)
+	event.Payload = redactRawJSON(event.Payload)
+	event.Run = redactRunEventSnapshot(event.Run)
+	return event
 }
 
 func redactRunEventSnapshot(run RunDTO) RunDTO {

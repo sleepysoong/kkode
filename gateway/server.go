@@ -384,6 +384,9 @@ func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit i
 	if len(events) > limit {
 		events = events[:limit]
 	}
+	for i := range events {
+		events[i] = redactRunEvent(events[i])
+	}
 	return events, nil
 }
 
@@ -482,6 +485,7 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 	streamSeq := 0
 	terminal := map[string]bool{}
 	for _, event := range events {
+		event = redactRunEvent(event)
 		streamSeq++
 		writeSSEFrame(w, flusher, streamSeq, event.Type, event)
 		if activeIDs[event.Run.ID] && isTerminalRunStatus(event.Run.Status) {
@@ -498,6 +502,7 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 		case <-heartbeat.C:
 			writeSSEHeartbeat(w, flusher)
 		case event := <-updates:
+			event = redactRunEvent(event)
 			streamSeq++
 			if event.Seq <= 0 {
 				event.Seq = streamSeq
@@ -1679,7 +1684,7 @@ func (s *Server) runEventSnapshotWithLimit(r *http.Request, runID string, fallba
 	if s.cfg.RunEventLister != nil {
 		events, err := s.cfg.RunEventLister(r.Context(), runID, afterSeq, limit)
 		if err == nil && len(events) > 0 {
-			return events
+			return redactRunEvents(events)
 		}
 		if err == nil && afterSeq > 0 {
 			return []RunEventDTO{}
@@ -1688,7 +1693,15 @@ func (s *Server) runEventSnapshotWithLimit(r *http.Request, runID string, fallba
 	if afterSeq >= 1 {
 		return []RunEventDTO{}
 	}
-	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}}
+	return []RunEventDTO{redactRunEvent(RunEventDTO{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback})}
+}
+
+func redactRunEvents(events []RunEventDTO) []RunEventDTO {
+	out := make([]RunEventDTO, len(events))
+	for i, event := range events {
+		out[i] = redactRunEvent(event)
+	}
+	return out
 }
 
 func trimRuns(runs []RunDTO, limit int) ([]RunDTO, int, bool) {
@@ -1867,6 +1880,7 @@ func writeSSEHeartbeat(w http.ResponseWriter, flusher http.Flusher) {
 }
 
 func writeRunSSEEvent(w http.ResponseWriter, flusher http.Flusher, event RunEventDTO) {
+	event = redactRunEvent(event)
 	writeSSEFrame(w, flusher, event.Seq, event.Type, event)
 }
 

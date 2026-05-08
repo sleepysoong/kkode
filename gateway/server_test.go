@@ -1288,6 +1288,7 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 
 func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	store := openTestStore(t)
+	secret := "token=abc1234567890secretvalue"
 	var query RunQuery
 	var eventRunID string
 	var gotAfterSeq int
@@ -1301,8 +1302,8 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 			eventRunID = runID
 			gotAfterSeq = afterSeq
 			return []RunEventDTO{
-				{Seq: 1, At: time.Unix(2, 0).UTC(), Type: "run.completed", Run: RunDTO{ID: runID, Status: "completed"}},
-				{Seq: 2, At: time.Unix(1, 0).UTC(), Type: "run.queued", Run: RunDTO{ID: runID, Status: "queued"}},
+				{Seq: 1, At: time.Unix(2, 0).UTC(), Type: "run.completed", Message: "done " + secret, Run: RunDTO{ID: runID, Status: "completed", Prompt: "done " + secret, Metadata: map[string]string{"token": secret}}},
+				{Seq: 2, At: time.Unix(1, 0).UTC(), Type: "run.queued", Payload: json.RawMessage(`{"value":"token=abc1234567890secretvalue"}`), Run: RunDTO{ID: runID, Status: "queued", ContextBlocks: []string{"context " + secret}}},
 			}, nil
 		},
 	})
@@ -1324,6 +1325,9 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}
 	if body.RequestID != "req_filter" || len(body.Events) != 2 || body.Events[0].Type != "run.queued" || body.Events[1].Type != "run.completed" {
 		t.Fatalf("request correlation event 응답이 이상해요: %+v", body)
+	}
+	if raw := rec.Body.String(); strings.Contains(raw, "abc1234567890secretvalue") || !strings.Contains(raw, "[REDACTED]") {
+		t.Fatalf("request correlation event 응답은 secret을 숨겨야 해요: %s", raw)
 	}
 	if body.Limit != 5 || body.ResultTruncated {
 		t.Fatalf("request correlation event metadata가 이상해요: %+v", body)
@@ -3184,7 +3188,8 @@ func writeTestFile(t *testing.T, path string, content string) {
 func TestGatewayStreamsRunEvents(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
-	run := RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_stream")}
+	secret := "token=abc1234567890secretvalue"
+	run := RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "running", Prompt: "run " + secret, EventsURL: runEventsURL("run_stream"), Metadata: map[string]string{"token": secret}, ContextBlocks: []string{"context " + secret}}
 	srv, err := New(Config{
 		Store: store,
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
@@ -3206,7 +3211,7 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 		close(done)
 	}()
 	waitForRunSubscription(t, bus, "run_stream")
-	bus.Publish(RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "completed"})
+	bus.Publish(RunDTO{ID: "run_stream", SessionID: "sess_1", Status: "completed", Prompt: "done " + secret, Metadata: map[string]string{"token": secret}})
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -3219,6 +3224,9 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "event: run.running") || !strings.Contains(body, "event: run.completed") {
 		t.Fatalf("run SSE body가 이상해요: %s", body)
+	}
+	if strings.Contains(body, "abc1234567890secretvalue") || !strings.Contains(body, "[REDACTED]") {
+		t.Fatalf("run SSE는 run snapshot secret을 숨겨야 해요: %s", body)
 	}
 }
 
@@ -3330,7 +3338,8 @@ func TestGatewayRunSSERejectsInvalidHeartbeat(t *testing.T) {
 func TestGatewayRunSSEStreamsProgressEvents(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
-	run := RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_progress")}
+	secret := "token=abc1234567890secretvalue"
+	run := RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "running", Prompt: "run " + secret, EventsURL: runEventsURL("run_progress")}
 	srv, err := New(Config{
 		Store: store,
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
@@ -3352,8 +3361,8 @@ func TestGatewayRunSSEStreamsProgressEvents(t *testing.T) {
 		close(done)
 	}()
 	waitForRunEventSubscription(t, bus, "run_progress")
-	bus.PublishEvent(RunEventDTO{Seq: 2, At: time.Now().UTC(), Type: "tool.completed", Tool: "file_read", Message: "ok", Run: run})
-	bus.PublishEvent(RunEventDTO{Seq: 3, At: time.Now().UTC(), Type: "run.completed", Run: RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "completed"}})
+	bus.PublishEvent(RunEventDTO{Seq: 2, At: time.Now().UTC(), Type: "tool.completed", Tool: "file_read", Message: "ok " + secret, Error: "err " + secret, Payload: json.RawMessage(`{"value":"token=abc1234567890secretvalue"}`), Run: run})
+	bus.PublishEvent(RunEventDTO{Seq: 3, At: time.Now().UTC(), Type: "run.completed", Run: RunDTO{ID: "run_progress", SessionID: "sess_1", Status: "completed", Prompt: "done " + secret}})
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -3361,8 +3370,11 @@ func TestGatewayRunSSEStreamsProgressEvents(t *testing.T) {
 		t.Fatal("progress SSE가 종료되지 않았어요")
 	}
 	body := rec.BodyString()
-	if !strings.Contains(body, "event: tool.completed") || !strings.Contains(body, `"tool":"file_read"`) || !strings.Contains(body, `"message":"ok"`) {
+	if !strings.Contains(body, "event: tool.completed") || !strings.Contains(body, `"tool":"file_read"`) || !strings.Contains(body, `"message":"ok [REDACTED]"`) {
 		t.Fatalf("run progress SSE body가 이상해요: %s", body)
+	}
+	if strings.Contains(body, "abc1234567890secretvalue") {
+		t.Fatalf("run progress SSE는 secret을 숨겨야 해요: %s", body)
 	}
 }
 
