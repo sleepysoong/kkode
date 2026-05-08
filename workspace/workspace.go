@@ -70,6 +70,7 @@ var defaultWalkSkipDirs = map[string]struct{}{
 	"node_modules": {},
 }
 
+const MaxFileReadBytes = 8 << 20
 const MaxCommandTimeout = 5 * time.Minute
 
 func New(root string) (*Workspace, error) {
@@ -117,17 +118,23 @@ func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error) 
 		return "", errors.New("limit_lines must be >= 0")
 	case opts.MaxBytes < 0:
 		return "", errors.New("max_bytes must be >= 0")
+	case opts.MaxBytes > MaxFileReadBytes:
+		return "", fmt.Errorf("max_bytes must be <= %d", MaxFileReadBytes)
 	}
 	path, err := w.Resolve(rel)
 	if err != nil {
 		return "", err
 	}
-	b, err := readFileBytes(path, opts.MaxBytes)
+	maxBytes := opts.MaxBytes
+	if maxBytes == 0 {
+		maxBytes = MaxFileReadBytes
+	}
+	b, err := readFileBytes(path, maxBytes)
 	if err != nil {
 		return "", err
 	}
-	if opts.MaxBytes > 0 && len(b) > opts.MaxBytes {
-		b = truncateUTF8Bytes(b, opts.MaxBytes)
+	if len(b) > maxBytes {
+		b = truncateUTF8Bytes(b, maxBytes)
 	}
 	text := string(b)
 	if opts.OffsetLine > 0 || opts.LimitLines > 0 {

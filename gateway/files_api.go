@@ -12,7 +12,7 @@ import (
 )
 
 const defaultFileContentBytes = 1 << 20
-const maxFileContentBytes = 8 << 20
+const maxFileContentBytes = workspace.MaxFileReadBytes
 
 type FileEntryDTO struct {
 	Name    string    `json:"name"`
