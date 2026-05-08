@@ -86,6 +86,19 @@ func TestOpenAPIOperationsExposeSuccessResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDescriptionsQuoteColonScalars(t *testing.T) {
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unquotedColonScalar := regexp.MustCompile(`^\s+(description|summary):\s+[^'"|>].*:\s+`)
+	for i, line := range strings.Split(string(data), "\n") {
+		if unquotedColonScalar.MatchString(line) {
+			t.Fatalf("OpenAPI line %d has an unquoted colon scalar that breaks YAML parsers: %s", i+1, line)
+		}
+	}
+}
+
 func TestOpenAPISuccessResponsesExposeContent(t *testing.T) {
 	responses := readOpenAPIOperationSuccessResponseContent(t)
 	for op, statuses := range responses {
