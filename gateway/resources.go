@@ -12,6 +12,11 @@ import (
 	"github.com/sleepysoong/kkode/session"
 )
 
+const maxResourceIDBytes = 128
+const maxResourceNameBytes = 256
+const maxResourceDescriptionBytes = 4096
+const maxResourceConfigBytes = 1 << 20
+
 // ResourceDTO는 MCP server, skill, subagent를 외부 API에 노출하는 공통 manifest예요.
 type ResourceDTO struct {
 	ID          string         `json:"id,omitempty"`
@@ -231,7 +236,31 @@ func resourceFromDTO(kind session.ResourceKind, id string, dto ResourceDTO) (ses
 	if id == "" {
 		id = strings.TrimSpace(dto.ID)
 	}
+	if err := validateResourceIdentity(id, name, dto.Description); err != nil {
+		return session.Resource{}, err
+	}
+	if len(encoded) > maxResourceConfigBytes {
+		return session.Resource{}, fmt.Errorf("resource config는 %d byte 이하여야 해요", maxResourceConfigBytes)
+	}
 	return session.Resource{ID: id, Kind: kind, Name: name, Description: strings.TrimSpace(dto.Description), Enabled: enabled, Config: encoded}, nil
+}
+
+func validateResourceIdentity(id string, name string, description string) error {
+	if id != "" {
+		if len(id) > maxResourceIDBytes {
+			return fmt.Errorf("resource id는 %d byte 이하여야 해요", maxResourceIDBytes)
+		}
+		if !validRunMetadataKey(id) {
+			return fmt.Errorf("resource id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		}
+	}
+	if len(name) > maxResourceNameBytes {
+		return fmt.Errorf("resource name은 %d byte 이하여야 해요", maxResourceNameBytes)
+	}
+	if len(strings.TrimSpace(description)) > maxResourceDescriptionBytes {
+		return fmt.Errorf("resource description은 %d byte 이하여야 해요", maxResourceDescriptionBytes)
+	}
+	return nil
 }
 
 func validateResourceConfig(kind session.ResourceKind, config map[string]any) error {

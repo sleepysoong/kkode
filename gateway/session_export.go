@@ -293,6 +293,7 @@ func (s *Server) prepareImportResources(w http.ResponseWriter, r *http.Request, 
 		return nil, nil, false
 	}
 	resources := make([]session.Resource, 0, len(items))
+	seen := map[string]bool{}
 	for _, item := range items {
 		kind := session.ResourceKind(strings.TrimSpace(item.Kind))
 		if kind == "" {
@@ -304,6 +305,12 @@ func (s *Server) prepareImportResources(w http.ResponseWriter, r *http.Request, 
 			writeError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 			return nil, nil, false
 		}
+		key := string(resource.Kind) + "/" + resource.ID
+		if seen[key] {
+			writeError(w, r, http.StatusBadRequest, "invalid_resource", "import resource id가 중복됐어요")
+			return nil, nil, false
+		}
+		seen[key] = true
 		resources = append(resources, resource)
 	}
 	return store, resources, true

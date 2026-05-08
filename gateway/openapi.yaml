@@ -4143,19 +4143,24 @@ components:
       properties:
         id:
           type: string
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.-]+$'
         kind:
           type: string
           enum: [mcp_server, skill, subagent]
         name:
           type: string
+          maxLength: 256
         description:
           type: string
+          maxLength: 4096
         enabled:
           type: boolean
           default: true
         config:
           type: object
           additionalProperties: true
+          description: MCP/skill/subagent 실행 config예요. JSON 직렬화 기준 최대 1048576 byte까지 허용돼요.
         created_at:
           type: string
           format: date-time

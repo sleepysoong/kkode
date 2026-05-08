@@ -2417,6 +2417,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		{name: "mcp negative timeout", path: "/api/v1/mcp/servers", body: `{"name":"slow","config":{"kind":"http","url":"https://mcp.example.test","timeout":-1}}`, want: "timeout"},
 		{name: "mcp fractional timeout", path: "/api/v1/mcp/servers", body: `{"name":"slow","config":{"kind":"http","url":"https://mcp.example.test","timeout":1.5}}`, want: "integer"},
 		{name: "mcp bad url", path: "/api/v1/mcp/servers", body: `{"name":"bad-url","config":{"kind":"http","url":"file:///tmp/mcp.sock"}}`, want: "http/https"},
+		{name: "mcp bad id", path: "/api/v1/mcp/servers", body: `{"id":"bad id","name":"broken","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource id"},
+		{name: "mcp long name", path: "/api/v1/mcp/servers", body: `{"name":"` + strings.Repeat("n", maxResourceNameBytes+1) + `","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource name"},
+		{name: "mcp long config", path: "/api/v1/mcp/servers", body: `{"name":"huge","config":{"kind":"http","url":"https://mcp.example.test","headers":{"X-Fill":"` + strings.Repeat("x", maxResourceConfigBytes+1) + `"}}}`, want: "resource config"},
 		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
 		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
 		{name: "subagent blank inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"  ":"mcp-fs"}}}`, want: "label"},
@@ -4929,6 +4932,49 @@ func TestGatewayImportRejectsUnknownResourceKindBeforeSavingSession(t *testing.T
 	}
 	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("resource preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		resources []ResourceDTO
+		want      string
+	}{
+		{
+			name:      "bad resource id",
+			resources: []ResourceDTO{{ID: "bad id", Kind: string(session.ResourceMCPServer), Name: "bad", Config: map[string]any{"kind": "http", "url": "https://mcp.example.test"}}},
+			want:      "resource id",
+		},
+		{
+			name: "duplicate resource id",
+			resources: []ResourceDTO{
+				{ID: "mcp_dup", Kind: string(session.ResourceMCPServer), Name: "one", Config: map[string]any{"kind": "http", "url": "https://mcp.example.test/one"}},
+				{ID: "mcp_dup", Kind: string(session.ResourceMCPServer), Name: "two", Config: map[string]any{"kind": "http", "url": "https://mcp.example.test/two"}},
+			},
+			want: "중복",
+		},
+		{
+			name:      "oversized resource config",
+			resources: []ResourceDTO{{ID: "mcp_huge", Kind: string(session.ResourceMCPServer), Name: "huge", Config: map[string]any{"kind": "http", "url": "https://mcp.example.test", "headers": map[string]any{"X-Fill": strings.Repeat("x", maxResourceConfigBytes+1)}}}},
+			want:      "resource config",
+		},
+	} {
+		body, err = json.Marshal(SessionImportRequest{
+			FormatVersion: sessionExportFormatVersion,
+			RawSession:    sess,
+			Resources:     tc.resources,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s import는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("%s preflight 실패 후 session이 저장되면 안 돼요: err=%v", tc.name, err)
+		}
 	}
 }
 
