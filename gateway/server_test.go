@@ -398,6 +398,20 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 		t.Fatalf("event list metadata가 이상해요: %+v", events)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?after_seq=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
+		t.Fatalf("음수 event after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?after_seq=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
+		t.Fatalf("잘못된 event after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?stream=true", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -1734,6 +1748,20 @@ func TestGatewaySessionTurnsAPI(t *testing.T) {
 	}
 	if listed.Turns[0].Usage == nil || listed.Turns[0].Usage.TotalTokens != 15 {
 		t.Fatalf("turn usage가 이상해요: %+v", listed.Turns[0])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns?after_seq=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
+		t.Fatalf("음수 turn after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns?after_seq=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
+		t.Fatalf("잘못된 turn after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns/"+second.ID, nil)

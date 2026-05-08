@@ -982,7 +982,10 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request, sessionID s
 }
 
 func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessionID string) {
-	afterSeq := queryInt(r, "after_seq", 0)
+	afterSeq, ok := queryAfterSeq(w, r)
+	if !ok {
+		return
+	}
 	limit := queryLimit(r, "limit", 500, 5000)
 	var events []EventDTO
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
@@ -1056,7 +1059,10 @@ func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sess
 }
 
 func (s *Server) listSessionTurnsFromTimeline(w http.ResponseWriter, r *http.Request, timeline session.TimelineStore, sessionID string) {
-	afterSeq := queryInt(r, "after_seq", 0)
+	afterSeq, ok := queryAfterSeq(w, r)
+	if !ok {
+		return
+	}
 	limit := queryLimit(r, "limit", 100, 500)
 	records, err := timeline.ListTurns(r.Context(), session.TurnQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
 	if err != nil {
@@ -1085,7 +1091,10 @@ func (s *Server) getSessionTurnFromTimeline(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) listSessionTurns(w http.ResponseWriter, r *http.Request, sess *session.Session) {
-	afterSeq := queryInt(r, "after_seq", 0)
+	afterSeq, ok := queryAfterSeq(w, r)
+	if !ok {
+		return
+	}
 	limit := queryLimit(r, "limit", 100, 500)
 	out := make([]TurnDTO, 0, min(len(sess.Turns), limit))
 	for i, turn := range sess.Turns {
@@ -1754,6 +1763,10 @@ func queryNonNegativeLimitParam(w http.ResponseWriter, r *http.Request, key stri
 		return maxValue, true
 	}
 	return value, true
+}
+
+func queryAfterSeq(w http.ResponseWriter, r *http.Request) (int, bool) {
+	return queryNonNegativeIntParam(w, r, "after_seq", 0, "invalid_after_seq")
 }
 
 func queryOffset(r *http.Request, key string) int {
