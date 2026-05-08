@@ -4489,6 +4489,24 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if len(listed.Entries) != 1 || listed.Entries[0].Name != "b.md" || listed.TotalEntries != 2 || listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.EntriesTruncated {
 		t.Fatalf("files offset list가 이상해요: %+v", listed)
 	}
+	invalidListParams := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "negative limit", query: "limit=-1", want: "limit"},
+		{name: "bad limit", query: "limit=abc", want: "limit"},
+		{name: "negative offset", query: "offset=-1", want: "offset"},
+		{name: "bad offset", query: "offset=abc", want: "offset"},
+	}
+	for _, tc := range invalidListParams {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/files?project_root="+root+"&path=docs&"+tc.query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s file list param은 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/a.md&offset_line=2&limit_lines=1", nil)
 	rec = httptest.NewRecorder()
@@ -4589,6 +4607,14 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("pattern 없는 grep은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	for _, query := range []string{"max_matches=-1", "max_matches=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_matches") {
+			t.Fatalf("잘못된 grep max_matches는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
@@ -4640,6 +4666,24 @@ func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
 	}
 	if len(glob.Paths) != 1 || glob.Paths[0] == firstPath || glob.TotalPaths != 2 || glob.Limit != 1 || glob.Offset != 1 || glob.NextOffset != 0 || glob.PathsTruncated {
 		t.Fatalf("glob offset metadata가 이상해요: %+v", glob)
+	}
+	invalidParams := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "negative limit", query: "limit=-1", want: "limit"},
+		{name: "bad limit", query: "limit=abc", want: "limit"},
+		{name: "negative offset", query: "offset=-1", want: "offset"},
+		{name: "bad offset", query: "offset=abc", want: "offset"},
+	}
+	for _, tc := range invalidParams {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/glob?project_root="+url.QueryEscape(root)+"&pattern=src/*&"+tc.query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s glob param은 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
 	}
 }
 

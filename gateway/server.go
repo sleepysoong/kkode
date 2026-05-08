@@ -1750,6 +1750,10 @@ func queryLimit(r *http.Request, key string, fallback int, maxValue int) int {
 	return limit
 }
 
+func queryLimitParam(w http.ResponseWriter, r *http.Request, key string, fallback int, maxValue int, code string) (int, bool) {
+	return queryNonNegativeLimitParam(w, r, key, fallback, maxValue, code)
+}
+
 func queryNonNegativeIntParam(w http.ResponseWriter, r *http.Request, key string, fallback int, code string) (int, bool) {
 	value := strings.TrimSpace(r.URL.Query().Get(key))
 	if value == "" {
@@ -1780,6 +1784,10 @@ func queryAfterSeq(w http.ResponseWriter, r *http.Request) (int, bool) {
 
 func queryOffset(r *http.Request, key string) int {
 	return queryInt(r, key, 0)
+}
+
+func queryOffsetParam(w http.ResponseWriter, r *http.Request, key string, code string) (int, bool) {
+	return queryNonNegativeIntParam(w, r, key, 0, code)
 }
 
 func nextOffset(offset int, returned int, truncated bool) int {

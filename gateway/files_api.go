@@ -131,8 +131,14 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "list_files_failed", err.Error())
 		return
 	}
-	limit := queryLimit(r, "limit", 500, 5000)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 500, 5000, "invalid_file_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_file_list")
+	if !ok {
+		return
+	}
 	total := len(entries)
 	if offset >= total {
 		entries = nil
@@ -255,7 +261,10 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_grep", "pattern이 필요해요")
 		return
 	}
-	limit := queryLimit(r, "max_matches", 100, 1000)
+	limit, ok := queryLimitParam(w, r, "max_matches", 100, 1000, "invalid_file_grep")
+	if !ok {
+		return
+	}
 	opts := workspace.GrepOptions{
 		PathGlob:      strings.TrimSpace(r.URL.Query().Get("path_glob")),
 		Regex:         queryBool(r, "regex", false),
@@ -289,8 +298,14 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "glob_files_failed", err.Error())
 		return
 	}
-	limit := queryLimit(r, "limit", 500, 5000)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 500, 5000, "invalid_file_glob")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_file_glob")
+	if !ok {
+		return
+	}
 	total := len(paths)
 	if offset >= total {
 		paths = nil
