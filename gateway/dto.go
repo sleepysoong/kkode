@@ -65,6 +65,8 @@ type SessionDTO struct {
 type SessionListResponse struct {
 	Sessions        []SessionDTO `json:"sessions"`
 	Limit           int          `json:"limit,omitempty"`
+	Offset          int          `json:"offset,omitempty"`
+	NextOffset      int          `json:"next_offset,omitempty"`
 	ResultTruncated bool         `json:"result_truncated,omitempty"`
 }
 

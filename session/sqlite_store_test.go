@@ -77,6 +77,21 @@ func TestSQLiteStoreSessionLifecycle(t *testing.T) {
 	if len(summaries) != 1 || summaries[0].TurnCount != 1 {
 		t.Fatalf("summaries=%#v", summaries)
 	}
+	other := NewSession("/repo", "openai", "gpt-5-mini", "agent", AgentModeBuild)
+	if err := store.CreateSession(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	firstPage, err := store.ListSessions(ctx, SessionQuery{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offsetPage, err := store.ListSessions(ctx, SessionQuery{Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage) != 1 || len(offsetPage) != 1 || firstPage[0].ID == offsetPage[0].ID {
+		t.Fatalf("session offset list가 이상해요: first=%+v offset=%+v", firstPage, offsetPage)
+	}
 }
 
 func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {

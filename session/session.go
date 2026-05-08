@@ -86,6 +86,7 @@ type Checkpoint struct {
 type SessionQuery struct {
 	ProjectRoot string
 	Limit       int
+	Offset      int
 }
 
 type CheckpointQuery struct {

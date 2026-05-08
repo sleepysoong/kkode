@@ -2765,6 +2765,10 @@ components:
             $ref: '#/components/schemas/Session'
         limit:
           type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
         result_truncated:
           type: boolean
     SessionExportResponse:

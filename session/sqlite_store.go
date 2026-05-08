@@ -564,6 +564,10 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]Sessi
 	}
 	query += ` GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?`
 	args = append(args, limit)
+	if q.Offset > 0 {
+		query += ` OFFSET ?`
+		args = append(args, q.Offset)
+	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
