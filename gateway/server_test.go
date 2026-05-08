@@ -4422,6 +4422,27 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if content.Content != "ne" || content.ContentBytes != 2 || content.FileBytes != 3 || !content.ContentTruncated {
 		t.Fatalf("file content byte 제한 metadata가 이상해요: %+v", content)
 	}
+
+	invalidRanges := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "negative offset", query: "offset_line=-1", want: "offset_line"},
+		{name: "bad offset", query: "offset_line=abc", want: "offset_line"},
+		{name: "negative limit", query: "limit_lines=-1", want: "limit_lines"},
+		{name: "bad limit", query: "limit_lines=abc", want: "limit_lines"},
+		{name: "negative max bytes", query: "max_bytes=-1", want: "max_bytes"},
+		{name: "bad max bytes", query: "max_bytes=abc", want: "max_bytes"},
+	}
+	for _, tc := range invalidRanges {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/b.md&"+tc.query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s file content range는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {

@@ -177,7 +177,19 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rel := strings.TrimSpace(r.URL.Query().Get("path"))
-	opts := workspace.ReadOptions{OffsetLine: queryInt(r, "offset_line", 0), LimitLines: queryInt(r, "limit_lines", 0), MaxBytes: queryInt(r, "max_bytes", 0)}
+	offsetLine, ok := queryNonNegativeIntParam(w, r, "offset_line", 0, "invalid_file_range")
+	if !ok {
+		return
+	}
+	limitLines, ok := queryNonNegativeIntParam(w, r, "limit_lines", 0, "invalid_file_range")
+	if !ok {
+		return
+	}
+	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", 0, "invalid_file_range")
+	if !ok {
+		return
+	}
+	opts := workspace.ReadOptions{OffsetLine: offsetLine, LimitLines: limitLines, MaxBytes: maxBytes}
 	fileBytes, statErr := fileSize(ws, rel)
 	if statErr != nil {
 		writeError(w, r, http.StatusBadRequest, "read_file_failed", statErr.Error())
