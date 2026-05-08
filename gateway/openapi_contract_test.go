@@ -29,22 +29,71 @@ func TestFeatureCatalogEndpointsExistInOpenAPI(t *testing.T) {
 
 func TestAPIIndexLinksExistInOpenAPI(t *testing.T) {
 	paths := readOpenAPIPaths(t)
-	postLinks := map[string]bool{
-		"provider_test":  true,
-		"run_preview":    true,
-		"run_validate":   true,
-		"session_import": true,
-	}
+	linkMethods := apiIndexLinkMethods()
 	for name, path := range APIIndexLinks() {
 		method := "get"
-		if postLinks[name] {
-			method = "post"
+		if explicitMethod := linkMethods[name]; explicitMethod != "" {
+			method = explicitMethod
 		}
 		methods := paths[path]
 		if !methods[method] {
 			t.Fatalf("API index link가 OpenAPI paths에 없어요: link=%s method=%s path=%s", name, method, path)
 		}
 	}
+}
+
+func TestFeatureCatalogEndpointsExistInAPIIndexLinks(t *testing.T) {
+	linkMethods := apiIndexLinkMethods()
+	indexEndpoints := map[string]bool{}
+	for name, path := range APIIndexLinks() {
+		method := "GET"
+		if explicitMethod := linkMethods[name]; explicitMethod != "" {
+			method = strings.ToUpper(explicitMethod)
+		}
+		indexEndpoints[method+" "+path] = true
+	}
+	for _, feature := range DefaultFeatureCatalog() {
+		for _, endpoint := range feature.Endpoints {
+			if !indexEndpoints[endpoint] {
+				t.Fatalf("feature endpoint가 API index links에 없어요: feature=%s endpoint=%s", feature.Name, endpoint)
+			}
+		}
+	}
+}
+
+func apiIndexLinkMethods() map[string]string {
+	linkMethods := map[string]string{
+		"provider_test":             "post",
+		"session_create":            "post",
+		"session_import":            "post",
+		"session_compact":           "post",
+		"session_fork":              "post",
+		"session_todos_replace":     "put",
+		"session_todo_upsert":       "post",
+		"session_todo_delete":       "delete",
+		"session_checkpoint_create": "post",
+		"run_start":                 "post",
+		"run_preview":               "post",
+		"run_validate":              "post",
+		"run_retry":                 "post",
+		"run_cancel":                "post",
+		"tool_call":                 "post",
+		"file_write":                "put",
+		"file_patch":                "post",
+		"mcp_server_create":         "post",
+		"mcp_server_update":         "put",
+		"mcp_server_delete":         "delete",
+		"mcp_prompt_get":            "post",
+		"mcp_tool_call":             "post",
+		"skill_create":              "post",
+		"skill_update":              "put",
+		"skill_delete":              "delete",
+		"subagent_create":           "post",
+		"subagent_update":           "put",
+		"subagent_delete":           "delete",
+		"prompt_render":             "post",
+	}
+	return linkMethods
 }
 
 func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
