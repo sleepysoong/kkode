@@ -470,10 +470,19 @@ type RunRuntimeStatsDTO struct {
 
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.
 type LimitDTO struct {
-	MaxRequestBytes         int64 `json:"max_request_bytes"`
-	MaxConcurrentRuns       int   `json:"max_concurrent_runs,omitempty"`
-	RunTimeoutSeconds       int   `json:"run_timeout_seconds,omitempty"`
-	MaxMCPHTTPResponseBytes int   `json:"max_mcp_http_response_bytes,omitempty"`
+	MaxRequestBytes          int64 `json:"max_request_bytes"`
+	MaxConcurrentRuns        int   `json:"max_concurrent_runs,omitempty"`
+	RunTimeoutSeconds        int   `json:"run_timeout_seconds,omitempty"`
+	MaxMCPHTTPResponseBytes  int   `json:"max_mcp_http_response_bytes,omitempty"`
+	MaxRunPromptBytes        int   `json:"max_run_prompt_bytes,omitempty"`
+	MaxRunSelectorItems      int   `json:"max_run_selector_items,omitempty"`
+	MaxRunSelectorItemBytes  int   `json:"max_run_selector_item_bytes,omitempty"`
+	MaxRunContextBlocks      int   `json:"max_run_context_blocks,omitempty"`
+	MaxRunContextBlockBytes  int   `json:"max_run_context_block_bytes,omitempty"`
+	MaxRunMetadataEntries    int   `json:"max_run_metadata_entries,omitempty"`
+	MaxRunMetadataKeyBytes   int   `json:"max_run_metadata_key_bytes,omitempty"`
+	MaxRunMetadataValueBytes int   `json:"max_run_metadata_value_bytes,omitempty"`
+	MaxRunProviderModelBytes int   `json:"max_run_provider_model_bytes,omitempty"`
 }
 
 func toSessionDTO(sess *session.Session) SessionDTO {

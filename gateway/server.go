@@ -710,8 +710,26 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 		ProviderCapabilities: DefaultProviderCapabilityCatalog(),
 		ProviderPipeline:     DefaultProviderPipelineCatalog(),
 		DefaultMCPServers:    RedactResourceDTOs(s.cfg.DefaultMCPServers),
-		Limits:               LimitDTO{MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout), MaxMCPHTTPResponseBytes: maxMCPHTTPResponseBytes},
+		Limits:               gatewayLimits(s.cfg),
 	})
+}
+
+func gatewayLimits(cfg Config) LimitDTO {
+	return LimitDTO{
+		MaxRequestBytes:          cfg.MaxRequestBytes,
+		MaxConcurrentRuns:        cfg.MaxConcurrentRuns,
+		RunTimeoutSeconds:        durationSeconds(cfg.RunTimeout),
+		MaxMCPHTTPResponseBytes:  maxMCPHTTPResponseBytes,
+		MaxRunPromptBytes:        maxRunPromptBytes,
+		MaxRunSelectorItems:      maxRunSelectorItems,
+		MaxRunSelectorItemBytes:  maxRunSelectorItemBytes,
+		MaxRunContextBlocks:      maxRunContextBlocks,
+		MaxRunContextBlockBytes:  maxRunContextBlockBytes,
+		MaxRunMetadataEntries:    maxRunMetadataEntries,
+		MaxRunMetadataKeyBytes:   maxRunMetadataKeyBytes,
+		MaxRunMetadataValueBytes: maxRunMetadataValueBytes,
+		MaxRunProviderModelBytes: maxRunProviderModelBytes,
+	}
 }
 
 func durationSeconds(d time.Duration) int {
@@ -1416,6 +1434,9 @@ func validateRunStartRequest(req RunStartRequest) error {
 	if req.MaxPreviewBytes < 0 {
 		return errors.New("max_preview_bytes는 0 이상이어야 해요")
 	}
+	if err := validateRunRequestShape(req); err != nil {
+		return err
+	}
 	if err := validateRunMetadata(req.Metadata); err != nil {
 		return err
 	}
@@ -1466,6 +1487,11 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
 	metadata = withDefaultMCPMetadata(metadata, s.cfg.DefaultMCPServers)
 	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), EnabledTools: cloneStringSlice(original.EnabledTools), DisabledTools: cloneStringSlice(original.DisabledTools), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
+	req = sanitizeRunStartRequest(req)
+	if err := validateRunStartRequest(req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
+		return
+	}
 	if s.cfg.RunValidator != nil {
 		if err := s.cfg.RunValidator(r.Context(), req); err != nil {
 			writeError(w, r, http.StatusBadRequest, "invalid_run_preflight", err.Error())

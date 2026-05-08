@@ -10,9 +10,14 @@ import (
 )
 
 const maxRunContextBlockBytes = 32 << 10
+const maxRunContextBlocks = 64
 const maxRunMetadataEntries = 64
 const maxRunMetadataKeyBytes = 128
 const maxRunMetadataValueBytes = 1024
+const maxRunPromptBytes = 256 << 10
+const maxRunProviderModelBytes = 128
+const maxRunSelectorItems = 256
+const maxRunSelectorItemBytes = 128
 
 // SanitizeContextBlocks는 adapter가 보낸 임시 prompt context를 실행/저장 전에 안전한 형태로 정규화해요.
 // secret은 제거하고, 너무 긴 block은 UTF-8을 깨지 않는 byte 경계에서 잘라요.
@@ -47,6 +52,7 @@ func SanitizeContextBlocks(blocks []string) []string {
 
 func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
 	req.SessionID = strings.TrimSpace(req.SessionID)
+	req.Prompt = strings.TrimSpace(req.Prompt)
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.Model = strings.TrimSpace(req.Model)
 	req.Metadata = sanitizeRunMetadata(req.Metadata)
@@ -57,6 +63,52 @@ func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
 	req.EnabledTools = sanitizeToolNames(req.EnabledTools)
 	req.DisabledTools = sanitizeToolNames(req.DisabledTools)
 	return req
+}
+
+func validateRunRequestShape(req RunStartRequest) error {
+	if len(req.Prompt) > maxRunPromptBytes {
+		return fmt.Errorf("prompt는 %d byte 이하여야 해요", maxRunPromptBytes)
+	}
+	if len(req.Provider) > maxRunProviderModelBytes {
+		return fmt.Errorf("provider는 %d byte 이하여야 해요", maxRunProviderModelBytes)
+	}
+	if len(req.Model) > maxRunProviderModelBytes {
+		return fmt.Errorf("model은 %d byte 이하여야 해요", maxRunProviderModelBytes)
+	}
+	if err := validateRunSelectorList("mcp_servers", req.MCPServers, true); err != nil {
+		return err
+	}
+	if err := validateRunSelectorList("skills", req.Skills, true); err != nil {
+		return err
+	}
+	if err := validateRunSelectorList("subagents", req.Subagents, true); err != nil {
+		return err
+	}
+	if err := validateRunSelectorList("enabled_tools", req.EnabledTools, false); err != nil {
+		return err
+	}
+	if err := validateRunSelectorList("disabled_tools", req.DisabledTools, false); err != nil {
+		return err
+	}
+	if len(req.ContextBlocks) > maxRunContextBlocks {
+		return fmt.Errorf("context_blocks는 최대 %d개까지 허용돼요", maxRunContextBlocks)
+	}
+	return nil
+}
+
+func validateRunSelectorList(label string, values []string, identifier bool) error {
+	if len(values) > maxRunSelectorItems {
+		return fmt.Errorf("%s는 최대 %d개까지 허용돼요", label, maxRunSelectorItems)
+	}
+	for i, value := range values {
+		if len(value) > maxRunSelectorItemBytes {
+			return fmt.Errorf("%s[%d]는 %d byte 이하여야 해요", label, i, maxRunSelectorItemBytes)
+		}
+		if identifier && !validRunMetadataKey(value) {
+			return fmt.Errorf("%s[%d]는 영문/숫자/._- 문자만 쓸 수 있어요", label, i)
+		}
+	}
+	return nil
 }
 
 func sanitizeResourceIDs(ids []string) []string {

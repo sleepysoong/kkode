@@ -44,3 +44,50 @@ func TestRunMetadataIsSanitizedAndValidated(t *testing.T) {
 		t.Fatalf("너무 긴 metadata value는 거부해야 해요: %v", err)
 	}
 }
+
+func TestRunRequestShapeIsValidated(t *testing.T) {
+	valid := RunStartRequest{
+		Prompt:        "go test",
+		Provider:      "copilot",
+		Model:         "gpt-5-mini",
+		MCPServers:    []string{"mcp_1"},
+		Skills:        []string{"skill_1"},
+		Subagents:     []string{"agent_1"},
+		EnabledTools:  []string{"file_read"},
+		DisabledTools: []string{"shell_run"},
+		ContextBlocks: []string{"adapter context"},
+	}
+	if err := validateRunRequestShape(valid); err != nil {
+		t.Fatalf("정상 run request shape이 거부됐어요: %v", err)
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*RunStartRequest)
+		want   string
+	}{
+		{name: "prompt", mutate: func(req *RunStartRequest) { req.Prompt = strings.Repeat("x", maxRunPromptBytes+1) }, want: "prompt"},
+		{name: "provider", mutate: func(req *RunStartRequest) { req.Provider = strings.Repeat("x", maxRunProviderModelBytes+1) }, want: "provider"},
+		{name: "model", mutate: func(req *RunStartRequest) { req.Model = strings.Repeat("x", maxRunProviderModelBytes+1) }, want: "model"},
+		{name: "mcp count", mutate: func(req *RunStartRequest) { req.MCPServers = repeatedRunValues("mcp", maxRunSelectorItems+1) }, want: "mcp_servers"},
+		{name: "mcp item", mutate: func(req *RunStartRequest) { req.MCPServers = []string{strings.Repeat("x", maxRunSelectorItemBytes+1)} }, want: "mcp_servers[0]"},
+		{name: "mcp id", mutate: func(req *RunStartRequest) { req.MCPServers = []string{"bad id"} }, want: "mcp_servers[0]"},
+		{name: "tool item", mutate: func(req *RunStartRequest) {
+			req.EnabledTools = []string{strings.Repeat("x", maxRunSelectorItemBytes+1)}
+		}, want: "enabled_tools[0]"},
+		{name: "context count", mutate: func(req *RunStartRequest) { req.ContextBlocks = repeatedRunValues("context", maxRunContextBlocks+1) }, want: "context_blocks"},
+	} {
+		req := valid
+		tc.mutate(&req)
+		if err := validateRunRequestShape(req); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s invalid run request shape 오류가 이상해요: %v", tc.name, err)
+		}
+	}
+}
+
+func repeatedRunValues(prefix string, count int) []string {
+	values := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		values = append(values, prefix)
+	}
+	return values
+}

@@ -799,6 +799,61 @@ func TestGatewayRejectsInvalidRunMetadata(t *testing.T) {
 	}
 }
 
+func TestGatewayRejectsInvalidRunRequestShape(t *testing.T) {
+	store := openTestStore(t)
+	started := false
+	previewed := false
+	validated := false
+	srv, err := New(Config{
+		Store: store,
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			validated = true
+			return nil
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			started = true
+			return &RunDTO{ID: "run_bad_shape", SessionID: req.SessionID, Status: "queued"}, nil
+		},
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			previewed = true
+			return &RunPreviewResponse{SessionID: req.SessionID, Provider: "openai", Model: "gpt-5-mini"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"session_id":"sess_1","prompt":"go test","mcp_servers":["` + strings.Repeat("x", maxRunSelectorItemBytes+1) + `"]}`
+	for _, tc := range []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{name: "start", method: http.MethodPost, path: "/api/v1/runs", wantStatus: http.StatusBadRequest},
+		{name: "preview", method: http.MethodPost, path: "/api/v1/runs/preview", wantStatus: http.StatusBadRequest},
+		{name: "validate", method: http.MethodPost, path: "/api/v1/runs/validate", wantStatus: http.StatusOK},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != tc.wantStatus || !strings.Contains(rec.Body.String(), "mcp_servers[0]") {
+			t.Fatalf("%s invalid run shape 응답이 이상해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if tc.name == "validate" {
+			var got RunValidateResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.OK || got.Code != "invalid_run" {
+				t.Fatalf("validate invalid run shape 응답이 이상해요: %+v", got)
+			}
+		}
+	}
+	if started || previewed || validated {
+		t.Fatalf("invalid run shape은 runtime hook 전에 거부돼야 해요: started=%v previewed=%v validated=%v", started, previewed, validated)
+	}
+}
+
 func TestGatewayValidatesRunWithoutStarting(t *testing.T) {
 	store := openTestStore(t)
 	started := false
@@ -1510,7 +1565,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	capKeys := map[string]bool{}
@@ -4906,6 +4961,8 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 		{name: "bad run status", run: RunDTO{ID: "run_bad_status", Status: "paused", TurnID: turn.ID}, want: "run status"},
 		{name: "missing run turn", run: RunDTO{ID: "run_missing_turn", Status: "completed", TurnID: "turn_missing"}, want: "run turn_id"},
 		{name: "bad run metadata", run: RunDTO{ID: "run_bad_metadata", Status: "completed", Metadata: map[string]string{"bad key": "value"}}, want: "metadata key"},
+		{name: "huge run prompt", run: RunDTO{ID: "run_huge_prompt", Status: "completed", Prompt: strings.Repeat("x", maxRunPromptBytes+1)}, want: "prompt"},
+		{name: "bad run resource selector", run: RunDTO{ID: "run_bad_selector", Status: "completed", MCPServers: []string{"bad id"}}, want: "mcp_servers[0]"},
 	} {
 		body, err = json.Marshal(SessionImportRequest{
 			FormatVersion: sessionExportFormatVersion,

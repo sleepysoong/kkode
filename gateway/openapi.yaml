@@ -2275,6 +2275,24 @@ components:
           type: integer
         max_mcp_http_response_bytes:
           type: integer
+        max_run_prompt_bytes:
+          type: integer
+        max_run_selector_items:
+          type: integer
+        max_run_selector_item_bytes:
+          type: integer
+        max_run_context_blocks:
+          type: integer
+        max_run_context_block_bytes:
+          type: integer
+        max_run_metadata_entries:
+          type: integer
+        max_run_metadata_key_bytes:
+          type: integer
+        max_run_metadata_value_bytes:
+          type: integer
+        max_run_provider_model_bytes:
+          type: integer
     DiagnosticsResponse:
       type: object
       required: [ok, version, time, checks, providers, features, default_mcp_servers, max_request_bytes]
@@ -3405,10 +3423,13 @@ components:
           type: string
         prompt:
           type: string
+          maxLength: 262144
         provider:
           type: string
+          maxLength: 128
         model:
           type: string
+          maxLength: 128
         metadata:
           type: object
           maxProperties: 64
@@ -3422,32 +3443,46 @@ components:
           description: request/provider correlation metadata예요. key/value는 trim되고 빈 항목은 제거되며, key는 영문/숫자/._-만 허용해요.
         mcp_servers:
           type: array
+          maxItems: 256
           description: run에 연결할 MCP server resource id 목록이에요.
           items:
             type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
         skills:
           type: array
+          maxItems: 256
           description: run에 연결할 skill resource id 목록이에요.
           items:
             type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
         subagents:
           type: array
+          maxItems: 256
           description: run에 연결할 subagent resource id 목록이에요.
           items:
             type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
         enabled_tools:
           type: array
+          maxItems: 256
           description: 비어 있지 않으면 이번 run의 local tool surface를 이 tool 이름 목록으로 제한해요.
           items:
             type: string
+            maxLength: 128
         disabled_tools:
           type: array
+          maxItems: 256
           description: 이번 run의 local tool surface에서 제외할 tool 이름 목록이에요.
           items:
             type: string
+            maxLength: 128
         context_blocks:
           type: array
-          description: 저장 resource 없이 이번 run에만 system prompt로 추가할 provider-neutral 컨텍스트예요.
+          maxItems: 64
+          description: 저장 resource 없이 이번 run에만 system prompt로 추가할 provider-neutral 컨텍스트예요. 각 block은 secret 마스킹 뒤 UTF-8 안전하게 32768 byte로 잘라 저장해요.
           items:
             type: string
         preview_stream:

@@ -358,6 +358,7 @@ func sanitizeImportedRunDTO(run RunDTO) RunDTO {
 	run.SessionID = strings.TrimSpace(run.SessionID)
 	run.TurnID = strings.TrimSpace(run.TurnID)
 	run.Status = strings.TrimSpace(run.Status)
+	run.Prompt = strings.TrimSpace(run.Prompt)
 	run.Provider = strings.TrimSpace(run.Provider)
 	run.Model = strings.TrimSpace(run.Model)
 	run.MCPServers = sanitizeResourceIDs(run.MCPServers)
@@ -385,6 +386,9 @@ func validateImportedRunDTO(run RunDTO) error {
 	}
 	if !validImportedRunStatus(run.Status) {
 		return fmt.Errorf("run status %q는 지원하지 않아요", run.Status)
+	}
+	if err := validateRunRequestShape(RunStartRequest{Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: run.MCPServers, Skills: run.Skills, Subagents: run.Subagents, EnabledTools: run.EnabledTools, DisabledTools: run.DisabledTools, ContextBlocks: run.ContextBlocks}); err != nil {
+		return err
 	}
 	return validateRunMetadata(run.Metadata)
 }
