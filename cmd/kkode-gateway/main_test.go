@@ -49,6 +49,30 @@ func TestSplitCSV(t *testing.T) {
 	}
 }
 
+func TestNormalizeRunOptionsBoundsAgentBudgets(t *testing.T) {
+	got, err := normalizeRunOptions(runOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxIterations != app.DefaultAgentMaxIterations || got.WebMaxBytes != app.DefaultAgentWebMaxBytes {
+		t.Fatalf("default run options가 이상해요: %+v", got)
+	}
+	for _, tc := range []struct {
+		name string
+		opts runOptions
+		want string
+	}{
+		{name: "negative iterations", opts: runOptions{MaxIterations: -1}, want: "max-iterations"},
+		{name: "large iterations", opts: runOptions{MaxIterations: app.MaxAgentMaxIterations + 1}, want: "max-iterations"},
+		{name: "negative web", opts: runOptions{MaxIterations: 1, WebMaxBytes: -1}, want: "web-max-bytes"},
+		{name: "large web", opts: runOptions{MaxIterations: 1, WebMaxBytes: app.MaxAgentWebMaxBytes + 1}, want: "web-max-bytes"},
+	} {
+		if _, err := normalizeRunOptions(tc.opts); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s 오류가 이상해요: %v", tc.name, err)
+		}
+	}
+}
+
 func TestProviderDTOsExposeConversionProfile(t *testing.T) {
 	providers := providerDTOs()
 	if len(providers) == 0 {

@@ -43,6 +43,8 @@ type Config struct {
 	MaxRequestBytes      int64
 	MaxConcurrentRuns    int
 	RunTimeout           time.Duration
+	RunMaxIterations     int
+	RunWebMaxBytes       int64
 	AccessLogger         AccessLogger
 	Providers            []ProviderDTO
 	DefaultMCPServers    []ResourceDTO
@@ -741,6 +743,8 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxRequestBytes:             cfg.MaxRequestBytes,
 		MaxConcurrentRuns:           cfg.MaxConcurrentRuns,
 		RunTimeoutSeconds:           durationSeconds(cfg.RunTimeout),
+		RunMaxIterations:            cfg.RunMaxIterations,
+		RunWebMaxBytes:              cfg.RunWebMaxBytes,
 		MaxMCPHTTPResponseBytes:     maxMCPHTTPResponseBytes,
 		MaxMCPProbeNameBytes:        maxMCPProbeNameBytes,
 		MaxMCPProbeURIBytes:         maxMCPProbeURIBytes,

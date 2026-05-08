@@ -52,9 +52,9 @@ func run(args []string) error {
 	idleTimeout := fs.Duration("idle-timeout", envDuration("KKODE_IDLE_TIMEOUT", 120*time.Second), "HTTP idle timeout이에요")
 	shutdownTimeout := fs.Duration("shutdown-timeout", envDuration("KKODE_SHUTDOWN_TIMEOUT", 10*time.Second), "graceful shutdown timeout이에요")
 	version := fs.String("version", app.EnvDefault("KKODE_VERSION", "dev"), "version endpoint에 표시할 버전이에요")
-	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", 8), "gateway run tool loop 최대 반복 횟수예요")
+	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", app.DefaultAgentMaxIterations), "gateway run tool loop 최대 반복 횟수예요")
 	noWeb := fs.Bool("no-web", app.EnvBool("KKODE_NO_WEB"), "gateway run에서 web_fetch tool을 비활성화해요")
-	webMaxBytes := fs.Int64("web-max-bytes", app.EnvInt64("KKODE_WEB_MAX_BYTES", 1<<20), "gateway run web_fetch 최대 byte 수예요")
+	webMaxBytes := fs.Int64("web-max-bytes", app.EnvInt64("KKODE_WEB_MAX_BYTES", app.DefaultAgentWebMaxBytes), "gateway run web_fetch 최대 byte 수예요")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -77,7 +77,11 @@ func run(args []string) error {
 		return err
 	}
 	defer store.Close()
-	runManager := gateway.NewAsyncRunManagerWithStore(syncRunStarter(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}), store).SetMaxConcurrentRuns(*maxConcurrentRuns).SetRunTimeout(*runTimeout)
+	runOpts, err := normalizeRunOptions(runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes})
+	if err != nil {
+		return err
+	}
+	runManager := gateway.NewAsyncRunManagerWithStore(syncRunStarter(store, runOpts), store).SetMaxConcurrentRuns(*maxConcurrentRuns).SetRunTimeout(*runTimeout)
 	if err := runManager.RecoverStaleRuns(context.Background()); err != nil {
 		return err
 	}
@@ -90,9 +94,11 @@ func run(args []string) error {
 		MaxRequestBytes:      *maxBodyBytes,
 		MaxConcurrentRuns:    runManager.MaxConcurrentRuns(),
 		RunTimeout:           runManager.RunTimeout(),
+		RunMaxIterations:     runOpts.MaxIterations,
+		RunWebMaxBytes:       runOpts.WebMaxBytes,
 		AccessLogger:         accessLoggerForFlag(*accessLog, os.Stderr),
 		RunStarter:           runManager.Start,
-		RunPreviewer:         syncRunPreviewer(store, runOptions{MaxIterations: *maxIterations, NoWeb: *noWeb, WebMaxBytes: *webMaxBytes}),
+		RunPreviewer:         syncRunPreviewer(store, runOpts),
 		RunValidator:         syncRunValidator(store),
 		ProviderTester:       syncProviderTester(),
 		RunRuntimeStats:      runManager.RuntimeStats,
@@ -205,6 +211,28 @@ type runOptions struct {
 	MaxIterations int
 	NoWeb         bool
 	WebMaxBytes   int64
+}
+
+func normalizeRunOptions(opts runOptions) (runOptions, error) {
+	if opts.MaxIterations < 0 {
+		return opts, fmt.Errorf("max-iterations는 0 이상이어야 해요")
+	}
+	if opts.MaxIterations == 0 {
+		opts.MaxIterations = app.DefaultAgentMaxIterations
+	}
+	if opts.MaxIterations > app.MaxAgentMaxIterations {
+		return opts, fmt.Errorf("max-iterations는 %d 이하여야 해요", app.MaxAgentMaxIterations)
+	}
+	if opts.WebMaxBytes < 0 {
+		return opts, fmt.Errorf("web-max-bytes는 0 이상이어야 해요")
+	}
+	if opts.WebMaxBytes == 0 {
+		opts.WebMaxBytes = app.DefaultAgentWebMaxBytes
+	}
+	if opts.WebMaxBytes > app.MaxAgentWebMaxBytes {
+		return opts, fmt.Errorf("web-max-bytes는 %d 이하여야 해요", app.MaxAgentWebMaxBytes)
+	}
+	return opts, nil
 }
 
 func splitCSV(raw string) []string {

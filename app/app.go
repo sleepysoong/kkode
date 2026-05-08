@@ -15,6 +15,13 @@ import (
 	"github.com/sleepysoong/kkode/workspace"
 )
 
+const (
+	DefaultAgentMaxIterations = 8
+	MaxAgentMaxIterations     = 128
+	DefaultAgentWebMaxBytes   = 1 << 20
+	MaxAgentWebMaxBytes       = 8 << 20
+)
+
 // WorkspaceOptions는 workspace 경계를 정하는 옵션이에요.
 type WorkspaceOptions struct {
 	Root string

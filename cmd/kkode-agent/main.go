@@ -26,6 +26,31 @@ func main() {
 	}
 }
 
+func normalizeAgentBudgets(maxIterations *int, webMaxBytes *int64) error {
+	if maxIterations == nil || webMaxBytes == nil {
+		return errors.New("agent budget pointer가 필요해요")
+	}
+	if *maxIterations < 0 {
+		return fmt.Errorf("max-iterations는 0 이상이어야 해요")
+	}
+	if *maxIterations == 0 {
+		*maxIterations = app.DefaultAgentMaxIterations
+	}
+	if *maxIterations > app.MaxAgentMaxIterations {
+		return fmt.Errorf("max-iterations는 %d 이하여야 해요", app.MaxAgentMaxIterations)
+	}
+	if *webMaxBytes < 0 {
+		return fmt.Errorf("web-max-bytes는 0 이상이어야 해요")
+	}
+	if *webMaxBytes == 0 {
+		*webMaxBytes = app.DefaultAgentWebMaxBytes
+	}
+	if *webMaxBytes > app.MaxAgentWebMaxBytes {
+		return fmt.Errorf("web-max-bytes는 %d 이하여야 해요", app.MaxAgentWebMaxBytes)
+	}
+	return nil
+}
+
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("kkode-agent", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -33,7 +58,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	model := fs.String("model", os.Getenv("KKODE_MODEL"), "사용할 모델 이름이에요")
 	root := fs.String("root", app.EnvDefault("KKODE_ROOT", "."), "agent가 접근할 workspace root예요")
 	instructions := fs.String("instructions", os.Getenv("KKODE_INSTRUCTIONS"), "agent system/developer instructions예요")
-	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", 8), "tool loop 최대 반복 횟수예요")
+	maxIterations := fs.Int("max-iterations", app.EnvInt("KKODE_MAX_ITERATIONS", app.DefaultAgentMaxIterations), "tool loop 최대 반복 횟수예요")
 	reasoningEffort := fs.String("reasoning-effort", os.Getenv("KKODE_REASONING_EFFORT"), "OpenAI 호환 reasoning effort예요")
 	reasoningSummary := fs.String("reasoning-summary", os.Getenv("KKODE_REASONING_SUMMARY"), "OpenAI 호환 reasoning summary 설정이에요")
 	include := fs.String("include", os.Getenv("KKODE_INCLUDE"), "Responses API include 값을 쉼표로 적어요")
@@ -48,12 +73,15 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	noSession := fs.Bool("no-session", app.EnvBool("KKODE_NO_SESSION"), "SQLite session 저장을 끄고 단발 실행해요")
 	redactTranscript := fs.Bool("redact-transcript", app.EnvBool("KKODE_REDACT_TRANSCRIPT"), "transcript 저장 전에 secret 패턴을 마스킹해요")
 	noWeb := fs.Bool("no-web", app.EnvBool("KKODE_NO_WEB"), "web_fetch tool을 비활성화해요")
-	webMaxBytes := fs.Int64("web-max-bytes", app.EnvInt64("KKODE_WEB_MAX_BYTES", 1<<20), "web_fetch가 읽을 최대 byte 수예요")
+	webMaxBytes := fs.Int64("web-max-bytes", app.EnvInt64("KKODE_WEB_MAX_BYTES", app.DefaultAgentWebMaxBytes), "web_fetch가 읽을 최대 byte 수예요")
 	verbose := fs.Bool("v", app.EnvBool("KKODE_VERBOSE"), "trace event를 stderr에 출력해요")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
+		return err
+	}
+	if err := normalizeAgentBudgets(maxIterations, webMaxBytes); err != nil {
 		return err
 	}
 

@@ -2287,6 +2287,11 @@ components:
           type: integer
         run_timeout_seconds:
           type: integer
+        run_max_iterations:
+          type: integer
+        run_web_max_bytes:
+          type: integer
+          format: int64
         max_mcp_http_response_bytes:
           type: integer
         max_mcp_probe_name_bytes:
