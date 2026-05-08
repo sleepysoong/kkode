@@ -12,11 +12,13 @@ import (
 )
 
 type SkillPreviewResponse struct {
-	Skill     ResourceDTO `json:"skill"`
-	Directory string      `json:"directory,omitempty"`
-	File      string      `json:"file,omitempty"`
-	Markdown  string      `json:"markdown,omitempty"`
-	Truncated bool        `json:"truncated"`
+	Skill             ResourceDTO `json:"skill"`
+	Directory         string      `json:"directory,omitempty"`
+	File              string      `json:"file,omitempty"`
+	Markdown          string      `json:"markdown,omitempty"`
+	MarkdownBytes     int         `json:"markdown_bytes,omitempty"`
+	MarkdownTruncated bool        `json:"markdown_truncated,omitempty"`
+	Truncated         bool        `json:"truncated"`
 }
 
 type skillPreviewConfig struct {
@@ -64,8 +66,8 @@ func readSkillPreview(resource session.Resource, maxBytes int) (SkillPreviewResp
 	if err != nil {
 		return SkillPreviewResponse{}, err
 	}
-	markdown, _, truncated := truncateToolOutput(string(data), maxBytes)
-	return SkillPreviewResponse{Skill: publicResourceDTO(resource), Directory: dir, File: file, Markdown: markdown, Truncated: truncated}, nil
+	markdown, markdownBytes, truncated := truncateToolOutput(string(data), maxBytes)
+	return SkillPreviewResponse{Skill: publicResourceDTO(resource), Directory: dir, File: file, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: truncated, Truncated: truncated}, nil
 }
 
 func firstExistingFile(paths ...string) string {

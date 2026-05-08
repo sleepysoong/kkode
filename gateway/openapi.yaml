@@ -1394,6 +1394,13 @@ paths:
       summary: subagent manifest를 실행 전 preview 형태로 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
+        - in: query
+          name: max_prompt_bytes
+          schema:
+            type: integer
+            default: 65536
+            maximum: 1048576
+          description: subagent prompt preview를 이 byte 수까지 UTF-8 안전하게 잘라요.
       responses:
         '200':
           description: subagent preview예요.
@@ -3894,6 +3901,12 @@ components:
           type: string
         prompt:
           type: string
+        prompt_bytes:
+          type: integer
+          description: 제한 전 subagent prompt byte 수예요.
+        prompt_truncated:
+          type: boolean
+          description: max_prompt_bytes 때문에 prompt가 잘렸는지 알려줘요.
         tools:
           type: array
           items:
@@ -3925,6 +3938,12 @@ components:
           type: string
         markdown:
           type: string
+        markdown_bytes:
+          type: integer
+          description: 제한 전 skill markdown byte 수예요.
+        markdown_truncated:
+          type: boolean
+          description: max_bytes 때문에 markdown이 잘렸는지 알려줘요.
         truncated:
           type: boolean
     PromptTemplateListResponse:

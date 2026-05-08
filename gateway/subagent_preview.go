@@ -8,16 +8,18 @@ import (
 )
 
 type SubagentPreviewResponse struct {
-	Subagent     ResourceDTO    `json:"subagent"`
-	Name         string         `json:"name"`
-	DisplayName  string         `json:"display_name,omitempty"`
-	Description  string         `json:"description,omitempty"`
-	Prompt       string         `json:"prompt,omitempty"`
-	Tools        []string       `json:"tools,omitempty"`
-	MCPServers   map[string]any `json:"mcp_servers,omitempty"`
-	MCPServerIDs []string       `json:"mcp_server_ids,omitempty"`
-	Skills       []string       `json:"skills,omitempty"`
-	Infer        *bool          `json:"infer,omitempty"`
+	Subagent        ResourceDTO    `json:"subagent"`
+	Name            string         `json:"name"`
+	DisplayName     string         `json:"display_name,omitempty"`
+	Description     string         `json:"description,omitempty"`
+	Prompt          string         `json:"prompt,omitempty"`
+	PromptBytes     int            `json:"prompt_bytes,omitempty"`
+	PromptTruncated bool           `json:"prompt_truncated,omitempty"`
+	Tools           []string       `json:"tools,omitempty"`
+	MCPServers      map[string]any `json:"mcp_servers,omitempty"`
+	MCPServerIDs    []string       `json:"mcp_server_ids,omitempty"`
+	Skills          []string       `json:"skills,omitempty"`
+	Infer           *bool          `json:"infer,omitempty"`
 }
 
 type subagentPreviewConfig struct {
@@ -33,7 +35,7 @@ type subagentPreviewConfig struct {
 
 func (s *Server) previewSubagent(w http.ResponseWriter, r *http.Request, subagentID string) {
 	s.withResource(w, r, session.ResourceSubagent, subagentID, func(resource session.Resource) {
-		preview, err := subagentPreviewFromResource(resource)
+		preview, err := subagentPreviewFromResource(resource, queryLimit(r, "max_prompt_bytes", 65536, 1<<20))
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "subagent_preview_failed", err.Error())
 			return
@@ -42,12 +44,13 @@ func (s *Server) previewSubagent(w http.ResponseWriter, r *http.Request, subagen
 	})
 }
 
-func subagentPreviewFromResource(resource session.Resource) (SubagentPreviewResponse, error) {
+func subagentPreviewFromResource(resource session.Resource, maxPromptBytes int) (SubagentPreviewResponse, error) {
 	var cfg subagentPreviewConfig
 	if len(resource.Config) > 0 {
 		if err := json.Unmarshal(resource.Config, &cfg); err != nil {
 			return SubagentPreviewResponse{}, err
 		}
 	}
-	return SubagentPreviewResponse{Subagent: publicResourceDTO(resource), Name: resource.ID, DisplayName: firstNonEmptyString(cfg.DisplayName, resource.Name), Description: firstNonEmptyString(cfg.Description, resource.Description), Prompt: cfg.Prompt, Tools: cfg.Tools, MCPServers: cfg.MCPServers, MCPServerIDs: cfg.MCPServerIDs, Skills: cfg.Skills, Infer: cfg.Infer}, nil
+	prompt, promptBytes, promptTruncated := truncateToolOutput(cfg.Prompt, maxPromptBytes)
+	return SubagentPreviewResponse{Subagent: publicResourceDTO(resource), Name: resource.ID, DisplayName: firstNonEmptyString(cfg.DisplayName, resource.Name), Description: firstNonEmptyString(cfg.Description, resource.Description), Prompt: prompt, PromptBytes: promptBytes, PromptTruncated: promptTruncated, Tools: cfg.Tools, MCPServers: cfg.MCPServers, MCPServerIDs: cfg.MCPServerIDs, Skills: cfg.Skills, Infer: cfg.Infer}, nil
 }
