@@ -188,7 +188,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		writeJSON(w, preview)
 	case "format-preview":
 		relPath := strings.TrimSpace(r.URL.Query().Get("path"))
-		maxBytes := queryLimit(r, "max_bytes", 1<<20, 8<<20)
+		maxBytes, ok := queryNonNegativeLimitParam(w, r, "max_bytes", 1<<20, 8<<20, "invalid_lsp_format_preview")
+		if !ok {
+			return
+		}
 		preview, err := scanGoFormatPreview(root, relPath, maxBytes)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_format_preview_failed", err.Error())

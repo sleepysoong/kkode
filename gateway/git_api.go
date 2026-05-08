@@ -102,7 +102,10 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 		canonicalRel = filepath.ToSlash(filepath.Clean(rel))
 		args = append(args, canonicalRel)
 	}
-	maxBytes := queryLimit(r, "max_bytes", 1<<20, 4<<20)
+	maxBytes, ok := queryNonNegativeLimitParam(w, r, "max_bytes", 1<<20, 4<<20, "invalid_git_diff")
+	if !ok {
+		return
+	}
 	out, truncated, err := runGitCommand(r.Context(), root, args, int64(maxBytes))
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_diff_failed", err.Error())

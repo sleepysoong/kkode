@@ -2461,6 +2461,20 @@ func main() {
 	if formatPreview.File != "main.go" || formatPreview.Content == "" || formatPreview.ContentBytes == 0 {
 		t.Fatalf("format preview 결과가 이상해요: %+v", formatPreview)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/format-preview?project_root="+root+"&path=main.go&max_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("음수 LSP format max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/format-preview?project_root="+root+"&path=main.go&max_bytes=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("잘못된 LSP format max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayLSPDiagnosticsAndHover(t *testing.T) {
@@ -3374,6 +3388,20 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	}
 	if diff.Path != "README.md" || !strings.Contains(diff.Diff, "+world") {
 		t.Fatalf("git diff 응답이 이상해요: %+v", diff)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&max_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("음수 git diff max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&max_bytes=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("잘못된 git diff max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/log?project_root="+url.QueryEscape(root)+"&limit=1", nil)
