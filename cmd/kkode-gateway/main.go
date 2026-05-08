@@ -988,10 +988,10 @@ func mcpServerFromResource(resource session.Resource) (llm.MCPServer, error) {
 			return llm.MCPServer{}, err
 		}
 	}
-	return mcpServerFromConfig(firstNonEmpty(cfg.Name, resource.Name), cfg), nil
+	return mcpServerFromConfig(firstNonEmpty(cfg.Name, resource.Name), cfg)
 }
 
-func mcpServerFromConfig(defaultName string, cfg mcpResourceConfig) llm.MCPServer {
+func mcpServerFromConfig(defaultName string, cfg mcpResourceConfig) (llm.MCPServer, error) {
 	kind := llm.MCPServerKind(cfg.Kind)
 	if kind == "" {
 		if cfg.URL != "" {
@@ -1000,7 +1000,35 @@ func mcpServerFromConfig(defaultName string, cfg mcpResourceConfig) llm.MCPServe
 			kind = llm.MCPStdio
 		}
 	}
-	return llm.MCPServer{Kind: kind, Name: firstNonEmpty(cfg.Name, defaultName), Tools: cfg.Tools, Timeout: cfg.Timeout, Command: cfg.Command, Args: cfg.Args, Env: cfg.Env, Cwd: cfg.Cwd, URL: cfg.URL, Headers: cfg.Headers}
+	server := llm.MCPServer{Kind: kind, Name: firstNonEmpty(cfg.Name, defaultName), Tools: cfg.Tools, Timeout: cfg.Timeout, Command: cfg.Command, Args: cfg.Args, Env: cfg.Env, Cwd: cfg.Cwd, URL: cfg.URL, Headers: cfg.Headers}
+	if err := validateMCPServerConfig(server); err != nil {
+		return llm.MCPServer{}, err
+	}
+	return server, nil
+}
+
+func validateMCPServerConfig(server llm.MCPServer) error {
+	name := firstNonEmpty(server.Name, "unnamed")
+	if server.Timeout < 0 {
+		return fmt.Errorf("MCP server %q timeout은 0 이상이어야 해요", name)
+	}
+	switch server.Kind {
+	case llm.MCPStdio:
+		if strings.TrimSpace(server.Command) == "" {
+			return fmt.Errorf("MCP server %q stdio config에는 command가 필요해요", name)
+		}
+	case llm.MCPHTTP:
+		rawURL := strings.TrimSpace(server.URL)
+		if rawURL == "" {
+			return fmt.Errorf("MCP server %q http config에는 url이 필요해요", name)
+		}
+		if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+			return fmt.Errorf("MCP server %q url은 http/https여야 해요", name)
+		}
+	default:
+		return fmt.Errorf("MCP server %q kind는 stdio 또는 http여야 해요", name)
+	}
+	return nil
 }
 
 type skillResourceConfig struct {
@@ -1160,11 +1188,15 @@ func subagentContextBlock(agent llm.Agent) string {
 func inlineMCPServerFromRaw(name string, raw json.RawMessage) (llm.MCPServer, error) {
 	var command string
 	if err := json.Unmarshal(raw, &command); err == nil {
-		return llm.MCPServer{Name: name, Kind: llm.MCPStdio, Command: command}, nil
+		server := llm.MCPServer{Name: name, Kind: llm.MCPStdio, Command: command}
+		if err := validateMCPServerConfig(server); err != nil {
+			return llm.MCPServer{}, err
+		}
+		return server, nil
 	}
 	var cfg mcpResourceConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return llm.MCPServer{}, err
 	}
-	return mcpServerFromConfig(name, cfg), nil
+	return mcpServerFromConfig(name, cfg)
 }

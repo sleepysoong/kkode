@@ -231,6 +231,32 @@ func TestLoadProviderOptionsRejectsDisabledResources(t *testing.T) {
 	}
 }
 
+func TestLoadProviderOptionsRejectsInvalidMCPManifests(t *testing.T) {
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	invalid, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "broken", Enabled: true, Config: []byte(`{"kind":"http","timeout":-1}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadProviderOptions(ctx, store, gateway.RunStartRequest{MCPServers: []string{invalid.ID}})
+	if err == nil || !strings.Contains(err.Error(), "timeout") {
+		t.Fatalf("invalid MCP resource는 run 조립에서 거부해야 해요: %v", err)
+	}
+
+	agent, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceSubagent, Name: "planner", Enabled: true, Config: []byte(`{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadProviderOptions(ctx, store, gateway.RunStartRequest{Subagents: []string{agent.ID}})
+	if err == nil || !strings.Contains(err.Error(), "url") {
+		t.Fatalf("invalid inline MCP resource는 subagent 조립에서 거부해야 해요: %v", err)
+	}
+}
+
 func TestLoadProviderOptionsRejectsInvalidSkillManifest(t *testing.T) {
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
 	if err != nil {
