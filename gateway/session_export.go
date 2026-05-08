@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 )
 
 const sessionExportFormatVersion = "kkode.session.export.v1"
+const maxRunIDBytes = 128
 
 // SessionExportResponse는 session 복구/이관/debug를 위해 관련 상태를 한 번에 묶은 JSON이에요.
 type SessionExportResponse struct {
@@ -195,7 +197,7 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runStore, runs, ok := s.prepareImportRuns(w, r, imported.ID, req.Runs)
+	runStore, runs, ok := s.prepareImportRuns(w, r, imported, req.Runs)
 	if !ok {
 		return
 	}
@@ -295,7 +297,7 @@ func (s *Server) prepareImportResources(w http.ResponseWriter, r *http.Request, 
 	return store, resources, true
 }
 
-func (s *Server) prepareImportRuns(w http.ResponseWriter, r *http.Request, sessionID string, items []RunDTO) (session.RunStore, []session.Run, bool) {
+func (s *Server) prepareImportRuns(w http.ResponseWriter, r *http.Request, imported session.Session, items []RunDTO) (session.RunStore, []session.Run, bool) {
 	if len(items) == 0 {
 		return nil, nil, true
 	}
@@ -306,8 +308,17 @@ func (s *Server) prepareImportRuns(w http.ResponseWriter, r *http.Request, sessi
 	}
 	runs := make([]session.Run, 0, len(items))
 	for _, item := range items {
+		item = sanitizeImportedRunDTO(item)
+		if err := validateImportedRunDTO(item); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_import", err.Error())
+			return nil, nil, false
+		}
+		if item.TurnID != "" && !sessionHasTurn(imported, item.TurnID) {
+			writeError(w, r, http.StatusBadRequest, "invalid_import", "run turn_id가 raw_session에 없어요")
+			return nil, nil, false
+		}
 		run := sessionRunFromDTO(item)
-		run.SessionID = sessionID
+		run.SessionID = imported.ID
 		run.EventsURL = runEventsURL(run.ID)
 		runs = append(runs, run)
 	}
@@ -321,6 +332,51 @@ func sessionHasTurn(sess session.Session, turnID string) bool {
 		}
 	}
 	return false
+}
+
+func sanitizeImportedRunDTO(run RunDTO) RunDTO {
+	run.ID = strings.TrimSpace(run.ID)
+	run.SessionID = strings.TrimSpace(run.SessionID)
+	run.TurnID = strings.TrimSpace(run.TurnID)
+	run.Status = strings.TrimSpace(run.Status)
+	run.Provider = strings.TrimSpace(run.Provider)
+	run.Model = strings.TrimSpace(run.Model)
+	run.MCPServers = sanitizeResourceIDs(run.MCPServers)
+	run.Skills = sanitizeResourceIDs(run.Skills)
+	run.Subagents = sanitizeResourceIDs(run.Subagents)
+	run.EnabledTools = sanitizeToolNames(run.EnabledTools)
+	run.DisabledTools = sanitizeToolNames(run.DisabledTools)
+	run.ContextBlocks = SanitizeContextBlocks(run.ContextBlocks)
+	run.Metadata = sanitizeRunMetadata(run.Metadata)
+	return run
+}
+
+func validateImportedRunDTO(run RunDTO) error {
+	if run.ID == "" {
+		return fmt.Errorf("run id가 필요해요")
+	}
+	if len(run.ID) > maxRunIDBytes {
+		return fmt.Errorf("run id는 %d byte 이하여야 해요", maxRunIDBytes)
+	}
+	if !validRunMetadataKey(run.ID) {
+		return fmt.Errorf("run id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if run.Status == "" {
+		return fmt.Errorf("run status가 필요해요")
+	}
+	if !validImportedRunStatus(run.Status) {
+		return fmt.Errorf("run status %q는 지원하지 않아요", run.Status)
+	}
+	return validateRunMetadata(run.Metadata)
+}
+
+func validImportedRunStatus(status string) bool {
+	switch status {
+	case "queued", "running", "cancelling", "completed", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
 }
 
 func trimExportSlice[T any](items []T, limit int) ([]T, int, bool) {

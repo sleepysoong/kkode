@@ -3465,8 +3465,14 @@ components:
           $ref: '#/components/schemas/Run'
         metadata:
           type: object
+          maxProperties: 64
+          propertyNames:
+            type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
           additionalProperties:
             type: string
+            maxLength: 1024
           description: request_id/idempotency_key가 반영된 metadata예요.
     RunPreviewResponse:
       type: object
@@ -4255,6 +4261,8 @@ components:
       properties:
         id:
           type: string
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.-]+$'
         session_id:
           type: string
         turn_id:
@@ -4308,8 +4316,14 @@ components:
           type: string
         metadata:
           type: object
+          maxProperties: 64
+          propertyNames:
+            type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
           additionalProperties:
             type: string
+            maxLength: 1024
     ErrorEnvelope:
       type: object
       required: [error]

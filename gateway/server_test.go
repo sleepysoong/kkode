@@ -4798,6 +4798,35 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("checkpoint id preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
 	}
+	for _, tc := range []struct {
+		name string
+		run  RunDTO
+		want string
+	}{
+		{name: "bad run id", run: RunDTO{ID: "bad id", Status: "completed", TurnID: turn.ID}, want: "run id"},
+		{name: "bad run status", run: RunDTO{ID: "run_bad_status", Status: "paused", TurnID: turn.ID}, want: "run status"},
+		{name: "missing run turn", run: RunDTO{ID: "run_missing_turn", Status: "completed", TurnID: "turn_missing"}, want: "run turn_id"},
+		{name: "bad run metadata", run: RunDTO{ID: "run_bad_metadata", Status: "completed", Metadata: map[string]string{"bad key": "value"}}, want: "metadata key"},
+	} {
+		body, err = json.Marshal(SessionImportRequest{
+			FormatVersion: sessionExportFormatVersion,
+			RawSession:    sess,
+			Runs:          []RunDTO{tc.run},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s import는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("%s preflight 실패 후 session이 저장되면 안 돼요: err=%v", tc.name, err)
+		}
+	}
 }
 
 func TestGatewayImportRejectsUnknownResourceKindBeforeSavingSession(t *testing.T) {
