@@ -379,6 +379,9 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 
 func syncProviderTester() gateway.ProviderTester {
 	return func(ctx context.Context, providerName string, req gateway.ProviderTestRequest) (*gateway.ProviderTestResponse, error) {
+		if err := validateProviderTestBudgets(req); err != nil {
+			return nil, err
+		}
 		spec, ok := app.ResolveProviderSpec(providerName)
 		if !ok {
 			return nil, fmt.Errorf("unknown provider: %s", providerName)
@@ -473,6 +476,21 @@ func syncProviderTester() gateway.ProviderTester {
 		out.Result = providerTestResult(resp, req.MaxResultBytes)
 		out.Message = "provider live test가 성공했어요"
 		return out, nil
+	}
+}
+
+func validateProviderTestBudgets(req gateway.ProviderTestRequest) error {
+	switch {
+	case req.MaxPreviewBytes < 0:
+		return fmt.Errorf("max_preview_bytes는 0 이상이어야 해요")
+	case req.MaxOutputTokens < 0:
+		return fmt.Errorf("max_output_tokens는 0 이상이어야 해요")
+	case req.MaxResultBytes < 0:
+		return fmt.Errorf("max_result_bytes는 0 이상이어야 해요")
+	case req.TimeoutMS < 0:
+		return fmt.Errorf("timeout_ms는 0 이상이어야 해요")
+	default:
+		return nil
 	}
 }
 

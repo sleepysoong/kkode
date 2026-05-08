@@ -591,6 +591,11 @@ func TestSyncProviderTesterTruncatesLiveResult(t *testing.T) {
 	if strings.Contains(resp.Result.Text, "ghp_") || !strings.Contains(resp.Result.Text, "[REDACTED]") {
 		t.Fatalf("provider live smoke 결과는 secret을 먼저 숨겨야 해요: %+v", resp.Result)
 	}
+
+	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{Live: true, MaxResultBytes: -1})
+	if err == nil || !strings.Contains(err.Error(), "max_result_bytes") {
+		t.Fatalf("negative max_result_bytes는 거부해야 해요: %v", err)
+	}
 }
 
 func TestSyncProviderTesterReturnsPreviewErrorCode(t *testing.T) {

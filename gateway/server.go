@@ -539,12 +539,31 @@ func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerNa
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	if err := validateProviderTestRequest(req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_provider_test", err.Error())
+		return
+	}
 	resp, err := s.cfg.ProviderTester(r.Context(), providerName, req)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "provider_test_failed", err.Error())
 		return
 	}
 	writeJSON(w, resp)
+}
+
+func validateProviderTestRequest(req ProviderTestRequest) error {
+	switch {
+	case req.MaxPreviewBytes < 0:
+		return errors.New("max_preview_bytes는 0 이상이어야 해요")
+	case req.MaxOutputTokens < 0:
+		return errors.New("max_output_tokens는 0 이상이어야 해요")
+	case req.MaxResultBytes < 0:
+		return errors.New("max_result_bytes는 0 이상이어야 해요")
+	case req.TimeoutMS < 0:
+		return errors.New("timeout_ms는 0 이상이어야 해요")
+	default:
+		return nil
+	}
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []string) {

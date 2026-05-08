@@ -1864,6 +1864,31 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 		t.Fatalf("provider test JSON 오류는 표준 invalid_json이어야 해요: %+v", errBody)
 	}
 
+	invalidProviderTests := []struct {
+		name  string
+		body  string
+		field string
+	}{
+		{name: "max preview bytes", body: `{"max_preview_bytes":-1}`, field: "max_preview_bytes"},
+		{name: "max output tokens", body: `{"max_output_tokens":-1}`, field: "max_output_tokens"},
+		{name: "max result bytes", body: `{"max_result_bytes":-1}`, field: "max_result_bytes"},
+		{name: "timeout", body: `{"timeout_ms":-1}`, field: "timeout_ms"},
+	}
+	for _, tc := range invalidProviderTests {
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(tc.body))
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("provider test %s invalid request는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
+			t.Fatal(err)
+		}
+		if errBody.Error.Code != "invalid_provider_test" || !strings.Contains(errBody.Error.Message, tc.field) {
+			t.Fatalf("provider test %s 오류가 이상해요: %+v", tc.name, errBody)
+		}
+	}
+
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(``))
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

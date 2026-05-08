@@ -2395,13 +2395,17 @@ components:
             type: string
         max_preview_bytes:
           type: integer
+          minimum: 0
         max_output_tokens:
           type: integer
+          minimum: 0
         max_result_bytes:
           type: integer
+          minimum: 0
           description: live provider smoke 응답 text를 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
         timeout_ms:
           type: integer
+          minimum: 0
           description: live provider smoke 호출에 적용할 timeout이에요. 0이면 기본 60초를 사용해요.
     ProviderTestResponse:
       type: object
