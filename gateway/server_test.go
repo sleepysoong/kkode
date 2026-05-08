@@ -3708,8 +3708,32 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	srv := newTestServer(t, store, "")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?include_raw=false&turn_limit=1&event_limit=1", nil)
+	for i, turn := range sess.Turns {
+		if err := store.SaveCheckpoint(ctx, session.Checkpoint{ID: fmt.Sprintf("cp_bounded_%d", i), SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC().Add(time.Duration(i) * time.Second), Payload: json.RawMessage(`{"summary":"bounded"}`)}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.SaveRun(ctx, session.Run{ID: fmt.Sprintf("run_bounded_%d", i), SessionID: sess.ID, Status: "completed", Prompt: turn.Prompt}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			runs, err := store.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Limit: q.Limit})
+			if err != nil {
+				return nil, err
+			}
+			out := make([]RunDTO, 0, len(runs))
+			for _, run := range runs {
+				out = append(out, *runDTOFromSession(run))
+			}
+			return out, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?include_raw=false&turn_limit=1&event_limit=1&checkpoint_limit=1&run_limit=1", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3719,7 +3743,7 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
 		t.Fatal(err)
 	}
-	if exported.RawSession != nil || exported.RawSessionIncluded || len(exported.Turns) != 1 || len(exported.Events) != 1 || exported.TurnLimit != 1 || exported.EventLimit != 1 || !exported.ResultTruncated {
+	if exported.RawSession != nil || exported.RawSessionIncluded || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 || exported.TurnLimit != 1 || exported.EventLimit != 1 || exported.CheckpointLimit != 1 || exported.RunLimit != 1 || !exported.CheckpointsTruncated || !exported.RunsTruncated || !exported.ResultTruncated {
 		t.Fatalf("bounded session export preview가 이상해요: %+v", exported)
 	}
 }

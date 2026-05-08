@@ -15,22 +15,26 @@ const sessionExportFormatVersion = "kkode.session.export.v1"
 
 // SessionExportResponse는 session 복구/이관/debug를 위해 관련 상태를 한 번에 묶은 JSON이에요.
 type SessionExportResponse struct {
-	FormatVersion      string                 `json:"format_version"`
-	ExportedAt         time.Time              `json:"exported_at"`
-	Session            SessionDTO             `json:"session"`
-	RawSession         *session.Session       `json:"raw_session,omitempty"`
-	RawSessionIncluded bool                   `json:"raw_session_included"`
-	Counts             SessionExportCountsDTO `json:"counts"`
-	Redacted           bool                   `json:"redacted,omitempty"`
-	Turns              []TurnDTO              `json:"turns"`
-	Events             []EventDTO             `json:"events"`
-	Todos              []TodoDTO              `json:"todos"`
-	TurnLimit          int                    `json:"turn_limit,omitempty"`
-	EventLimit         int                    `json:"event_limit,omitempty"`
-	ResultTruncated    bool                   `json:"result_truncated,omitempty"`
-	Checkpoints        []CheckpointDTO        `json:"checkpoints,omitempty"`
-	Runs               []RunDTO               `json:"runs,omitempty"`
-	Resources          []ResourceDTO          `json:"resources,omitempty"`
+	FormatVersion        string                 `json:"format_version"`
+	ExportedAt           time.Time              `json:"exported_at"`
+	Session              SessionDTO             `json:"session"`
+	RawSession           *session.Session       `json:"raw_session,omitempty"`
+	RawSessionIncluded   bool                   `json:"raw_session_included"`
+	Counts               SessionExportCountsDTO `json:"counts"`
+	Redacted             bool                   `json:"redacted,omitempty"`
+	Turns                []TurnDTO              `json:"turns"`
+	Events               []EventDTO             `json:"events"`
+	Todos                []TodoDTO              `json:"todos"`
+	TurnLimit            int                    `json:"turn_limit,omitempty"`
+	EventLimit           int                    `json:"event_limit,omitempty"`
+	CheckpointLimit      int                    `json:"checkpoint_limit,omitempty"`
+	RunLimit             int                    `json:"run_limit,omitempty"`
+	CheckpointsTruncated bool                   `json:"checkpoints_truncated,omitempty"`
+	RunsTruncated        bool                   `json:"runs_truncated,omitempty"`
+	ResultTruncated      bool                   `json:"result_truncated,omitempty"`
+	Checkpoints          []CheckpointDTO        `json:"checkpoints,omitempty"`
+	Runs                 []RunDTO               `json:"runs,omitempty"`
+	Resources            []ResourceDTO          `json:"resources,omitempty"`
 }
 
 // SessionExportCountsDTO는 export bundle이 잘렸는지 adapter가 빠르게 검증할 때 쓰는 카운트예요.
@@ -78,6 +82,8 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 	includeRaw := !redacted && !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_raw")), "false")
 	turnLimit := queryLimit(r, "turn_limit", len(sess.Turns), 5000)
 	eventLimit := queryLimit(r, "event_limit", len(sess.Events), 5000)
+	checkpointLimit := queryLimit(r, "checkpoint_limit", 200, 5000)
+	runLimit := queryLimit(r, "run_limit", 200, 5000)
 	turns, _, turnsTruncated := trimExportSlice(exportTurnDTOs(sess), turnLimit)
 	events, _, eventsTruncated := trimExportSlice(exportEventDTOs(sess), eventLimit)
 	resp := SessionExportResponse{
@@ -90,6 +96,8 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		Todos:              todoDTOs(sess.Todos),
 		TurnLimit:          turnLimit,
 		EventLimit:         eventLimit,
+		CheckpointLimit:    checkpointLimit,
+		RunLimit:           runLimit,
 		ResultTruncated:    turnsTruncated || eventsTruncated,
 	}
 	if includeRaw {
@@ -97,21 +105,24 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		resp.RawSession = &rawSession
 	}
 	if store := s.checkpointStore(); store != nil {
-		checkpoints, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: queryLimit(r, "checkpoint_limit", 200, 5000)})
+		checkpoints, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: checkpointLimit + 1})
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, "export_checkpoints_failed", err.Error())
 			return
 		}
+		checkpoints, _, resp.CheckpointsTruncated = trimExportSlice(checkpoints, checkpointLimit)
 		resp.Checkpoints = checkpointDTOs(checkpoints)
 	}
 	if s.cfg.RunLister != nil {
-		runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: sessionID, Limit: queryLimit(r, "run_limit", 200, 5000)})
+		runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: sessionID, Limit: runLimit + 1})
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, "export_runs_failed", err.Error())
 			return
 		}
+		runs, _, resp.RunsTruncated = trimExportSlice(runs, runLimit)
 		resp.Runs = runs
 	}
+	resp.ResultTruncated = resp.ResultTruncated || resp.CheckpointsTruncated || resp.RunsTruncated
 	if resources, err := s.exportReferencedResources(r.Context(), resp.Runs); err != nil {
 		writeError(w, r, http.StatusInternalServerError, "export_resources_failed", err.Error())
 		return

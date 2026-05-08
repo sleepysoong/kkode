@@ -2963,9 +2963,17 @@ components:
           type: integer
         event_limit:
           type: integer
+        checkpoint_limit:
+          type: integer
+        run_limit:
+          type: integer
+        checkpoints_truncated:
+          type: boolean
+        runs_truncated:
+          type: boolean
         result_truncated:
           type: boolean
-          description: turn_limit 또는 event_limit 때문에 export DTO 배열이 잘렸는지 알려줘요.
+          description: turn/event/checkpoint/run limit 때문에 export DTO 배열이 잘렸는지 알려줘요.
         checkpoints:
           type: array
           items:
