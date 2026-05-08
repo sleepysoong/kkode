@@ -20,6 +20,8 @@ const maxResourceConfigStringBytes = 64 << 10
 const maxResourceInlineMCPLabelBytes = 128
 const maxResourceStringArrayItems = 256
 const maxResourceStringArrayItemBytes = 4096
+const maxResourceStringMapItems = 256
+const maxResourceStringMapKeyBytes = 256
 
 // ResourceDTO는 MCP server, skill, subagent를 외부 API에 노출하는 공통 manifest예요.
 type ResourceDTO struct {
@@ -351,6 +353,12 @@ func validateMCPResourceConfig(config map[string]any, label string) error {
 	if err := validateStringArrayConfig(config, "args"); err != nil {
 		return err
 	}
+	if err := validateStringMapConfig(config, label, "env"); err != nil {
+		return err
+	}
+	if err := validateStringMapConfig(config, label, "headers"); err != nil {
+		return err
+	}
 	if _, err := nonNegativeIntConfig(config, "timeout"); err != nil {
 		return err
 	}
@@ -393,6 +401,62 @@ func validateStringConfigFields(config map[string]any, label string, keys ...str
 	return nil
 }
 
+func validateStringMapConfig(config map[string]any, label string, key string) error {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	values, err := stringMapConfigValues(raw)
+	if err != nil {
+		return fmt.Errorf("%s %s는 string object여야 해요", label, key)
+	}
+	if len(values) > maxResourceStringMapItems {
+		return fmt.Errorf("%s %s는 최대 %d개까지 허용돼요", label, key, maxResourceStringMapItems)
+	}
+	seen := map[string]bool{}
+	for rawKey, rawValue := range values {
+		itemKey := strings.TrimSpace(rawKey)
+		if itemKey == "" {
+			return fmt.Errorf("%s %s key는 비어 있지 않아야 해요", label, key)
+		}
+		if seen[itemKey] {
+			return fmt.Errorf("%s %s.%s key가 중복됐어요", label, key, itemKey)
+		}
+		seen[itemKey] = true
+		if len(itemKey) > maxResourceStringMapKeyBytes {
+			return fmt.Errorf("%s %s key는 %d byte 이하여야 해요", label, key, maxResourceStringMapKeyBytes)
+		}
+		value := strings.TrimSpace(rawValue)
+		if len(value) > maxResourceConfigStringBytes {
+			return fmt.Errorf("%s %s.%s는 %d byte 이하여야 해요", label, key, itemKey, maxResourceConfigStringBytes)
+		}
+	}
+	return nil
+}
+
+func stringMapConfigValues(raw any) (map[string]string, error) {
+	switch values := raw.(type) {
+	case map[string]any:
+		out := make(map[string]string, len(values))
+		for key, value := range values {
+			text, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("non-string value")
+			}
+			out[key] = text
+		}
+		return out, nil
+	case map[string]string:
+		out := make(map[string]string, len(values))
+		for key, value := range values {
+			out[key] = value
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("not a map")
+	}
+}
+
 func normalizeResourceConfig(kind session.ResourceKind, config map[string]any) map[string]any {
 	out := cloneAnyMap(config)
 	switch kind {
@@ -416,6 +480,8 @@ func normalizeMCPResourceConfig(config map[string]any) {
 	for _, key := range []string{"kind", "name", "command", "url", "cwd"} {
 		trimStringConfig(config, key)
 	}
+	normalizeStringMapConfig(config, "env")
+	normalizeStringMapConfig(config, "headers")
 }
 
 func normalizeInlineMCPServers(config map[string]any) {
@@ -452,6 +518,26 @@ func trimStringConfig(config map[string]any, key string) {
 	if ok {
 		config[key] = strings.TrimSpace(value)
 	}
+}
+
+func normalizeStringMapConfig(config map[string]any, key string) {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return
+	}
+	values, err := stringMapConfigValues(raw)
+	if err != nil {
+		return
+	}
+	out := make(map[string]string, len(values))
+	for rawKey, rawValue := range values {
+		itemKey := strings.TrimSpace(rawKey)
+		if itemKey == "" {
+			continue
+		}
+		out[itemKey] = strings.TrimSpace(rawValue)
+	}
+	config[key] = out
 }
 
 func normalizeStringArrayConfig(config map[string]any, key string) {

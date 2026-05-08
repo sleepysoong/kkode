@@ -4160,7 +4160,7 @@ components:
         config:
           type: object
           additionalProperties: true
-          description: MCP/skill/subagent 실행 config예요. JSON 직렬화 기준 최대 1048576 byte까지 허용되며, 주요 string 필드는 65536 byte, inline MCP label은 128 byte, args/tools/skills/mcp_server_ids 같은 string array는 최대 256개, 항목당 4096 byte까지 허용돼요.
+          description: MCP/skill/subagent 실행 config예요. JSON 직렬화 기준 최대 1048576 byte까지 허용되며, 주요 string 필드는 65536 byte, inline MCP label은 128 byte, args/tools/skills/mcp_server_ids 같은 string array는 최대 256개, 항목당 4096 byte, env/headers 같은 string object는 최대 256개, key당 256 byte, value당 65536 byte까지 허용돼요.
         created_at:
           type: string
           format: date-time

@@ -2379,7 +2379,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
 
-	body := bytes.NewBufferString(`{"name":"filesystem","description":"파일 MCP예요","config":{"kind":" stdio ","command":" mcp-fs ","args":["."],"headers":{"Authorization":"Bearer secret-token"}}}`)
+	body := bytes.NewBufferString(`{"name":"filesystem","description":"파일 MCP예요","config":{"kind":" stdio ","command":" mcp-fs ","args":["."],"env":{" PATH ":" /tmp/bin "},"headers":{" Authorization ":" Bearer secret-token "}}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers", body)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -2395,6 +2395,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if created.Config["kind"] != "stdio" {
 		t.Fatalf("생성된 MCP manifest kind는 canonical 값이어야 해요: %+v", created.Config)
+	}
+	if created.Config["env"].(map[string]any)["PATH"] != "/tmp/bin" {
+		t.Fatalf("생성된 MCP manifest env는 canonical 값이어야 해요: %+v", created.Config)
 	}
 	if created.Config["headers"].(map[string]any)["Authorization"] != "[REDACTED]" {
 		t.Fatalf("생성 응답은 secret config를 숨겨야 해요: %+v", created.Config)
@@ -2419,13 +2422,20 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		{name: "mcp bad url", path: "/api/v1/mcp/servers", body: `{"name":"bad-url","config":{"kind":"http","url":"file:///tmp/mcp.sock"}}`, want: "http/https"},
 		{name: "mcp bad id", path: "/api/v1/mcp/servers", body: `{"id":"bad id","name":"broken","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource id"},
 		{name: "mcp long name", path: "/api/v1/mcp/servers", body: `{"name":"` + strings.Repeat("n", maxResourceNameBytes+1) + `","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource name"},
-		{name: "mcp long config", path: "/api/v1/mcp/servers", body: `{"name":"huge","config":{"kind":"http","url":"https://mcp.example.test","headers":{"X-Fill":"` + strings.Repeat("x", maxResourceConfigBytes+1) + `"}}}`, want: "resource config"},
+		{name: "mcp long config", path: "/api/v1/mcp/servers", body: `{"name":"huge","config":{"kind":"http","url":"https://mcp.example.test","extra":"` + strings.Repeat("x", maxResourceConfigBytes+1) + `"}}`, want: "resource config"},
 		{name: "mcp long command", path: "/api/v1/mcp/servers", body: `{"name":"long-command","config":{"kind":"stdio","command":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}`, want: "command"},
 		{name: "mcp too many args", path: "/api/v1/mcp/servers", body: `{"name":"many-args","config":{"kind":"stdio","command":"mcp-fs","args":[` + quotedStringList("arg", maxResourceStringArrayItems+1) + `]}}`, want: "최대"},
 		{name: "mcp long arg", path: "/api/v1/mcp/servers", body: `{"name":"long-arg","config":{"kind":"stdio","command":"mcp-fs","args":["` + strings.Repeat("x", maxResourceStringArrayItemBytes+1) + `"]}}`, want: "args[0]"},
+		{name: "mcp numeric env", path: "/api/v1/mcp/servers", body: `{"name":"bad-env","config":{"kind":"stdio","command":"mcp-fs","env":{"PORT":3000}}}`, want: "env"},
+		{name: "mcp blank header key", path: "/api/v1/mcp/servers", body: `{"name":"blank-header","config":{"kind":"http","url":"https://mcp.example.test","headers":{"  ":"x"}}}`, want: "headers key"},
+		{name: "mcp duplicate canonical header key", path: "/api/v1/mcp/servers", body: `{"name":"dup-header","config":{"kind":"http","url":"https://mcp.example.test","headers":{" X-Test ":"a","X-Test":"b"}}}`, want: "중복"},
+		{name: "mcp long header key", path: "/api/v1/mcp/servers", body: `{"name":"long-header","config":{"kind":"http","url":"https://mcp.example.test","headers":{"` + strings.Repeat("x", maxResourceStringMapKeyBytes+1) + `":"v"}}}`, want: "key"},
+		{name: "mcp long header value", path: "/api/v1/mcp/servers", body: `{"name":"long-header-value","config":{"kind":"http","url":"https://mcp.example.test","headers":{"X-Test":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}}`, want: "X-Test"},
+		{name: "mcp too many headers", path: "/api/v1/mcp/servers", body: `{"name":"many-headers","config":{"kind":"http","url":"https://mcp.example.test","headers":{` + quotedStringMap("X-Test-", "v", maxResourceStringMapItems+1) + `}}}`, want: "최대"},
 		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
 		{name: "skill long path", path: "/api/v1/skills", body: `{"name":"long-skill","config":{"path":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}`, want: "path"},
 		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
+		{name: "subagent bad inline mcp env", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"fs":{"kind":"stdio","command":"mcp-fs","env":{"PORT":3000}}}}}`, want: "env"},
 		{name: "subagent long prompt", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}`, want: "prompt"},
 		{name: "subagent long tool", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","tools":["` + strings.Repeat("x", maxResourceStringArrayItemBytes+1) + `"]}}`, want: "tools[0]"},
 		{name: "subagent blank inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"  ":"mcp-fs"}}}`, want: "label"},
@@ -4961,7 +4971,7 @@ func TestGatewayImportRejectsUnknownResourceKindBeforeSavingSession(t *testing.T
 		},
 		{
 			name:      "oversized resource config",
-			resources: []ResourceDTO{{ID: "mcp_huge", Kind: string(session.ResourceMCPServer), Name: "huge", Config: map[string]any{"kind": "http", "url": "https://mcp.example.test", "headers": map[string]any{"X-Fill": strings.Repeat("x", maxResourceConfigBytes+1)}}}},
+			resources: []ResourceDTO{{ID: "mcp_huge", Kind: string(session.ResourceMCPServer), Name: "huge", Config: map[string]any{"kind": "http", "url": "https://mcp.example.test", "extra": strings.Repeat("x", maxResourceConfigBytes+1)}}},
 			want:      "resource config",
 		},
 	} {
@@ -4999,6 +5009,14 @@ func quotedStringList(prefix string, count int) string {
 	items := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		items = append(items, fmt.Sprintf("%q", fmt.Sprintf("%s_%d", prefix, i)))
+	}
+	return strings.Join(items, ",")
+}
+
+func quotedStringMap(keyPrefix string, value string, count int) string {
+	items := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		items = append(items, fmt.Sprintf("%q:%q", fmt.Sprintf("%s%d", keyPrefix, i), value))
 	}
 	return strings.Join(items, ",")
 }
