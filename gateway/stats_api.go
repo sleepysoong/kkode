@@ -21,7 +21,7 @@ type StatsResponse struct {
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 1 || r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 stats 요청이에요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 stats 요청이에요", http.MethodGet)
 		return
 	}
 	statsStore, ok := s.cfg.Store.(session.StatsStore)

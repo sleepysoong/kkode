@@ -111,9 +111,22 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		s.applyFilePatch(w, r)
 		return
 	}
-	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "content") {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 files method예요")
+	if len(parts) == 1 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodGet)
 		return
+	}
+	if len(parts) == 2 {
+		switch parts[1] {
+		case "content":
+			writeMethodNotAllowed(w, r, "지원하지 않는 file content method예요", http.MethodGet, http.MethodPut)
+			return
+		case "grep", "glob":
+			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodGet)
+			return
+		case "patch":
+			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodPost)
+			return
+		}
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "files endpoint를 찾을 수 없어요")
 }
@@ -195,7 +208,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		s.writeFileContent(w, r)
 	default:
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 file content method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 file content method예요", http.MethodGet, http.MethodPut)
 	}
 }
 

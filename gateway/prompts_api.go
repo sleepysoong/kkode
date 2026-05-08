@@ -47,7 +47,7 @@ const (
 func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 1 {
 		if r.Method != http.MethodGet {
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 prompts method예요")
+			writeMethodNotAllowed(w, r, "지원하지 않는 prompts method예요", http.MethodGet)
 			return
 		}
 		s.listPromptTemplates(w, r)
@@ -60,6 +60,14 @@ func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, parts []s
 	}
 	if len(parts) == 3 && parts[2] == "render" && r.Method == http.MethodPost {
 		s.renderPromptTemplate(w, r, name)
+		return
+	}
+	if len(parts) == 2 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 prompts method예요", http.MethodGet)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "render" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 prompts method예요", http.MethodPost)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "prompt endpoint를 찾을 수 없어요")

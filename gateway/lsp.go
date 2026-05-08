@@ -121,7 +121,7 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		return
 	}
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 lsp method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 lsp method예요", http.MethodGet)
 		return
 	}
 	_, root, ok := workspaceFromQuery(w, r)

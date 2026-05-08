@@ -59,7 +59,7 @@ func (s *Server) handleGit(w http.ResponseWriter, r *http.Request, parts []strin
 		return
 	}
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 git method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 git method예요", http.MethodGet)
 		return
 	}
 	switch parts[1] {

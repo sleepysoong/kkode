@@ -107,6 +107,46 @@ func TestGatewayHealthUsesTypedDTO(t *testing.T) {
 	}
 }
 
+func TestGatewayMethodNotAllowedIncludesAllowHeader(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		allow  string
+	}{
+		{name: "health", method: http.MethodPost, path: "/healthz", allow: "GET"},
+		{name: "sessions collection", method: http.MethodPatch, path: "/api/v1/sessions", allow: "GET, POST"},
+		{name: "files content", method: http.MethodDelete, path: "/api/v1/files/content", allow: "GET, PUT"},
+		{name: "tools collection", method: http.MethodPost, path: "/api/v1/tools", allow: "GET"},
+		{name: "tool call", method: http.MethodGet, path: "/api/v1/tools/call", allow: "POST"},
+		{name: "prompt render", method: http.MethodGet, path: "/api/v1/prompts/default/render", allow: "POST"},
+		{name: "todo item", method: http.MethodPatch, path: "/api/v1/sessions/sess_1/todos/todo_1", allow: "DELETE"},
+		{name: "checkpoint item", method: http.MethodPatch, path: "/api/v1/sessions/sess_1/checkpoints/cp_1", allow: "GET"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+			}
+			if got := rec.Header().Get("Allow"); got != tc.allow {
+				t.Fatalf("Allow = %q, want %q", got, tc.allow)
+			}
+			var body ErrorEnvelope
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Error.Code != "method_not_allowed" {
+				t.Fatalf("error code = %q", body.Error.Code)
+			}
+		})
+	}
+}
+
 func TestGatewayReadyChecksStoreHealth(t *testing.T) {
 	store := openTestStore(t)
 	srv := newReadyTestServer(t, store)

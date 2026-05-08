@@ -28,12 +28,16 @@ func (s *Server) handleSessionTodos(w http.ResponseWriter, r *http.Request, sess
 		case http.MethodPost:
 			s.upsertSessionTodo(w, r, sessionID)
 		default:
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 todo method예요")
+			writeMethodNotAllowed(w, r, "지원하지 않는 todo method예요", http.MethodGet, http.MethodPut, http.MethodPost)
 		}
 		return
 	}
 	if len(rest) == 1 && r.Method == http.MethodDelete {
 		s.deleteSessionTodo(w, r, sessionID, rest[0])
+		return
+	}
+	if len(rest) == 1 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 todo method예요", http.MethodDelete)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "todo endpoint를 찾을 수 없어요")

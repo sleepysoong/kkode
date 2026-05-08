@@ -109,7 +109,7 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 		case http.MethodPost:
 			s.saveResource(w, r, store, route, "")
 		default:
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 resource method예요")
+			writeMethodNotAllowed(w, r, "지원하지 않는 resource method예요", http.MethodGet, http.MethodPost)
 		}
 		return
 	}
@@ -136,7 +136,7 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 resource method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 resource method예요", http.MethodGet, http.MethodPut, http.MethodDelete)
 	}
 }
 

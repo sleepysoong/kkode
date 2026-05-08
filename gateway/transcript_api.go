@@ -49,7 +49,7 @@ const (
 
 func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 transcript method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 transcript method예요", http.MethodGet)
 		return
 	}
 	maxMarkdownBytes, ok := transcriptMarkdownLimit(w, r)
@@ -72,7 +72,7 @@ func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, se
 
 func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, requestID string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 request transcript method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 request transcript method예요", http.MethodGet)
 		return
 	}
 	if s.cfg.RunLister == nil {
@@ -138,7 +138,7 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 
 func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 run transcript method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 run transcript method예요", http.MethodGet)
 		return
 	}
 	if s.cfg.RunGetter == nil {

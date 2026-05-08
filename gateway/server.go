@@ -170,7 +170,7 @@ func (s *Server) recoverMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 method예요", http.MethodGet)
 		return
 	}
 	writeJSON(w, HealthResponse{OK: true, Time: s.cfg.Now()})
@@ -178,7 +178,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 method예요", http.MethodGet)
 		return
 	}
 	if checker, ok := s.cfg.Store.(session.HealthChecker); ok {
@@ -264,7 +264,7 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request, parts []
 
 func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 request correlation method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 request correlation method예요", http.MethodGet)
 		return
 	}
 	if s.cfg.RunLister == nil {
@@ -299,7 +299,7 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 
 func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 request correlation method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 request correlation method예요", http.MethodGet)
 		return
 	}
 	if s.cfg.RunLister == nil {
@@ -515,7 +515,7 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 
 func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 0 || r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 API index 요청이에요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 API index 요청이에요", http.MethodGet)
 		return
 	}
 	writeJSON(w, APIIndexResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Links: APIIndexLinks()})
@@ -523,7 +523,7 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 1 || r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 version 요청이에요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 version 요청이에요", http.MethodGet)
 		return
 	}
 	names := make([]string, 0, len(s.cfg.Providers))
@@ -537,7 +537,7 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []s
 func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 3 && parts[2] == "test" {
 		if r.Method != http.MethodPost {
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "provider test는 POST만 지원해요")
+			writeMethodNotAllowed(w, r, "provider test는 POST만 지원해요", http.MethodPost)
 			return
 		}
 		s.testProvider(w, r, parts[1])
@@ -545,7 +545,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 	}
 	if len(parts) == 2 {
 		if r.Method != http.MethodGet {
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "provider 상세는 GET만 지원해요")
+			writeMethodNotAllowed(w, r, "provider 상세는 GET만 지원해요", http.MethodGet)
 			return
 		}
 		provider, ok := findProvider(s.cfg.Providers, parts[1])
@@ -558,7 +558,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 	}
 	if len(parts) != 1 || r.Method != http.MethodGet {
 		if len(parts) == 1 {
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "provider 목록은 GET만 지원해요")
+			writeMethodNotAllowed(w, r, "provider 목록은 GET만 지원해요", http.MethodGet)
 			return
 		}
 		writeError(w, r, http.StatusNotFound, "not_found", "provider endpoint를 찾을 수 없어요")
@@ -630,7 +630,7 @@ func validateProviderTestRequest(req ProviderTestRequest) error {
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 1 || r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 models 요청이에요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 models 요청이에요", http.MethodGet)
 		return
 	}
 	providerFilter := strings.TrimSpace(r.URL.Query().Get("provider"))
@@ -721,7 +721,7 @@ func providerMatches(provider ProviderDTO, name string) bool {
 
 func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 1 || r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 capabilities 요청이에요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 capabilities 요청이에요", http.MethodGet)
 		return
 	}
 	features := append([]FeatureDTO{}, s.cfg.Features...)
@@ -803,7 +803,7 @@ func durationSeconds(d time.Duration) int {
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 1 || r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 diagnostics 요청이에요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 diagnostics 요청이에요", http.MethodGet)
 		return
 	}
 	features := s.cfg.Features
@@ -965,7 +965,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		case http.MethodPost:
 			s.createSession(w, r)
 		default:
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 sessions method예요")
+			writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodGet, http.MethodPost)
 		}
 		return
 	}
@@ -1166,7 +1166,7 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 
 func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 turns method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 turns method예요", http.MethodGet)
 		return
 	}
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
@@ -1284,7 +1284,7 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		case http.MethodPost:
 			s.startRun(w, r)
 		default:
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 runs method예요")
+			writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodGet, http.MethodPost)
 		}
 		return
 	}

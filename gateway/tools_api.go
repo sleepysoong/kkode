@@ -70,16 +70,24 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []str
 		s.listTools(w, r)
 		return
 	}
-	if len(parts) == 2 && r.Method == http.MethodGet {
-		s.getTool(w, r, parts[1])
-		return
-	}
 	if len(parts) == 2 && parts[1] == "call" && r.Method == http.MethodPost {
 		s.callTool(w, r)
 		return
 	}
-	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "call") {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 tools method예요")
+	if len(parts) == 2 && parts[1] != "call" && r.Method == http.MethodGet {
+		s.getTool(w, r, parts[1])
+		return
+	}
+	if len(parts) == 1 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 tools method예요", http.MethodGet)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "call" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 tools method예요", http.MethodPost)
+		return
+	}
+	if len(parts) == 2 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 tools method예요", http.MethodGet)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "tools endpoint를 찾을 수 없어요")

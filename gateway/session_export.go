@@ -79,7 +79,7 @@ type SessionImportResponse struct {
 
 func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if r.Method != http.MethodGet {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 session export method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 session export method예요", http.MethodGet)
 		return
 	}
 	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
@@ -166,7 +166,7 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 
 func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 session import method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 session import method예요", http.MethodPost)
 		return
 	}
 	var req SessionImportRequest

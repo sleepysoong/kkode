@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 )
 
 // ErrorDTO는 모든 gateway 실패 응답의 표준 오류 본문이에요.
@@ -22,6 +23,11 @@ type ErrorEnvelope struct {
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	writeErrorDetails(w, r, status, code, message, nil)
+}
+
+func writeMethodNotAllowed(w http.ResponseWriter, r *http.Request, message string, methods ...string) {
+	w.Header().Set("Allow", strings.Join(methods, ", "))
+	writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", message)
 }
 
 func writeErrorDetails(w http.ResponseWriter, r *http.Request, status int, code, message string, details map[string]any) {

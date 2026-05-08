@@ -42,12 +42,16 @@ func (s *Server) handleSessionCheckpoints(w http.ResponseWriter, r *http.Request
 		case http.MethodPost:
 			s.createSessionCheckpoint(w, r, store, sessionID)
 		default:
-			writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 checkpoint method예요")
+			writeMethodNotAllowed(w, r, "지원하지 않는 checkpoint method예요", http.MethodGet, http.MethodPost)
 		}
 		return
 	}
 	if len(rest) == 1 && r.Method == http.MethodGet {
 		s.getSessionCheckpoint(w, r, store, sessionID, rest[0])
+		return
+	}
+	if len(rest) == 1 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 checkpoint method예요", http.MethodGet)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "checkpoint endpoint를 찾을 수 없어요")

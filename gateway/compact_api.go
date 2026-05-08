@@ -31,7 +31,7 @@ type SessionCompactResponse struct {
 
 func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if r.Method != http.MethodPost {
-		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 compact method예요")
+		writeMethodNotAllowed(w, r, "지원하지 않는 compact method예요", http.MethodPost)
 		return
 	}
 	var req SessionCompactRequest
