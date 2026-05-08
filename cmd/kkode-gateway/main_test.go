@@ -457,6 +457,20 @@ func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
 	}
 }
 
+func TestSyncProviderTesterReportsMissingAuthBeforeLive(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	resp, err := syncProviderTester()(context.Background(), "openai-compatible", gateway.ProviderTestRequest{Model: "gpt-5-mini", Live: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.OK || resp.Code != "provider_auth_missing" || resp.AuthStatus != "missing" || !strings.Contains(resp.Message, "OPENAI_API_KEY") {
+		t.Fatalf("provider live smoke는 인증 누락을 구조화해 반환해야 해요: %+v", resp)
+	}
+	if resp.ProviderRequest == nil {
+		t.Fatalf("인증 누락이어도 변환 preview는 보여줘야 해요: %+v", resp)
+	}
+}
+
 func TestSyncProviderTesterAppliesLiveTimeout(t *testing.T) {
 	unregister, err := app.RegisterProvider(app.ProviderRegistration{
 		Spec: app.ProviderSpec{

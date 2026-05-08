@@ -418,6 +418,12 @@ func syncProviderTester() gateway.ProviderTester {
 		if !req.Live {
 			return out, nil
 		}
+		if out.AuthStatus == "missing" {
+			out.OK = false
+			out.Code = "provider_auth_missing"
+			out.Message = "provider 인증 환경변수가 설정되지 않았어요: " + strings.Join(spec.AuthEnv, ", ")
+			return out, nil
+		}
 
 		timeout, err := providerTestTimeout(req.TimeoutMS)
 		if err != nil {
