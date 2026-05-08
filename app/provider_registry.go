@@ -115,6 +115,7 @@ type HTTPJSONProviderOptions struct {
 	Headers           map[string]string
 	HTTPClient        *http.Client
 	Retry             httpjson.RetryConfig
+	MaxResponseBytes  int64
 	DefaultOperation  string
 	Routes            map[string]httpjson.Route
 	Capabilities      llm.Capabilities
@@ -144,6 +145,7 @@ type HTTPJSONProviderRegistration struct {
 	DisableStreaming  bool                 `json:"disable_streaming,omitempty"`
 	HTTPClient        *http.Client         `json:"-"`
 	Retry             httpjson.RetryConfig `json:"retry,omitempty"`
+	MaxResponseBytes  int64                `json:"max_response_bytes,omitempty"`
 	Source            string               `json:"source,omitempty"`
 }
 
@@ -237,6 +239,7 @@ func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) 
 		Headers:          headers,
 		HTTPClient:       opts.HTTPClient,
 		Retry:            opts.Retry,
+		MaxResponseBytes: opts.MaxResponseBytes,
 		DefaultOperation: defaultOperation,
 		Routes:           routes,
 	})
@@ -283,6 +286,7 @@ func RegisterHTTPJSONProvider(reg HTTPJSONProviderRegistration) (func(), error) 
 			AdditionalHeaders: reg.AdditionalHeaders,
 			HTTPClient:        reg.HTTPClient,
 			Retry:             reg.Retry,
+			MaxResponseBytes:  reg.MaxResponseBytes,
 			DefaultOperation:  firstNonEmpty(reg.DefaultOperation, firstOperation(spec)),
 			Routes:            httpJSONRoutesFromSpec(routes),
 			Capabilities:      capabilitiesFromMap(spec.Capabilities),

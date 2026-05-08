@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const DefaultMaxResponseBodyBytes int64 = 32 << 20
+
 // RetryConfig는 provider HTTP 호출의 공통 retry/backoff 정책이에요.
 type RetryConfig struct {
 	MaxRetries int
@@ -73,6 +75,42 @@ func ErrorFromResponse(label string, res *http.Response, body []byte) error {
 		StatusCode: res.StatusCode,
 		Body:       string(body),
 	}
+}
+
+func ReadResponseBody(body io.Reader, maxBytes int64) ([]byte, bool, error) {
+	if body == nil {
+		return nil, false, nil
+	}
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxResponseBodyBytes
+	}
+	data, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
+	if err != nil {
+		return nil, false, err
+	}
+	truncated := int64(len(data)) > maxBytes
+	if truncated {
+		data = data[:maxBytes]
+	}
+	return data, truncated, nil
+}
+
+func ResponseBodyTooLarge(label string, maxBytes int64) error {
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxResponseBodyBytes
+	}
+	if strings.TrimSpace(label) == "" {
+		label = "provider response"
+	}
+	return fmt.Errorf("%s body가 너무 커요: max_bytes=%d", label, maxBytes)
+}
+
+func AppendTruncatedMarker(body []byte, truncated bool) []byte {
+	if !truncated {
+		return body
+	}
+	out := append([]byte(nil), body...)
+	return append(out, []byte(" [truncated]")...)
 }
 
 // DoWithRetry는 retry 가능한 HTTP status와 transport 오류를 같은 backoff 정책으로 재시도해요.
@@ -204,7 +242,7 @@ func DoJSONRaw(ctx context.Context, client *http.Client, method string, endpoint
 		return nil, err
 	}
 	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
+	data, truncated, err := ReadResponseBody(res.Body, DefaultMaxResponseBodyBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +250,10 @@ func DoJSONRaw(ctx context.Context, client *http.Client, method string, endpoint
 		if errorLabel == "" {
 			errorLabel = endpoint
 		}
-		return nil, ErrorFromResponse(errorLabel, res, data)
+		return nil, ErrorFromResponse(errorLabel, res, AppendTruncatedMarker(data, truncated))
+	}
+	if truncated {
+		return nil, ResponseBodyTooLarge(errorLabel, DefaultMaxResponseBodyBytes)
 	}
 	return data, nil
 }

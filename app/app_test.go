@@ -440,6 +440,27 @@ func TestBuildHTTPJSONProviderAdapterUsesRegistryRoutes(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPJSONProviderAdapterAppliesResponseLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"resp_http_adapter","model":"gpt-5-mini","status":"completed","output_text":"adapter 응답이에요"}`))
+	}))
+	defer server.Close()
+
+	provider, err := BuildHTTPJSONProviderAdapter("openai-compatible", HTTPJSONProviderOptions{
+		ProviderName:     "limited-http",
+		BaseURL:          server.URL + "/v1",
+		HTTPClient:       server.Client(),
+		MaxResponseBytes: 8,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = provider.Generate(context.Background(), llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText("안녕")}})
+	if err == nil || !strings.Contains(err.Error(), "max_bytes=8") {
+		t.Fatalf("HTTP JSON adapter response limit이 적용돼야 해요: %v", err)
+	}
+}
+
 func TestPreviewProviderRequestShowsResolvedHTTPRoute(t *testing.T) {
 	unregister, err := RegisterHTTPJSONProvider(HTTPJSONProviderRegistration{
 		Name:         "preview-route-http",

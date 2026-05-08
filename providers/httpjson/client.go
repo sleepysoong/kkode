@@ -40,6 +40,7 @@ type Config struct {
 	Headers          map[string]string
 	HTTPClient       *http.Client
 	Retry            RetryConfig
+	MaxResponseBytes int64
 	DefaultOperation string
 	Routes           map[string]Route
 }
@@ -53,6 +54,7 @@ type Caller struct {
 	headers          map[string]string
 	httpClient       *http.Client
 	retry            RetryConfig
+	maxResponseBytes int64
 	defaultOperation string
 	routes           map[string]Route
 }
@@ -70,6 +72,7 @@ func New(cfg Config) *Caller {
 		headers:          httptransport.CloneHeaders(cfg.Headers),
 		httpClient:       httptransport.DefaultClient(cfg.HTTPClient),
 		retry:            httptransport.NormalizeRetry(cfg.Retry),
+		maxResponseBytes: cfg.MaxResponseBytes,
 		defaultOperation: strings.TrimSpace(cfg.DefaultOperation),
 		routes:           cloneRoutes(cfg.Routes),
 	}
@@ -97,12 +100,15 @@ func (c *Caller) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 		return llm.ProviderResult{}, err
 	}
 	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
+	data, truncated, err := httptransport.ReadResponseBody(res.Body, c.maxResponseBytes)
 	if err != nil {
 		return llm.ProviderResult{}, err
 	}
 	if !httptransport.IsSuccessStatus(res.StatusCode) {
-		return llm.ProviderResult{}, httptransport.ErrorFromResponse(c.providerName+" "+operation, res, data)
+		return llm.ProviderResult{}, httptransport.ErrorFromResponse(c.providerName+" "+operation, res, httptransport.AppendTruncatedMarker(data, truncated))
+	}
+	if truncated {
+		return llm.ProviderResult{}, httptransport.ResponseBodyTooLarge(c.providerName+" "+operation, c.maxResponseBytes)
 	}
 	return llm.ProviderResult{Provider: c.providerName, Model: req.Model, Body: data, Headers: res.Header}, nil
 }
@@ -135,8 +141,8 @@ func (c *Caller) StreamProvider(ctx context.Context, req llm.ProviderRequest) (l
 	}
 	if !httptransport.IsSuccessStatus(res.StatusCode) {
 		defer res.Body.Close()
-		data, _ := io.ReadAll(res.Body)
-		return nil, httptransport.ErrorFromResponse(c.providerName+" "+operation+" stream", res, data)
+		data, truncated, _ := httptransport.ReadResponseBody(res.Body, c.maxResponseBytes)
+		return nil, httptransport.ErrorFromResponse(c.providerName+" "+operation+" stream", res, httptransport.AppendTruncatedMarker(data, truncated))
 	}
 	events := make(chan llm.StreamEvent, 32)
 	go c.readSSE(ctx, operation, res.Body, events)

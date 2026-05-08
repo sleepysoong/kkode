@@ -55,8 +55,8 @@ func (c *Client) StreamProvider(ctx context.Context, req llm.ProviderRequest) (l
 	}
 	if !httptransport.IsSuccessStatus(res.StatusCode) {
 		defer res.Body.Close()
-		data, _ := io.ReadAll(res.Body)
-		return nil, httptransport.ErrorFromResponse("openai-compatible stream", res, data)
+		data, truncated, _ := httptransport.ReadResponseBody(res.Body, 0)
+		return nil, httptransport.ErrorFromResponse("openai-compatible stream", res, httptransport.AppendTruncatedMarker(data, truncated))
 	}
 	events := make(chan llm.StreamEvent, 32)
 	go readSSE(ctx, res.Body, c.Name(), events)

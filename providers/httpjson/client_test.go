@@ -71,6 +71,27 @@ func TestCallerReportsHTTPError(t *testing.T) {
 	}
 }
 
+func TestCallerBoundsResponseBodies(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("too-large"))
+	}))
+	defer server.Close()
+	caller := New(Config{ProviderName: "custom-api", BaseURL: server.URL, HTTPClient: server.Client(), MaxResponseBytes: 4, Routes: map[string]Route{"custom.call": {Path: "/call"}}})
+	_, err := caller.CallProvider(context.Background(), llm.ProviderRequest{Operation: "custom.call", Body: map[string]any{"ok": true}})
+	if err == nil || !strings.Contains(err.Error(), "max_bytes=4") {
+		t.Fatalf("큰 성공 body는 제한해야 해요: %v", err)
+	}
+
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "too-large", http.StatusBadGateway)
+	})
+	_, err = caller.CallProvider(context.Background(), llm.ProviderRequest{Operation: "custom.call", Body: map[string]any{"ok": true}})
+	var httpErr *httptransport.HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Body != "too- [truncated]" {
+		t.Fatalf("큰 오류 body는 잘라서 HTTPError에 담아야 해요: %#v", err)
+	}
+}
+
 func TestCallerStreamsRawSSEEvents(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Accept") != "text/event-stream" {
