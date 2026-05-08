@@ -72,7 +72,7 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []str
 }
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
-	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
+	defs := gatewayToolDefinitions()
 	out := make([]ToolDTO, 0, len(defs))
 	for _, tool := range defs {
 		out = append(out, toToolDTO(tool))
@@ -82,7 +82,7 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getTool(w http.ResponseWriter, r *http.Request, name string) {
 	name = strings.TrimSpace(name)
-	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
+	defs := gatewayToolDefinitions()
 	for _, tool := range defs {
 		if tool.Name == name {
 			writeJSON(w, toToolDTO(tool))
@@ -128,6 +128,16 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if strings.HasPrefix(req.Tool, "lsp_") {
+		output, err := executeLSPTool(req.ProjectRoot, req.Tool, req.Arguments)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
+			return
+		}
+		output, outputBytes, truncated := truncateToolOutput(output, req.MaxOutputBytes)
+		writeJSON(w, ToolCallResponse{CallID: req.CallID, Tool: req.Tool, Output: output, OutputBytes: outputBytes, OutputTruncated: truncated})
+		return
+	}
 	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes, Timeout: toolCallTimeout(req.TimeoutMS)}).Parts()
 	args, err := json.Marshal(req.Arguments)
 	if err != nil {
@@ -141,6 +151,138 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	}
 	output, outputBytes, truncated := truncateToolOutput(result.Output, req.MaxOutputBytes)
 	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated})
+}
+
+func gatewayToolDefinitions() []llm.Tool {
+	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
+	return append(defs, lspToolDefinitions()...)
+}
+
+func lspToolDefinitions() []llm.Tool {
+	strict := true
+	cursorOrSymbol := map[string]any{"symbol": ktools.StringSchema(), "path": ktools.StringSchema(), "line": ktools.IntegerSchema(), "column": ktools.IntegerSchema(), "limit": ktools.IntegerSchema()}
+	return []llm.Tool{
+		{Kind: llm.ToolFunction, Name: "lsp_symbols", Description: "Go workspace symbol 목록을 검색해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(map[string]any{"query": ktools.StringSchema(), "limit": ktools.IntegerSchema()}, nil)},
+		{Kind: llm.ToolFunction, Name: "lsp_document_symbols", Description: "Go 파일 하나의 symbol outline을 반환해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(map[string]any{"path": ktools.StringSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "lsp_definitions", Description: "Go symbol 또는 cursor 위치의 definition을 찾아요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(cursorOrSymbol, nil)},
+		{Kind: llm.ToolFunction, Name: "lsp_references", Description: "Go symbol 또는 cursor 위치의 reference를 찾아요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(cursorOrSymbol, nil)},
+		{Kind: llm.ToolFunction, Name: "lsp_hover", Description: "Go symbol 또는 cursor 위치의 signature와 doc comment를 반환해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(cursorOrSymbol, nil)},
+		{Kind: llm.ToolFunction, Name: "lsp_diagnostics", Description: "Go parser diagnostics를 반환해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(map[string]any{"path": ktools.StringSchema(), "limit": ktools.IntegerSchema()}, nil)},
+	}
+}
+
+func executeLSPTool(root string, name string, args map[string]any) (string, error) {
+	if args == nil {
+		args = map[string]any{}
+	}
+	var value any
+	var err error
+	switch name {
+	case "lsp_symbols":
+		limit := intArg(args, "limit", 200)
+		symbols, scanErr := scanGoSymbols(root, stringArg(args, "query"), limit+1)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		symbols, truncated := limitLSPSymbols(symbols, limit)
+		value = LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated}
+	case "lsp_document_symbols":
+		symbols, scanErr := scanGoDocumentSymbols(root, stringArg(args, "path"))
+		if scanErr != nil {
+			return "", scanErr
+		}
+		value = LSPSymbolListResponse{Symbols: symbols}
+	case "lsp_definitions":
+		symbol, scanErr := lspSymbolFromToolArgs(root, args)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		limit := intArg(args, "limit", 50)
+		locations, scanErr := scanGoDefinitions(root, symbol, limit+1)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		locations, truncated := limitLSPSymbols(locations, limit)
+		value = LSPLocationListResponse{Locations: locations, Limit: limit, ResultTruncated: truncated}
+	case "lsp_references":
+		symbol, scanErr := lspSymbolFromToolArgs(root, args)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		limit := intArg(args, "limit", 100)
+		references, scanErr := scanGoReferences(root, symbol, limit+1)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		references, truncated := limitLSPReferences(references, limit)
+		value = LSPReferenceListResponse{References: references, Limit: limit, ResultTruncated: truncated}
+	case "lsp_hover":
+		symbol, scanErr := lspSymbolFromToolArgs(root, args)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		value, err = scanGoHover(root, symbol)
+	case "lsp_diagnostics":
+		limit := intArg(args, "limit", 200)
+		diagnostics, scanErr := scanGoDiagnostics(root, stringArg(args, "path"), limit+1)
+		if scanErr != nil {
+			return "", scanErr
+		}
+		diagnostics, truncated := limitLSPDiagnostics(diagnostics, limit)
+		value = LSPDiagnosticListResponse{Diagnostics: diagnostics, Limit: limit, ResultTruncated: truncated}
+	default:
+		return "", errors.New("지원하지 않는 LSP tool이에요")
+	}
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func lspSymbolFromToolArgs(root string, args map[string]any) (string, error) {
+	if symbol := strings.TrimSpace(stringArg(args, "symbol")); symbol != "" {
+		return symbol, nil
+	}
+	path := strings.TrimSpace(stringArg(args, "path"))
+	line := intArg(args, "line", 0)
+	column := intArg(args, "column", 0)
+	if path == "" && line == 0 && column == 0 {
+		return "", errors.New("symbol 또는 path,line,column이 필요해요")
+	}
+	if path == "" || line <= 0 || column < 0 {
+		return "", errors.New("커서 위치 조회에는 path,line,column이 모두 필요해요")
+	}
+	if column == 0 {
+		column = 1
+	}
+	return scanGoIdentifierAt(root, path, line, column)
+}
+
+func stringArg(args map[string]any, name string) string {
+	value, _ := args[name].(string)
+	return strings.TrimSpace(value)
+}
+
+func intArg(args map[string]any, name string, fallback int) int {
+	switch value := args[name].(type) {
+	case int:
+		if value > 0 {
+			return value
+		}
+	case float64:
+		if value > 0 {
+			return int(value)
+		}
+	case json.Number:
+		if n, err := value.Int64(); err == nil && n > 0 {
+			return int(n)
+		}
+	}
+	return fallback
 }
 
 func toolCallContext(parent context.Context, timeoutMS int) (context.Context, context.CancelFunc, error) {
@@ -187,6 +329,8 @@ func toolMetadata(name string) toolMetadataDTO {
 		return toolMetadataDTO{Category: "shell", Effects: []string{"execute"}, OutputFormat: "json"}
 	case "web_fetch":
 		return toolMetadataDTO{Category: "web", Effects: []string{"network"}, OutputFormat: "json"}
+	case "lsp_symbols", "lsp_document_symbols", "lsp_definitions", "lsp_references", "lsp_hover", "lsp_diagnostics":
+		return toolMetadataDTO{Category: "codeintel", Effects: []string{"read"}, OutputFormat: "json"}
 	default:
 		return toolMetadataDTO{OutputFormat: "text"}
 	}
@@ -221,6 +365,18 @@ func toolExampleArguments(name string) map[string]any {
 		return map[string]any{"command": "go", "args": []any{"test", "./..."}, "timeout_ms": 120000}
 	case "web_fetch":
 		return map[string]any{"url": "https://example.com", "max_bytes": 65536, "timeout_ms": 10000}
+	case "lsp_symbols":
+		return map[string]any{"query": "Run", "limit": 20}
+	case "lsp_document_symbols":
+		return map[string]any{"path": "gateway/server.go"}
+	case "lsp_definitions":
+		return map[string]any{"symbol": "Server", "limit": 20}
+	case "lsp_references":
+		return map[string]any{"symbol": "RunDTO", "limit": 50}
+	case "lsp_hover":
+		return map[string]any{"symbol": "Server"}
+	case "lsp_diagnostics":
+		return map[string]any{"path": "gateway/server.go", "limit": 50}
 	default:
 		return nil
 	}
@@ -228,7 +384,7 @@ func toolExampleArguments(name string) map[string]any {
 
 func toolRequiresWorkspace(name string) bool {
 	name = strings.TrimSpace(name)
-	return name == "shell_run" || strings.HasPrefix(name, "file_")
+	return name == "shell_run" || strings.HasPrefix(name, "file_") || strings.HasPrefix(name, "lsp_")
 }
 
 func truncateToolOutput(output string, maxBytes int) (string, int, bool) {

@@ -3060,6 +3060,73 @@ func TestGatewayCallsWebFetchTool(t *testing.T) {
 	}
 }
 
+func TestGatewayListsAndCallsLSPTools(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\n// Runner runs things.\ntype Runner struct{}\n\nfunc (Runner) Run() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tools", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed ToolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if !hasTool(listed.Tools, "lsp_symbols") || !hasTool(listed.Tools, "lsp_hover") || !findTool(listed.Tools, "lsp_symbols").RequiresWorkspace {
+		t.Fatalf("LSP tool discovery가 필요해요: %+v", listed.Tools)
+	}
+	if findTool(listed.Tools, "lsp_symbols").Category != "codeintel" || findTool(listed.Tools, "lsp_symbols").OutputFormat != "json" || findTool(listed.Tools, "lsp_symbols").ExampleArguments["query"] == "" {
+		t.Fatalf("LSP tool metadata가 이상해요: %+v", findTool(listed.Tools, "lsp_symbols"))
+	}
+
+	body := `{"project_root":"` + root + `","tool":"lsp_symbols","arguments":{"query":"Runner","limit":10},"call_id":"lsp_1"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var called ToolCallResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.CallID != "lsp_1" || called.Tool != "lsp_symbols" || called.Error != "" {
+		t.Fatalf("LSP tool call 응답이 이상해요: %+v", called)
+	}
+	var symbols LSPSymbolListResponse
+	if err := json.Unmarshal([]byte(called.Output), &symbols); err != nil {
+		t.Fatalf("LSP tool output은 JSON이어야 해요: %v output=%s", err, called.Output)
+	}
+	if len(symbols.Symbols) == 0 || symbols.Symbols[0].Name != "Runner" {
+		t.Fatalf("LSP symbols tool 결과가 이상해요: %+v", symbols)
+	}
+
+	body = `{"project_root":"` + root + `","tool":"lsp_hover","arguments":{"symbol":"Runner"}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	var hover LSPHoverResponse
+	if err := json.Unmarshal([]byte(called.Output), &hover); err != nil {
+		t.Fatalf("LSP hover output은 JSON이어야 해요: %v output=%s", err, called.Output)
+	}
+	if !hover.Found || !strings.Contains(hover.Documentation, "runs things") {
+		t.Fatalf("LSP hover tool 결과가 이상해요: %+v", hover)
+	}
+}
+
 func hasTool(tools []ToolDTO, name string) bool {
 	return findTool(tools, name).Name != ""
 }
