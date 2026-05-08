@@ -93,3 +93,9 @@ func TestLimitedMCPStderrBuffer(t *testing.T) {
 		t.Fatalf("stderr buffer should be bounded and marked truncated: %q", got)
 	}
 }
+
+func TestReadLimitedMCPBodyDefaultsToResponseEnvelope(t *testing.T) {
+	if _, err := ReadLimitedMCPBody(strings.NewReader(strings.Repeat("x", maxMCPResponseBytes+1)), 0); err == nil || !strings.Contains(err.Error(), "너무 커요") {
+		t.Fatalf("default MCP body envelope should reject oversized responses: %v", err)
+	}
+}

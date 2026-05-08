@@ -380,7 +380,7 @@ func truncateMCPUTF8(text string, maxBytes int) string {
 
 func ReadLimitedMCPBody(r io.Reader, maxBytes int) ([]byte, error) {
 	if maxBytes <= 0 {
-		return io.ReadAll(r)
+		maxBytes = maxMCPResponseBytes
 	}
 	data, err := io.ReadAll(io.LimitReader(r, int64(maxBytes)+1))
 	if err != nil {

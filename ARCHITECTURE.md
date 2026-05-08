@@ -651,7 +651,7 @@ LSP format preview는 입력 Go 파일을 8388608 byte까지 허용하고, forma
 
 `web_fetch` tool argument의 `max_bytes`는 `WebConfig.MaxBytes`로 정해진 configured envelope를 넘으면 거부해서 agent run과 direct tool call 모두 배포자가 정한 web body 상한을 우회하지 못하게 해요.
 
-MCP prompt/tool 직접 검증의 `max_message_bytes`와 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한해서 저장된 stdio/http MCP 서버 응답도 bounded adapter envelope로 반환해요.
+MCP prompt/tool 직접 검증의 `max_message_bytes`와 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한해서 저장된 stdio/http MCP 서버 응답도 bounded adapter envelope로 반환해요. HTTP MCP body reader도 명시 상한이 없으면 8388608 byte envelope를 기본으로 써요.
 
 stdio MCP frame의 `Content-Length`는 8388608 byte를 넘으면 본문 할당 전에 거부하고, stdio MCP stderr는 최대 1048576 byte까지만 오류 context에 보존해요.
 
