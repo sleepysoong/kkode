@@ -112,6 +112,10 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "tool이 필요해요")
 		return
 	}
+	if !gatewayToolExists(req.Tool) {
+		writeError(w, r, http.StatusNotFound, "tool_not_found", "tool을 찾을 수 없어요")
+		return
+	}
 	execCtx, cancel, err := toolCallContext(r.Context(), req.TimeoutMS)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", err.Error())
@@ -164,6 +168,19 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 func gatewayToolDefinitions() []llm.Tool {
 	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
 	return defs
+}
+
+func gatewayToolExists(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	for _, tool := range gatewayToolDefinitions() {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func executeLSPTool(root string, name string, args map[string]any) (string, error) {

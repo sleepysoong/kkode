@@ -3214,6 +3214,14 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 		t.Fatalf("tool 상세 discovery가 이상해요: %+v", detail)
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"missing_tool"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "tool_not_found") {
+		t.Fatalf("없는 tool 직접 호출은 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	root := t.TempDir()
 	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":"call_1"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
