@@ -252,8 +252,17 @@ func validateSubagentResourceConfig(config map[string]any) error {
 	if !ok {
 		return fmt.Errorf("subagent config mcp_servers는 object여야 해요")
 	}
+	labels := map[string]bool{}
 	for name, raw := range servers {
-		label := "subagent config mcp_servers." + strings.TrimSpace(name)
+		serverName := strings.TrimSpace(name)
+		if serverName == "" {
+			return fmt.Errorf("subagent config mcp_servers label은 비어 있지 않아야 해요")
+		}
+		if labels[serverName] {
+			return fmt.Errorf("subagent config mcp_servers.%s label이 중복됐어요", serverName)
+		}
+		labels[serverName] = true
+		label := "subagent config mcp_servers." + serverName
 		switch value := raw.(type) {
 		case string:
 			if strings.TrimSpace(value) == "" {

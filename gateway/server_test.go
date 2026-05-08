@@ -2130,6 +2130,8 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		{name: "mcp bad url", path: "/api/v1/mcp/servers", body: `{"name":"bad-url","config":{"kind":"http","url":"file:///tmp/mcp.sock"}}`, want: "http/https"},
 		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
 		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
+		{name: "subagent blank inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"  ":"mcp-fs"}}}`, want: "label"},
+		{name: "subagent duplicate canonical inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{" context7 ":"mcp-a","context7":"mcp-b"}}}`, want: "중복"},
 	}
 	for _, tc := range invalidResources {
 		req = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
