@@ -22,6 +22,7 @@ import (
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 	ktools "github.com/sleepysoong/kkode/tools"
+	"github.com/sleepysoong/kkode/workspace"
 )
 
 // safeResponseRecorder는 스트리밍 핸들러를 테스트할 때 본문을 동시에 읽고 쓰는 레이스를 피하려고 써요.
@@ -1609,7 +1610,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.RunMaxIterations != 8 || caps.Limits.RunWebMaxBytes != 1<<20 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxMCPProbeNameBytes != maxMCPProbeNameBytes || caps.Limits.MaxMCPProbeURIBytes != maxMCPProbeURIBytes || caps.Limits.MaxMCPProbeArgumentBytes != maxMCPProbeArgumentsBytes || caps.Limits.MaxMCPProbeOutputBytes != maxMCPProbeOutputBytes || caps.Limits.MaxFileContentBytes != maxFileContentBytes || caps.Limits.MaxSkillPreviewBytes != maxSkillPreviewBytes || caps.Limits.MaxSubagentPreviewBytes != maxSubagentPreviewPromptBytes || caps.Limits.MaxPromptTextBytes != maxPromptTextBytes || caps.Limits.MaxTranscriptMarkdownBytes != maxTranscriptMarkdownBytes || caps.Limits.MaxGitDiffBytes != maxGitDiffBytes || caps.Limits.MaxRunPreviewBytes != MaxRunPreviewBytes || caps.Limits.MaxProviderTestPreviewBytes != MaxProviderTestPreviewBytes || caps.Limits.MaxProviderTestResultBytes != MaxProviderTestResultBytes || caps.Limits.MaxProviderTestOutputTokens != MaxProviderTestOutputTokens || caps.Limits.MaxProviderTestTimeoutMS != MaxProviderTestTimeoutMS || caps.Limits.MaxLSPFormatInputBytes != maxLSPFormatInputBytes || caps.Limits.MaxLSPFormatPreviewBytes != maxLSPFormatPreviewBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks || caps.Limits.MaxRequestIDBytes != maxRequestIDBytes || caps.Limits.MaxIdempotencyKeyBytes != maxIdempotencyKeyBytes || caps.Limits.MaxToolCallNameBytes != maxToolCallNameBytes || caps.Limits.MaxToolCallIDBytes != maxToolCallIDBytes || caps.Limits.MaxToolCallArgumentBytes != maxToolCallArgumentsBytes || caps.Limits.MaxToolCallOutputBytes != maxToolCallOutputBytes || caps.Limits.MaxToolCallWebBytes != maxToolCallWebBytes {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.RunMaxIterations != 8 || caps.Limits.RunWebMaxBytes != 1<<20 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxMCPProbeNameBytes != maxMCPProbeNameBytes || caps.Limits.MaxMCPProbeURIBytes != maxMCPProbeURIBytes || caps.Limits.MaxMCPProbeArgumentBytes != maxMCPProbeArgumentsBytes || caps.Limits.MaxMCPProbeOutputBytes != maxMCPProbeOutputBytes || caps.Limits.MaxFileContentBytes != maxFileContentBytes || caps.Limits.MaxSkillPreviewBytes != maxSkillPreviewBytes || caps.Limits.MaxSubagentPreviewBytes != maxSubagentPreviewPromptBytes || caps.Limits.MaxPromptTextBytes != maxPromptTextBytes || caps.Limits.MaxTranscriptMarkdownBytes != maxTranscriptMarkdownBytes || caps.Limits.MaxGitDiffBytes != maxGitDiffBytes || caps.Limits.MaxRunPreviewBytes != MaxRunPreviewBytes || caps.Limits.MaxProviderTestPreviewBytes != MaxProviderTestPreviewBytes || caps.Limits.MaxProviderTestResultBytes != MaxProviderTestResultBytes || caps.Limits.MaxProviderTestOutputTokens != MaxProviderTestOutputTokens || caps.Limits.MaxProviderTestTimeoutMS != MaxProviderTestTimeoutMS || caps.Limits.MaxLSPFormatInputBytes != maxLSPFormatInputBytes || caps.Limits.MaxLSPFormatPreviewBytes != maxLSPFormatPreviewBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks || caps.Limits.MaxRequestIDBytes != maxRequestIDBytes || caps.Limits.MaxIdempotencyKeyBytes != maxIdempotencyKeyBytes || caps.Limits.MaxToolCallNameBytes != maxToolCallNameBytes || caps.Limits.MaxToolCallIDBytes != maxToolCallIDBytes || caps.Limits.MaxToolCallArgumentBytes != maxToolCallArgumentsBytes || caps.Limits.MaxToolCallOutputBytes != maxToolCallOutputBytes || caps.Limits.MaxToolCallWebBytes != maxToolCallWebBytes || caps.Limits.MaxShellTimeoutMS != workspace.MaxCommandTimeout.Milliseconds() {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	capKeys := map[string]bool{}
@@ -4337,6 +4338,15 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "timeout_ms") {
 		t.Fatalf("음수 shell_run timeout_ms는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body = `{"project_root":"` + root + `","tool":"shell_run","arguments":{"command":"echo","timeout_ms":` + strconv.FormatInt(workspace.MaxCommandTimeout.Milliseconds()+1, 10) + `}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "timeout_ms") {
+		t.Fatalf("큰 shell_run timeout_ms는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

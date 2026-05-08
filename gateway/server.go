@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sleepysoong/kkode/session"
+	"github.com/sleepysoong/kkode/workspace"
 )
 
 // RunStarter는 gateway가 실제 agent 실행을 시작할 때 주입하는 경계예요.
@@ -778,6 +779,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxToolCallArgumentBytes:    maxToolCallArgumentsBytes,
 		MaxToolCallOutputBytes:      maxToolCallOutputBytes,
 		MaxToolCallWebBytes:         maxToolCallWebBytes,
+		MaxShellTimeoutMS:           workspace.MaxCommandTimeout.Milliseconds(),
 		MaxRunProviderModelBytes:    maxRunProviderModelBytes,
 	}
 }

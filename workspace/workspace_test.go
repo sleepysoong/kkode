@@ -139,6 +139,9 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	if _, err := w.RunDetailed(context.Background(), "echo", []string{"ok"}, CommandOptions{Timeout: -1 * time.Millisecond}); err == nil || !strings.Contains(err.Error(), "timeout_ms") {
 		t.Fatalf("negative timeout_ms는 거부해야 해요: %v", err)
 	}
+	if _, err := w.RunDetailed(context.Background(), "echo", []string{"ok"}, CommandOptions{Timeout: MaxCommandTimeout + time.Millisecond}); err == nil || !strings.Contains(err.Error(), "timeout_ms") {
+		t.Fatalf("large timeout_ms는 거부해야 해요: %v", err)
+	}
 	patch := `*** Begin Patch
 *** Update File: src/a.txt
 @@

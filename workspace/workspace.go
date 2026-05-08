@@ -70,6 +70,8 @@ var defaultWalkSkipDirs = map[string]struct{}{
 	"node_modules": {},
 }
 
+const MaxCommandTimeout = 5 * time.Minute
+
 func New(root string) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -371,6 +373,9 @@ func (w *Workspace) RunDetailed(ctx context.Context, command string, args []stri
 	}
 	if timeout <= 0 {
 		timeout = 30 * time.Second
+	}
+	if timeout > MaxCommandTimeout {
+		return result, fmt.Errorf("timeout_ms must be <= %d", MaxCommandTimeout.Milliseconds())
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

@@ -2359,6 +2359,9 @@ components:
         max_tool_call_web_bytes:
           type: integer
           format: int64
+        max_shell_timeout_ms:
+          type: integer
+          format: int64
         max_run_provider_model_bytes:
           type: integer
     DiagnosticsResponse:
