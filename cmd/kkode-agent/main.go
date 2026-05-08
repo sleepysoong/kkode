@@ -51,6 +51,27 @@ func normalizeAgentBudgets(maxIterations *int, webMaxBytes *int64) error {
 	return nil
 }
 
+func readPrompt(args []string, stdin io.Reader) (string, error) {
+	prompt := strings.TrimSpace(strings.Join(args, " "))
+	if prompt == "" {
+		data, err := io.ReadAll(io.LimitReader(stdin, int64(app.MaxAgentPromptBytes)+1))
+		if err != nil {
+			return "", err
+		}
+		if len(data) > app.MaxAgentPromptBytes {
+			return "", fmt.Errorf("prompt는 %d byte 이하여야 해요", app.MaxAgentPromptBytes)
+		}
+		prompt = strings.TrimSpace(string(data))
+	}
+	if len(prompt) > app.MaxAgentPromptBytes {
+		return "", fmt.Errorf("prompt는 %d byte 이하여야 해요", app.MaxAgentPromptBytes)
+	}
+	if prompt == "" {
+		return "", errors.New("prompt가 필요해요. 인자로 주거나 stdin으로 전달해야해요")
+	}
+	return prompt, nil
+}
+
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("kkode-agent", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -101,16 +122,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return nil
 	}
 
-	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
-	if prompt == "" {
-		data, err := io.ReadAll(stdin)
-		if err != nil {
-			return err
-		}
-		prompt = strings.TrimSpace(string(data))
-	}
-	if prompt == "" {
-		return errors.New("prompt가 필요해요. 인자로 주거나 stdin으로 전달해야해요")
+	prompt, err := readPrompt(fs.Args(), stdin)
+	if err != nil {
+		return err
 	}
 
 	unregisterHTTPJSONProviders, err := app.RegisterHTTPJSONProvidersFromEnv("KKODE_HTTPJSON_PROVIDERS")

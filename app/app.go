@@ -18,6 +18,7 @@ import (
 const (
 	DefaultAgentMaxIterations = 8
 	MaxAgentMaxIterations     = 128
+	MaxAgentPromptBytes       = 256 << 10
 	DefaultAgentWebMaxBytes   = 1 << 20
 	MaxAgentWebMaxBytes       = 8 << 20
 )

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sleepysoong/kkode/app"
 	"github.com/sleepysoong/kkode/llm"
 )
 
@@ -14,7 +15,7 @@ const maxRunContextBlocks = 64
 const maxRunMetadataEntries = 64
 const maxRunMetadataKeyBytes = 128
 const maxRunMetadataValueBytes = 1024
-const maxRunPromptBytes = 256 << 10
+const maxRunPromptBytes = app.MaxAgentPromptBytes
 const maxRunProviderModelBytes = 128
 const maxRunSelectorItems = 256
 const maxRunSelectorItemBytes = 128
