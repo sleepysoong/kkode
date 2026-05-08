@@ -426,12 +426,16 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 		t.Fatalf("잘못된 event after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	for _, query := range []string{"limit=-1", "limit=abc"} {
+	for _, query := range []string{"limit=-1", "limit=abc", "stream=maybe"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 event limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 event query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("잘못된 event query는 SSE stream을 열기 전에 반환해야 해요: query=%s header=%s", query, rec.Header().Get("Content-Type"))
 		}
 	}
 
@@ -1126,16 +1130,17 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 		{name: "malformed", query: "after_seq=abc"},
 		{name: "negative limit", query: "limit=-1"},
 		{name: "malformed limit", query: "limit=abc"},
+		{name: "malformed stream", query: "stream=maybe"},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?"+tc.query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		want := "after_seq"
-		if strings.Contains(tc.query, "limit") {
-			want = "limit"
-		}
+		want := strings.Split(tc.query, "=")[0]
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("%s request event query는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("%s request event query는 SSE stream을 열기 전에 반환해야 해요: header=%s", tc.name, rec.Header().Get("Content-Type"))
 		}
 	}
 }
@@ -2870,16 +2875,17 @@ func TestGatewayRunEventsRejectInvalidAfterSeq(t *testing.T) {
 		{name: "malformed", query: "after_seq=abc"},
 		{name: "negative limit", query: "limit=-1"},
 		{name: "malformed limit", query: "limit=abc"},
+		{name: "malformed stream", query: "stream=maybe"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?"+tc.query, nil)
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		want := "after_seq"
-		if strings.Contains(tc.query, "limit") {
-			want = "limit"
-		}
+		want := strings.Split(tc.query, "=")[0]
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("%s run event query는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("%s run event query는 SSE stream을 열기 전에 반환해야 해요: header=%s", tc.name, rec.Header().Get("Content-Type"))
 		}
 	}
 }

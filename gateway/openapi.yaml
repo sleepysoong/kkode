@@ -776,7 +776,7 @@ paths:
           name: stream
           schema:
             type: boolean
-          description: true면 text/event-stream으로 반환해요.
+          description: true면 text/event-stream으로 반환해요. 잘못된 boolean 값은 400으로 거부해요.
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -1903,7 +1903,7 @@ paths:
           schema:
             type: boolean
             default: false
-          description: true면 현재 replay 뒤 연결된 live run event를 SSE로 이어 받아요.
+          description: true면 현재 replay 뒤 연결된 live run event를 SSE로 이어 받아요. 잘못된 boolean 값은 400으로 거부해요.
         - in: query
           name: heartbeat_ms
           schema:
@@ -2017,7 +2017,7 @@ paths:
           name: stream
           schema:
             type: boolean
-          description: true면 run 상태 변경을 text/event-stream으로 받아요.
+          description: true면 run 상태 변경을 text/event-stream으로 받아요. 잘못된 boolean 값은 400으로 거부해요.
         - in: query
           name: heartbeat_ms
           schema:

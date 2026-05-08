@@ -305,8 +305,12 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	stream, ok := queryWantsSSE(w, r, "invalid_request_events")
+	if !ok {
+		return
+	}
 	heartbeatInterval := 15 * time.Second
-	if wantsSSE(r) {
+	if stream {
 		var ok bool
 		heartbeatInterval, ok = querySSEHeartbeatInterval(w, r, "invalid_request_events")
 		if !ok {
@@ -318,7 +322,7 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
-	if wantsSSE(r) {
+	if stream {
 		s.writeRequestEventsSSE(w, r, runs, limit, afterSeq, heartbeatInterval)
 		return
 	}
@@ -1032,6 +1036,10 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 	if !ok {
 		return
 	}
+	stream, ok := queryWantsSSE(w, r, "invalid_session_events")
+	if !ok {
+		return
+	}
 	var events []EventDTO
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
 		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
@@ -1061,7 +1069,7 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 			}
 		}
 	}
-	if wantsSSE(r) {
+	if stream {
 		events, _, _ = trimSessionEvents(events, limit)
 		s.writeSSEEvents(w, r, events)
 		return
@@ -1476,8 +1484,12 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 	if !ok {
 		return
 	}
+	stream, ok := queryWantsSSE(w, r, "invalid_run_events")
+	if !ok {
+		return
+	}
 	heartbeatInterval := 15 * time.Second
-	if wantsSSE(r) {
+	if stream {
 		var ok bool
 		heartbeatInterval, ok = querySSEHeartbeatInterval(w, r, "invalid_run_events")
 		if !ok {
@@ -1487,9 +1499,9 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 	var live <-chan RunDTO
 	var liveEvents <-chan RunEventDTO
 	var unsubscribe func()
-	if wantsSSE(r) && s.cfg.RunEventSubscriber != nil {
+	if stream && s.cfg.RunEventSubscriber != nil {
 		liveEvents, unsubscribe = s.cfg.RunEventSubscriber(r.Context(), runID)
-	} else if wantsSSE(r) && s.cfg.RunSubscriber != nil {
+	} else if stream && s.cfg.RunSubscriber != nil {
 		live, unsubscribe = s.cfg.RunSubscriber(r.Context(), runID)
 	}
 	run, err := s.cfg.RunGetter(r.Context(), runID)
@@ -1500,7 +1512,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
 		return
 	}
-	if !wantsSSE(r) {
+	if !stream {
 		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq, limit))
 		return
 	}
@@ -1852,9 +1864,13 @@ func queryBoolParam(w http.ResponseWriter, r *http.Request, key string, fallback
 	}
 }
 
-func wantsSSE(r *http.Request) bool {
-	if strings.EqualFold(r.URL.Query().Get("stream"), "true") || r.URL.Query().Get("stream") == "1" {
-		return true
+func queryWantsSSE(w http.ResponseWriter, r *http.Request, code string) (bool, bool) {
+	stream, ok := queryBoolParam(w, r, "stream", false, code)
+	if !ok {
+		return false, false
 	}
-	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/event-stream")
+	if stream {
+		return true, true
+	}
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/event-stream"), true
 }
