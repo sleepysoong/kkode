@@ -80,10 +80,22 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 	}
 	redacted := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "true")
 	includeRaw := !redacted && !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_raw")), "false")
-	turnLimit := queryLimit(r, "turn_limit", len(sess.Turns), 5000)
-	eventLimit := queryLimit(r, "event_limit", len(sess.Events), 5000)
-	checkpointLimit := queryLimit(r, "checkpoint_limit", 200, 5000)
-	runLimit := queryLimit(r, "run_limit", 200, 5000)
+	turnLimit, ok := queryNonNegativeLimitParam(w, r, "turn_limit", len(sess.Turns), 5000, "invalid_session_export")
+	if !ok {
+		return
+	}
+	eventLimit, ok := queryNonNegativeLimitParam(w, r, "event_limit", len(sess.Events), 5000, "invalid_session_export")
+	if !ok {
+		return
+	}
+	checkpointLimit, ok := queryNonNegativeLimitParam(w, r, "checkpoint_limit", 200, 5000, "invalid_session_export")
+	if !ok {
+		return
+	}
+	runLimit, ok := queryNonNegativeLimitParam(w, r, "run_limit", 200, 5000, "invalid_session_export")
+	if !ok {
+		return
+	}
 	turns, _, turnsTruncated := trimExportSlice(exportTurnDTOs(sess), turnLimit)
 	events, _, eventsTruncated := trimExportSlice(exportEventDTOs(sess), eventLimit)
 	resp := SessionExportResponse{

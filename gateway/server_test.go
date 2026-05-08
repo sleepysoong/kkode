@@ -4115,6 +4115,29 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 	if exported.RawSession != nil || exported.RawSessionIncluded || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 || exported.TurnLimit != 1 || exported.EventLimit != 1 || exported.CheckpointLimit != 1 || exported.RunLimit != 1 || !exported.CheckpointsTruncated || !exported.RunsTruncated || !exported.ResultTruncated {
 		t.Fatalf("bounded session export preview가 이상해요: %+v", exported)
 	}
+
+	invalidLimits := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "negative turn limit", query: "turn_limit=-1", want: "turn_limit"},
+		{name: "bad turn limit", query: "turn_limit=abc", want: "turn_limit"},
+		{name: "negative event limit", query: "event_limit=-1", want: "event_limit"},
+		{name: "bad event limit", query: "event_limit=abc", want: "event_limit"},
+		{name: "negative checkpoint limit", query: "checkpoint_limit=-1", want: "checkpoint_limit"},
+		{name: "bad checkpoint limit", query: "checkpoint_limit=abc", want: "checkpoint_limit"},
+		{name: "negative run limit", query: "run_limit=-1", want: "run_limit"},
+		{name: "bad run limit", query: "run_limit=abc", want: "run_limit"},
+	}
+	for _, tc := range invalidLimits {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?"+tc.query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s session export limit은 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
