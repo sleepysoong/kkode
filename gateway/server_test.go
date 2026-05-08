@@ -654,7 +654,7 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":"sess_1","prompt":"go test","metadata":{"source":"panel"},"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":" sess_1 ","prompt":"go test","provider":" openai ","model":" gpt-5-mini ","metadata":{"source":"panel"},"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"]}`))
 	req.Header.Set(RequestIDHeader, "req_run")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -668,7 +668,7 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || run.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata["source"] != "panel" {
 		t.Fatalf("unexpected run: %+v", run)
 	}
-	if len(started.MCPServers) != 1 || started.MCPServers[0] != "mcp_1" || len(started.Skills) != 1 || started.Skills[0] != "skill_1" || len(started.Subagents) != 1 || started.Subagents[0] != "agent_1" {
+	if started.SessionID != "sess_1" || started.Provider != "openai" || started.Model != "gpt-5-mini" || len(started.MCPServers) != 1 || started.MCPServers[0] != "mcp_1" || len(started.Skills) != 1 || started.Skills[0] != "skill_1" || len(started.Subagents) != 1 || started.Subagents[0] != "agent_1" {
 		t.Fatalf("run starter resource ids must be normalized: %+v", started)
 	}
 	if validated.SessionID != "sess_1" || validated.Metadata[RequestIDMetadataKey] != "req_run" || validated.Metadata[DefaultMCPMetadataKey] != "context7,serena" || len(validated.MCPServers) != 1 || validated.MCPServers[0] != "mcp_1" {
@@ -1631,7 +1631,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","provider":"openai","preview_stream":true,"max_preview_bytes":123,"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"],"enabled_tools":[" file_read ","file_read"],"disabled_tools":[" shell_run "],"context_blocks":["token=ghp_123456789012345678901234567890123456 패널 context"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":" `+sess.ID+` ","prompt":"미리보기","provider":" openai ","model":" gpt-5-mini ","preview_stream":true,"max_preview_bytes":123,"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"],"enabled_tools":[" file_read ","file_read"],"disabled_tools":[" shell_run "],"context_blocks":["token=ghp_123456789012345678901234567890123456 패널 context"]}`))
 	req.Header.Set(RequestIDHeader, "req_preview")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -1642,7 +1642,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || gotReq.Metadata[DefaultMCPMetadataKey] != "context7" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.MCPServers) != 1 || gotReq.MCPServers[0] != "mcp_1" || len(gotReq.Skills) != 1 || gotReq.Skills[0] != "skill_1" || len(gotReq.Subagents) != 1 || gotReq.Subagents[0] != "agent_1" || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.SessionID != sess.ID || gotReq.Provider != "openai" || gotReq.Model != "gpt-5-mini" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || gotReq.Metadata[DefaultMCPMetadataKey] != "context7" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.MCPServers) != 1 || gotReq.MCPServers[0] != "mcp_1" || len(gotReq.Skills) != 1 || gotReq.Skills[0] != "skill_1" || len(gotReq.Subagents) != 1 || gotReq.Subagents[0] != "agent_1" || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
 

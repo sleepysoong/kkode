@@ -41,6 +41,9 @@ func SanitizeContextBlocks(blocks []string) []string {
 }
 
 func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
+	req.SessionID = strings.TrimSpace(req.SessionID)
+	req.Provider = strings.TrimSpace(req.Provider)
+	req.Model = strings.TrimSpace(req.Model)
 	req.MCPServers = sanitizeResourceIDs(req.MCPServers)
 	req.Skills = sanitizeResourceIDs(req.Skills)
 	req.Subagents = sanitizeResourceIDs(req.Subagents)
