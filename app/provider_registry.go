@@ -156,6 +156,13 @@ func BuildProvider(name, root string) (ProviderHandle, error) {
 
 // BuildProviderWithOptions는 gateway resource manifest를 provider별 설정으로 반영해요.
 func BuildProviderWithOptions(name, root string, opts ProviderOptions) (ProviderHandle, error) {
+	return BuildProviderWithResolvedOptions(name, root, MergeProviderOptions(DefaultProviderOptions(root), opts))
+}
+
+// BuildProviderWithResolvedOptions builds a provider from options that already include defaults.
+// Gateway run paths use this after resolving workspace-root defaults once so provider config,
+// base request tools, and local MCP tools cannot drift.
+func BuildProviderWithResolvedOptions(name, root string, opts ProviderOptions) (ProviderHandle, error) {
 	entry, ok := resolveProviderEntry(name)
 	if !ok {
 		return ProviderHandle{}, fmt.Errorf("unknown provider: %s", name)
@@ -163,7 +170,6 @@ func BuildProviderWithOptions(name, root string, opts ProviderOptions) (Provider
 	if entry.Factory == nil {
 		return ProviderHandle{}, fmt.Errorf("provider factory가 등록되지 않았어요: %s", entry.Spec.Name)
 	}
-	opts = MergeProviderOptions(DefaultProviderOptions(root), opts)
 	return entry.Factory(root, opts)
 }
 

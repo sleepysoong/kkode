@@ -265,7 +265,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 			return nil, err
 		}
 		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
-		providerHandle, err := app.BuildProviderWithOptions(providerName, absRoot, providerOptions)
+		providerHandle, err := app.BuildProviderWithResolvedOptions(providerName, absRoot, effectiveProviderOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -331,7 +331,8 @@ func syncRunValidator(store session.Store) gateway.RunValidator {
 		if _, absRoot, err := app.NewWorkspace(app.WorkspaceOptions{Root: sess.ProjectRoot}); err != nil {
 			return fmt.Errorf("workspace preflight failed: %w", err)
 		} else {
-			handle, err := app.BuildProviderWithOptions(providerName, absRoot, providerOptions)
+			effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
+			handle, err := app.BuildProviderWithResolvedOptions(providerName, absRoot, effectiveProviderOptions)
 			if err != nil {
 				return fmt.Errorf("provider preflight failed: %w", err)
 			}
@@ -365,7 +366,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 			return nil, err
 		}
 		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
-		handle, err := app.BuildProviderWithOptions(providerName, absRoot, providerOptions)
+		handle, err := app.BuildProviderWithResolvedOptions(providerName, absRoot, effectiveProviderOptions)
 		if err != nil {
 			return nil, err
 		}

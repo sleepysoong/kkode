@@ -283,6 +283,17 @@ func TestBuildProviderWithOptionsMapsHTTPMCPToOpenAITools(t *testing.T) {
 	}
 }
 
+func TestBuildProviderWithResolvedOptionsDoesNotReapplyDefaults(t *testing.T) {
+	t.Setenv("KKODE_CONTEXT7_URL", "https://mcp.context7.com/mcp")
+	handle, err := BuildProviderWithResolvedOptions("openai", t.TempDir(), ProviderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(handle.BaseRequest.Tools) != 0 {
+		t.Fatalf("resolved provider options should not reapply default MCP tools: %+v", handle.BaseRequest.Tools)
+	}
+}
+
 func TestMergeBaseRequestPreservesProviderDefaults(t *testing.T) {
 	merged := MergeBaseRequest(
 		llm.Request{Instructions: "default", Tools: []llm.Tool{{Name: "mcp", Kind: llm.ToolBuiltin}}, Include: []string{"reasoning.encrypted_content"}, Metadata: map[string]string{"default": "yes"}},
