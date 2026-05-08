@@ -2116,6 +2116,20 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 	if !page.ResultTruncated && page.NextOffset != 0 {
 		t.Fatalf("prompt page next offset이 없어야 해요: %+v", page)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 prompt list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("prompt list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("prompt list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md?max_text_bytes=32", nil)
 	rec = httptest.NewRecorder()
@@ -3619,6 +3633,20 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	}
 	if !page.ResultTruncated && page.NextOffset != 0 {
 		t.Fatalf("tool page next offset이 없어야 해요: %+v", page)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/tools?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 tool list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("tool list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("tool list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools/web_fetch", nil)

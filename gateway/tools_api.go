@@ -84,8 +84,14 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 	for _, tool := range defs {
 		out = append(out, toToolDTO(tool))
 	}
-	limit := queryLimit(r, "limit", len(out), 500)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", len(out), 500, "invalid_tool_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_tool_list")
+	if !ok {
+		return
+	}
 	page, returned, truncated := pageSlice(out, limit, offset)
 	writeJSON(w, ToolListResponse{Tools: page, TotalTools: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }

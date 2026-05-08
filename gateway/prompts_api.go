@@ -70,8 +70,14 @@ func (s *Server) listPromptTemplates(w http.ResponseWriter, r *http.Request) {
 	for _, name := range names {
 		out = append(out, PromptTemplateDTO{Name: name})
 	}
-	limit := queryLimit(r, "limit", len(out), 500)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", len(out), 500, "invalid_prompt_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_prompt_list")
+	if !ok {
+		return
+	}
 	page, returned, truncated := pageSlice(out, limit, offset)
 	writeJSON(w, PromptTemplateListResponse{Prompts: page, TotalPrompts: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
