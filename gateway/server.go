@@ -1836,12 +1836,20 @@ func nextOffset(offset int, returned int, truncated bool) int {
 	return offset + returned
 }
 
-func queryBool(r *http.Request, key string, fallback bool) bool {
+func queryBoolParam(w http.ResponseWriter, r *http.Request, key string, fallback bool, code string) (bool, bool) {
 	value := strings.TrimSpace(r.URL.Query().Get(key))
 	if value == "" {
-		return fallback
+		return fallback, true
 	}
-	return strings.EqualFold(value, "true") || value == "1" || strings.EqualFold(value, "yes")
+	switch strings.ToLower(value) {
+	case "true", "1", "yes":
+		return true, true
+	case "false", "0", "no":
+		return false, true
+	default:
+		writeError(w, r, http.StatusBadRequest, code, key+"는 boolean이어야 해요")
+		return false, false
+	}
 }
 
 func wantsSSE(r *http.Request) bool {

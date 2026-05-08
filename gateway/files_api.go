@@ -265,10 +265,18 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	regex, ok := queryBoolParam(w, r, "regex", false, "invalid_file_grep")
+	if !ok {
+		return
+	}
+	caseSensitive, ok := queryBoolParam(w, r, "case_sensitive", false, "invalid_file_grep")
+	if !ok {
+		return
+	}
 	opts := workspace.GrepOptions{
 		PathGlob:      strings.TrimSpace(r.URL.Query().Get("path_glob")),
-		Regex:         queryBool(r, "regex", false),
-		CaseSensitive: queryBool(r, "case_sensitive", false),
+		Regex:         regex,
+		CaseSensitive: caseSensitive,
 		MaxMatches:    limit + 1,
 	}
 	matches, err := ws.Grep(pattern, opts)

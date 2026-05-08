@@ -4945,6 +4945,19 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	if grep.ProjectRoot != root || grep.Pattern != "todo" || grep.PathGlob != "src/**" || len(grep.Matches) != 1 || grep.Matches[0].Path != "src/a.go" || grep.Matches[0].Line != 2 || grep.Limit != 1 || !grep.ResultTruncated {
 		t.Fatalf("grep 결과가 이상해요: %+v", grep)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern="+url.QueryEscape("TODO: (wire|second)")+"&regex=true&case_sensitive=true", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("regex grep status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	grep = FileGrepResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &grep); err != nil {
+		t.Fatal(err)
+	}
+	if !grep.Regex || len(grep.Matches) != 2 {
+		t.Fatalf("regex/case_sensitive grep 결과가 이상해요: %+v", grep)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root), nil)
 	rec = httptest.NewRecorder()
@@ -4952,12 +4965,13 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("pattern 없는 grep은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	for _, query := range []string{"max_matches=-1", "max_matches=abc"} {
+	for _, query := range []string{"max_matches=-1", "max_matches=abc", "regex=maybe", "case_sensitive=maybe"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_matches") {
-			t.Fatalf("잘못된 grep max_matches는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 grep query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 }

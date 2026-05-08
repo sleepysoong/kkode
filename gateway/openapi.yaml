@@ -306,11 +306,13 @@ paths:
           schema:
             type: boolean
             default: false
+          description: true/false, 1/0, yes/no 값을 받아요. 다른 값은 400으로 거부해요.
         - in: query
           name: case_sensitive
           schema:
             type: boolean
             default: false
+          description: true/false, 1/0, yes/no 값을 받아요. 다른 값은 400으로 거부해요.
         - in: query
           name: max_matches
           schema:
