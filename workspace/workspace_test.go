@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,9 @@ func TestWorkspaceReadWriteSearchAndPathBoundary(t *testing.T) {
 	}
 	if err := w.WriteFile("b.txt", "x"); err != nil {
 		t.Fatalf("write failed: %v", err)
+	}
+	if err := w.WriteFile("large.txt", strings.Repeat("x", MaxFileWriteBytes+1)); err == nil || !strings.Contains(err.Error(), "content") {
+		t.Fatalf("large write는 거부해야 해요: %v", err)
 	}
 }
 
@@ -163,6 +167,41 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	updated, _ := w.ReadFile("src/a.txt")
 	if !strings.Contains(updated, "two patched") {
 		t.Fatalf("updated=%q", updated)
+	}
+}
+
+func TestWorkspaceApplyPatchBoundsPayloadAndResult(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.ApplyPatch(strings.Repeat("x", MaxPatchBytes+1)); err == nil || !strings.Contains(err.Error(), "patch_text") {
+		t.Fatalf("large patch_text는 거부해야 해요: %v", err)
+	}
+	if err := w.WriteFile("small.txt", "small\n"); err != nil {
+		t.Fatal(err)
+	}
+	original := "old" + strings.Repeat("x", MaxFileWriteBytes-len("old"))
+	if err := w.WriteFile("large.txt", original); err != nil {
+		t.Fatal(err)
+	}
+	patch := `*** Begin Patch
+*** Update File: large.txt
+@@
+-old
++new-content
+*** End Patch
+`
+	if err := w.ApplyPatch(patch); err == nil || !strings.Contains(err.Error(), "patched content") {
+		t.Fatalf("large patched content는 거부해야 해요: %v", err)
+	}
+	unchanged, err := os.ReadFile(filepath.Join(dir, "large.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unchanged) != original {
+		t.Fatal("oversize patch result should not be written")
 	}
 }
 

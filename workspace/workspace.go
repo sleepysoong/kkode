@@ -71,7 +71,9 @@ var defaultWalkSkipDirs = map[string]struct{}{
 }
 
 const MaxFileReadBytes = 8 << 20
+const MaxFileWriteBytes = 8 << 20
 const MaxGrepMatches = 1000
+const MaxPatchBytes = 1 << 20
 const MaxCommandTimeout = 5 * time.Minute
 
 func New(root string) (*Workspace, error) {
@@ -177,6 +179,9 @@ func truncateUTF8Bytes(b []byte, maxBytes int) []byte {
 }
 
 func (w *Workspace) WriteFile(rel, content string) error {
+	if len(content) > MaxFileWriteBytes {
+		return fmt.Errorf("content must be <= %d bytes", MaxFileWriteBytes)
+	}
 	path, err := w.Resolve(rel)
 	if err != nil {
 		return err
@@ -418,6 +423,9 @@ func (w *Workspace) RunDetailed(ctx context.Context, command string, args []stri
 }
 
 func (w *Workspace) ApplyPatch(patchText string) error {
+	if len(patchText) > MaxPatchBytes {
+		return fmt.Errorf("patch_text must be <= %d bytes", MaxPatchBytes)
+	}
 	ops, err := parsePatch(patchText)
 	if err != nil {
 		return err
@@ -427,6 +435,9 @@ func (w *Workspace) ApplyPatch(patchText string) error {
 		plan, err := w.planPatchOp(op)
 		if err != nil {
 			return err
+		}
+		if !plan.delete && len(plan.content) > MaxFileWriteBytes {
+			return fmt.Errorf("patched content must be <= %d bytes: %s", MaxFileWriteBytes, op.path)
 		}
 		plans = append(plans, plan)
 	}
