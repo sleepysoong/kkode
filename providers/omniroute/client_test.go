@@ -83,6 +83,15 @@ func TestListModelsHealthAndA2A(t *testing.T) {
 	}
 }
 
+func TestJoinA2AArtifactTextKeepsBoundedUTF8Output(t *testing.T) {
+	got := joinA2AArtifactText([]a2aArtifact{
+		{Content: "가나다"},
+	}, 4)
+	if got != "가\n[output truncated]" {
+		t.Fatalf("artifact text should be UTF-8 bounded and marked truncated: %q", got)
+	}
+}
+
 func TestDeriveAdminBaseURL(t *testing.T) {
 	if got := deriveAdminBaseURL("http://localhost:20128/v1"); got != "http://localhost:20128" {
 		t.Fatalf("got %s", got)

@@ -233,6 +233,7 @@ erDiagram
   - `/v1/responses` 또는 OpenAPI 기준 `/api/v1/responses`를 사용할 수 있어요.
   - generation은 `providers/openai`를 감싸고, management/A2A 호출은 같은 내부 HTTP transport helper를 써요.
   - model list, health, thinking budget, fallback chain, cache/rate/session, translator, A2A helper를 제공해요.
+  - A2A artifact text는 최대 8388608 byte envelope 안에서만 합쳐요.
 
 ### Gateway API: `gateway/`
 

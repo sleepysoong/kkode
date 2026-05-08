@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/internal/httptransport"
@@ -14,7 +15,8 @@ import (
 )
 
 const (
-	DefaultBaseURL = "http://localhost:20128/v1"
+	DefaultBaseURL  = "http://localhost:20128/v1"
+	MaxA2ATextBytes = 8 << 20
 )
 
 type Config struct {
@@ -174,11 +176,8 @@ func (c *Client) A2ASend(ctx context.Context, req A2ARequest) (*A2AResponse, err
 				ID    string `json:"id"`
 				State string `json:"state"`
 			} `json:"task"`
-			Artifacts []struct {
-				Type    string `json:"type"`
-				Content string `json:"content"`
-			} `json:"artifacts"`
-			Metadata map[string]any `json:"metadata"`
+			Artifacts []a2aArtifact  `json:"artifacts"`
+			Metadata  map[string]any `json:"metadata"`
 		} `json:"result"`
 		Error any `json:"error"`
 	}
@@ -192,16 +191,84 @@ func (c *Client) A2ASend(ctx context.Context, req A2ARequest) (*A2AResponse, err
 	if env.Error != nil {
 		return nil, fmt.Errorf("omniroute a2a error: %v", env.Error)
 	}
-	var text strings.Builder
-	for _, artifact := range env.Result.Artifacts {
-		if artifact.Content != "" {
-			if text.Len() > 0 {
-				text.WriteString("\n")
-			}
-			text.WriteString(artifact.Content)
+	return &A2AResponse{TaskID: env.Result.Task.ID, State: env.Result.Task.State, Text: joinA2AArtifactText(env.Result.Artifacts, MaxA2ATextBytes), Metadata: env.Result.Metadata, Raw: raw}, nil
+}
+
+type a2aArtifact struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
+func joinA2AArtifactText(artifacts []a2aArtifact, maxBytes int) string {
+	text := newLimitedA2ATextBuffer(maxBytes)
+	for _, artifact := range artifacts {
+		if artifact.Content == "" {
+			continue
 		}
+		if text.Len() > 0 {
+			text.WriteString("\n")
+		}
+		text.WriteString(artifact.Content)
 	}
-	return &A2AResponse{TaskID: env.Result.Task.ID, State: env.Result.Task.State, Text: text.String(), Metadata: env.Result.Metadata, Raw: raw}, nil
+	return text.String()
+}
+
+type limitedA2ATextBuffer struct {
+	buf       strings.Builder
+	max       int
+	truncated bool
+}
+
+func newLimitedA2ATextBuffer(max int) *limitedA2ATextBuffer {
+	return &limitedA2ATextBuffer{max: max}
+}
+
+func (b *limitedA2ATextBuffer) Len() int {
+	return b.buf.Len()
+}
+
+func (b *limitedA2ATextBuffer) WriteString(text string) {
+	if b.max <= 0 {
+		b.truncated = true
+		return
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return
+	}
+	if len(text) > remaining {
+		b.buf.WriteString(truncateUTF8Bytes(text, remaining))
+		b.truncated = true
+		return
+	}
+	b.buf.WriteString(text)
+}
+
+func (b *limitedA2ATextBuffer) String() string {
+	text := b.buf.String()
+	if b.truncated {
+		return strings.TrimRight(text, "\n") + "\n[output truncated]"
+	}
+	return text
+}
+
+func truncateUTF8Bytes(text string, maxBytes int) string {
+	if len(text) <= maxBytes {
+		return text
+	}
+	if maxBytes <= 0 {
+		return ""
+	}
+	text = text[:maxBytes]
+	for len(text) > 0 && !utf8.ValidString(text) {
+		_, size := utf8.DecodeLastRuneInString(text)
+		if size == 0 {
+			return ""
+		}
+		text = text[:len(text)-size]
+	}
+	return text
 }
 
 func (c *Client) doJSON(ctx context.Context, method, url string, body any, out any) error {
