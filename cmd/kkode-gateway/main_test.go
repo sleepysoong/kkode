@@ -238,6 +238,21 @@ func TestLoadProviderOptionsFromResources(t *testing.T) {
 	}
 }
 
+func TestSkillContextBlockUsesBoundedRead(t *testing.T) {
+	skillDir := t.TempDir()
+	largeMarkdown := "코드를 리뷰해요.\n" + strings.Repeat("x", 40<<10)
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(largeMarkdown), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	block, err := skillContextBlockFromResource(session.Resource{ID: "skill_large", Name: "large", Config: []byte(`{"path":"` + skillDir + `"}`)}, skillDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(block, "코드를 리뷰해요") || !strings.Contains(block, "일부만 포함") || len(block) >= len(largeMarkdown) {
+		t.Fatalf("large skill context block이 bounded preview여야 해요: len(block)=%d len(markdown)=%d block=%q", len(block), len(largeMarkdown), block)
+	}
+}
+
 func TestLoadProviderOptionsRejectsDisabledResources(t *testing.T) {
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
 	if err != nil {

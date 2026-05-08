@@ -1107,17 +1107,12 @@ func skillContextBlockFromResource(resource session.Resource, dir string) (strin
 	if file == "" {
 		return "", nil
 	}
-	data, err := os.ReadFile(file)
+	const maxSkillContextBytes = 32 << 10
+	text, truncated, err := readSkillContextText(file, maxSkillContextBytes)
 	if err != nil {
 		return "", err
 	}
-	const maxSkillContextBytes = 32 << 10
-	truncated := false
-	if len(data) > maxSkillContextBytes {
-		data = data[:maxSkillContextBytes]
-		truncated = true
-	}
-	text := strings.TrimSpace(llm.RedactSecrets(string(data)))
+	text = strings.TrimSpace(llm.RedactSecrets(text))
 	if text == "" {
 		return "", nil
 	}
@@ -1126,6 +1121,24 @@ func skillContextBlockFromResource(resource session.Resource, dir string) (strin
 		parts = append(parts, "[skill 내용이 길어서 일부만 포함했어요]")
 	}
 	return strings.Join(parts, "\n\n"), nil
+}
+
+func readSkillContextText(file string, maxBytes int) (string, bool, error) {
+	info, err := os.Stat(file)
+	if err != nil {
+		return "", false, err
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return "", false, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(maxBytes)+int64(utf8.UTFMax)))
+	if err != nil {
+		return "", false, err
+	}
+	text := truncateUTF8Bytes(string(data), maxBytes)
+	return text, info.Size() > int64(len(text)), nil
 }
 
 func skillContextFileFromResource(resource session.Resource, dir string) string {
