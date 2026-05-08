@@ -45,6 +45,8 @@ type FileGlobResponse struct {
 	Paths          []string `json:"paths"`
 	TotalPaths     int      `json:"total_paths,omitempty"`
 	Limit          int      `json:"limit,omitempty"`
+	Offset         int      `json:"offset,omitempty"`
+	NextOffset     int      `json:"next_offset,omitempty"`
 	PathsTruncated bool     `json:"paths_truncated,omitempty"`
 }
 
@@ -266,12 +268,19 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 500, 5000)
+	offset := queryOffset(r, "offset")
 	total := len(paths)
-	truncated := total > limit
-	if len(paths) > limit {
+	if offset >= total {
+		paths = nil
+	} else if offset > 0 {
+		paths = paths[offset:]
+	}
+	truncated := len(paths) > limit
+	if truncated {
 		paths = paths[:limit]
 	}
-	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths, TotalPaths: total, Limit: limit, PathsTruncated: truncated})
+	returned := len(paths)
+	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths, TotalPaths: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), PathsTruncated: truncated})
 }
 
 func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {

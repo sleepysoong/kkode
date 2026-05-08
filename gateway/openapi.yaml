@@ -213,6 +213,7 @@ paths:
             default: 500
             maximum: 5000
         - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: file entry 목록이에요.
@@ -341,6 +342,7 @@ paths:
             type: integer
             default: 500
             maximum: 5000
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: glob 검색 결과예요.
@@ -2546,6 +2548,12 @@ components:
         limit:
           type: integer
           description: 이번 응답에 적용한 path 개수 제한이에요.
+        offset:
+          type: integer
+          description: 이번 응답에 적용된 0-based path offset이에요.
+        next_offset:
+          type: integer
+          description: 다음 page가 있으면 다음 요청에 넣을 offset이에요.
         paths_truncated:
           type: boolean
           description: limit 때문에 paths가 잘렸는지 알려줘요.

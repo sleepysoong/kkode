@@ -3783,6 +3783,23 @@ func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
 	if len(glob.Paths) != 1 || glob.TotalPaths != 2 || glob.Limit != 1 || !glob.PathsTruncated {
 		t.Fatalf("glob limit metadata가 이상해요: %+v", glob)
 	}
+	if glob.Offset != 0 || glob.NextOffset != 1 {
+		t.Fatalf("glob paging metadata가 이상해요: %+v", glob)
+	}
+	firstPath := glob.Paths[0]
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/glob?project_root="+url.QueryEscape(root)+"&pattern=src/*&limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	glob = FileGlobResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &glob); err != nil {
+		t.Fatal(err)
+	}
+	if len(glob.Paths) != 1 || glob.Paths[0] == firstPath || glob.TotalPaths != 2 || glob.Limit != 1 || glob.Offset != 1 || glob.NextOffset != 0 || glob.PathsTruncated {
+		t.Fatalf("glob offset metadata가 이상해요: %+v", glob)
+	}
 }
 
 func TestGatewayFilesAPIAppliesPatch(t *testing.T) {
