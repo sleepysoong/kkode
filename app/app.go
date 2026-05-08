@@ -29,6 +29,8 @@ type AgentOptions struct {
 	MaxIterations int
 	NoWeb         bool
 	WebMaxBytes   int64
+	EnabledTools  []string
+	DisabledTools []string
 	Transcript    *transcript.Transcript
 	Guardrails    agent.Guardrails
 	Observer      agent.Observer
@@ -81,7 +83,7 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 	if opts.Model == "" && provider != nil {
 		opts.Model = DefaultModel(provider.Name())
 	}
-	toolSet := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+	toolSet := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Enabled: opts.EnabledTools, Disabled: opts.DisabledTools})
 	return agent.New(agent.Config{
 		Provider:      provider,
 		Model:         opts.Model,

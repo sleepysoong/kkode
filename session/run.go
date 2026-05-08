@@ -18,6 +18,9 @@ type Run struct {
 	MCPServers []string `json:"mcp_servers,omitempty"`
 	Skills     []string `json:"skills,omitempty"`
 	Subagents  []string `json:"subagents,omitempty"`
+	// EnabledTools/DisabledTools는 run 당시 local tool surface 선택이에요.
+	EnabledTools  []string `json:"enabled_tools,omitempty"`
+	DisabledTools []string `json:"disabled_tools,omitempty"`
 	// ContextBlocks는 저장된 resource가 아닌 요청 단위 임시 prompt context예요.
 	ContextBlocks []string          `json:"context_blocks,omitempty"`
 	EventsURL     string            `json:"events_url,omitempty"`

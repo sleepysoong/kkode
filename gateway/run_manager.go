@@ -225,7 +225,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		runID = session.NewID("run")
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
-	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "queued", EventsURL: runEventsURL(runID), StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
+	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "queued", EventsURL: runEventsURL(runID), StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
 	m.mu.Lock()
 	if existing, exists := m.runs[runID]; exists {
 		if sameIdempotencyKey(existing.run.Metadata, req.Metadata) {
@@ -523,6 +523,12 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		if len(run.Subagents) == 0 {
 			run.Subagents = cloneStringSlice(req.Subagents)
 		}
+		if len(run.EnabledTools) == 0 {
+			run.EnabledTools = cloneStringSlice(req.EnabledTools)
+		}
+		if len(run.DisabledTools) == 0 {
+			run.DisabledTools = cloneStringSlice(req.DisabledTools)
+		}
 		if len(run.ContextBlocks) == 0 {
 			run.ContextBlocks = cloneStringSlice(req.ContextBlocks)
 		}
@@ -691,11 +697,11 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 }
 
 func sessionRunFromDTO(run RunDTO) session.Run {
-	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func runDTOFromSession(run session.Run) *RunDTO {
-	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func (m *AsyncRunManager) timestamp() time.Time {
@@ -716,6 +722,11 @@ func cloneRun(run *RunDTO) *RunDTO {
 	}
 	out := *run
 	out.Metadata = cloneMap(run.Metadata)
+	out.MCPServers = cloneStringSlice(run.MCPServers)
+	out.Skills = cloneStringSlice(run.Skills)
+	out.Subagents = cloneStringSlice(run.Subagents)
+	out.EnabledTools = cloneStringSlice(run.EnabledTools)
+	out.DisabledTools = cloneStringSlice(run.DisabledTools)
 	out.ContextBlocks = cloneStringSlice(run.ContextBlocks)
 	return &out
 }

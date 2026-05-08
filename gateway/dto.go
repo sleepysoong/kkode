@@ -148,6 +148,10 @@ type RunStartRequest struct {
 	MCPServers []string          `json:"mcp_servers,omitempty"`
 	Skills     []string          `json:"skills,omitempty"`
 	Subagents  []string          `json:"subagents,omitempty"`
+	// EnabledTools가 비어 있지 않으면 이번 run의 local tool surface를 이 목록으로 제한해요.
+	EnabledTools []string `json:"enabled_tools,omitempty"`
+	// DisabledTools는 이번 run의 local tool surface에서 제외할 tool 이름 목록이에요.
+	DisabledTools []string `json:"disabled_tools,omitempty"`
 	// ContextBlocks는 저장 resource 없이 이번 run에만 추가할 provider-neutral prompt context예요.
 	ContextBlocks []string `json:"context_blocks,omitempty"`
 	// PreviewStream은 /runs/preview에서 provider streaming payload를 확인할 때만 쓰는 힌트예요.
@@ -169,6 +173,9 @@ type RunDTO struct {
 	MCPServers []string `json:"mcp_servers,omitempty"`
 	Skills     []string `json:"skills,omitempty"`
 	Subagents  []string `json:"subagents,omitempty"`
+	// EnabledTools/DisabledTools는 실행 당시 local tool surface 선택이에요.
+	EnabledTools  []string `json:"enabled_tools,omitempty"`
+	DisabledTools []string `json:"disabled_tools,omitempty"`
 	// ContextBlocks는 실행 당시 요청에 포함된 임시 prompt context예요.
 	ContextBlocks []string          `json:"context_blocks,omitempty"`
 	EventsURL     string            `json:"events_url,omitempty"`
@@ -201,6 +208,7 @@ type RunPreviewResponse struct {
 	Subagents         []ResourceDTO              `json:"subagents,omitempty"`
 	DefaultMCPServers []ResourceDTO              `json:"default_mcp_servers,omitempty"`
 	BaseRequestTools  []string                   `json:"base_request_tools,omitempty"`
+	LocalTools        []string                   `json:"local_tools,omitempty"`
 	ContextBlocks     []string                   `json:"context_blocks,omitempty"`
 	ContextTruncated  bool                       `json:"context_truncated,omitempty"`
 	ProviderRequest   *ProviderRequestPreviewDTO `json:"provider_request,omitempty"`

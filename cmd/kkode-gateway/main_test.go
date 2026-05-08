@@ -317,7 +317,7 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}, ContextBlocks: []string{"Discord thread summary예요"}})
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", Metadata: map[string]string{"trace_id": "trace_preview"}, MCPServers: []string{mcp.ID}, Skills: []string{skill.ID}, EnabledTools: []string{"file_read", "shell_run"}, DisabledTools: []string{"shell_run"}, ContextBlocks: []string{"Discord thread summary예요"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,10 +327,13 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	if len(preview.BaseRequestTools) != 1 || preview.BaseRequestTools[0] != "mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool preview가 필요해요: %+v", preview.BaseRequestTools)
 	}
+	if len(preview.LocalTools) != 1 || preview.LocalTools[0] != "file_read" {
+		t.Fatalf("run preview는 필터링된 local tool 목록을 보여줘야 해요: %+v", preview.LocalTools)
+	}
 	if len(preview.ContextBlocks) != 2 || !strings.Contains(preview.ContextBlocks[0], "Discord thread summary") || !strings.Contains(preview.ContextBlocks[1], "코드를 리뷰해요") || preview.ContextTruncated {
 		t.Fatalf("run preview는 선택된 prompt context를 직접 보여줘야 해요: blocks=%q truncated=%v", preview.ContextBlocks, preview.ContextTruncated)
 	}
-	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "Discord thread summary") || !strings.Contains(preview.ProviderRequest.BodyJSON, "코드를 리뷰해요") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") {
+	if preview.ProviderRequest == nil || preview.ProviderRequest.Provider != "openai" || preview.ProviderRequest.Operation != "responses.create" || preview.ProviderRequest.Route == nil || preview.ProviderRequest.Route.ResolvedPath != "/responses" || preview.ProviderRequest.Metadata["trace_id"] != "trace_preview" || !strings.Contains(preview.ProviderRequest.BodyJSON, "preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "trace_preview") || !strings.Contains(preview.ProviderRequest.BodyJSON, "Discord thread summary") || !strings.Contains(preview.ProviderRequest.BodyJSON, "코드를 리뷰해요") || !strings.Contains(preview.ProviderRequest.BodyJSON, "file_read") || strings.Contains(preview.ProviderRequest.BodyJSON, "shell_run") {
 		t.Fatalf("provider request 변환 preview가 필요해요: %+v", preview.ProviderRequest)
 	}
 	streamPreview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview", MCPServers: []string{mcp.ID}, PreviewStream: true})

@@ -3127,6 +3127,16 @@ components:
           description: run에 연결할 subagent resource id 목록이에요.
           items:
             type: string
+        enabled_tools:
+          type: array
+          description: 비어 있지 않으면 이번 run의 local tool surface를 이 tool 이름 목록으로 제한해요.
+          items:
+            type: string
+        disabled_tools:
+          type: array
+          description: 이번 run의 local tool surface에서 제외할 tool 이름 목록이에요.
+          items:
+            type: string
         context_blocks:
           type: array
           description: 저장 resource 없이 이번 run에만 system prompt로 추가할 provider-neutral 컨텍스트예요.
@@ -3198,6 +3208,11 @@ components:
             $ref: '#/components/schemas/Resource'
         base_request_tools:
           type: array
+          items:
+            type: string
+        local_tools:
+          type: array
+          description: provider request에 포함될 local tool 이름 목록이에요.
           items:
             type: string
         context_blocks:
@@ -3867,6 +3882,16 @@ components:
             type: string
         subagents:
           type: array
+          items:
+            type: string
+        enabled_tools:
+          type: array
+          description: 실행 당시 local tool surface allowlist예요.
+          items:
+            type: string
+        disabled_tools:
+          type: array
+          description: 실행 당시 local tool surface denylist예요.
           items:
             type: string
         context_blocks:

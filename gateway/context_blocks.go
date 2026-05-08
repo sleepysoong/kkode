@@ -42,7 +42,29 @@ func SanitizeContextBlocks(blocks []string) []string {
 
 func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
 	req.ContextBlocks = SanitizeContextBlocks(req.ContextBlocks)
+	req.EnabledTools = sanitizeToolNames(req.EnabledTools)
+	req.DisabledTools = sanitizeToolNames(req.DisabledTools)
 	return req
+}
+
+func sanitizeToolNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	seen := map[string]bool{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func truncateContextBlock(text string, maxBytes int) string {

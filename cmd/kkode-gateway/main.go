@@ -246,7 +246,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Observer: runEventTraceObserver()})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, Observer: runEventTraceObserver()})
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +257,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if runID == "" {
 			runID = session.NewID("run")
 		}
-		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
 		}
@@ -345,11 +345,12 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
-		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes})
+		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools})
 		if err != nil {
 			return nil, err
 		}
-		providerReq, _ := ag.Prepare(req.Prompt)
+		providerReq, handlers := ag.Prepare(req.Prompt)
+		localTools := localToolNames(providerReq.Tools, handlers)
 		maxPreviewBytes := runPreviewBytes(req.MaxPreviewBytes)
 		providerPreview, err := app.PreviewProviderRequest(ctx, providerName, providerReq, req.PreviewStream, maxPreviewBytes)
 		if err != nil {
@@ -366,6 +367,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 			Subagents:         resourceDTOsForIDs(ctx, store, session.ResourceSubagent, req.Subagents),
 			DefaultMCPServers: defaultMCPDTOs(),
 			BaseRequestTools:  toolNames(handle.BaseRequest.Tools),
+			LocalTools:        localTools,
 			ContextBlocks:     contextBlocks,
 			ContextTruncated:  contextTruncated,
 			ProviderRequest:   toProviderRequestPreviewDTO(providerPreview),
@@ -627,6 +629,16 @@ func toolNames(tools []llm.Tool) []string {
 	out := make([]string, 0, len(tools))
 	for _, tool := range tools {
 		if tool.Name != "" {
+			out = append(out, tool.Name)
+		}
+	}
+	return out
+}
+
+func localToolNames(tools []llm.Tool, handlers llm.ToolRegistry) []string {
+	out := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Name != "" && handlers[tool.Name] != nil {
 			out = append(out, tool.Name)
 		}
 	}
