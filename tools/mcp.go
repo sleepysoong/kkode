@@ -42,7 +42,7 @@ func MCPTools(servers map[string]llm.MCPServer) ([]llm.Tool, llm.ToolRegistry) {
 			"server":           StringSchema(),
 			"tool":             StringSchema(),
 			"arguments":        map[string]any{"type": "object", "additionalProperties": true},
-			"max_output_bytes": IntegerSchema(),
+			"max_output_bytes": NonNegativeIntegerSchema(),
 		}, []string{"server", "tool"}),
 	}}
 	cloned := cloneMCPServers(servers)
@@ -57,6 +57,9 @@ func MCPTools(servers map[string]llm.MCPServer) ([]llm.Tool, llm.ToolRegistry) {
 			server, ok := cloned[serverName]
 			if !ok {
 				return "", fmt.Errorf("MCP server %q is not configured; available=%s", serverName, strings.Join(sortedMCPServerNames(cloned), ","))
+			}
+			if in.MaxOutputBytes < 0 {
+				return "", fmt.Errorf("max_output_bytes must be >= 0")
 			}
 			result, err := CallMCPTool(ctx, server, in.Tool, in.Arguments)
 			if err != nil {

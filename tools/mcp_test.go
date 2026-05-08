@@ -59,6 +59,10 @@ func TestMCPToolsCallsConfiguredHTTPServer(t *testing.T) {
 	if !sawSession.Load() || !strings.Contains(result.Output, `"server":"context7"`) || !strings.Contains(result.Output, `"text":"hello"`) {
 		t.Fatalf("mcp_call output/session is wrong: sawSession=%v output=%s", sawSession.Load(), result.Output)
 	}
+	_, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "mcp_call", Arguments: []byte(`{"server":"context7","tool":"echo","max_output_bytes":-1}`)})
+	if err == nil || !strings.Contains(err.Error(), "max_output_bytes") {
+		t.Fatalf("negative MCP max_output_bytes는 거부해야 해요: %v", err)
+	}
 }
 
 func TestMCPToolsRejectsUnknownServer(t *testing.T) {
