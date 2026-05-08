@@ -42,6 +42,11 @@ type RequestCorrelationTranscriptResponse struct {
 	Redacted          bool                    `json:"redacted"`
 }
 
+const (
+	defaultTranscriptMarkdownBytes = 1 << 20
+	maxTranscriptMarkdownBytes     = 8 << 20
+)
+
 func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if r.Method != http.MethodGet {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 transcript method예요")
@@ -212,7 +217,7 @@ func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *sess
 }
 
 func transcriptMarkdownLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
-	return queryNonNegativeLimitParam(w, r, "max_markdown_bytes", 1<<20, 8<<20, "invalid_transcript")
+	return queryNonNegativeLimitParam(w, r, "max_markdown_bytes", defaultTranscriptMarkdownBytes, maxTranscriptMarkdownBytes, "invalid_transcript")
 }
 
 func limitTranscriptMarkdown(markdown string, maxMarkdownBytes int) (string, int, bool) {

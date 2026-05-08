@@ -47,6 +47,11 @@ type GitLogResponse struct {
 	CommitsTruncated bool             `json:"commits_truncated,omitempty"`
 }
 
+const (
+	defaultGitDiffBytes = 1 << 20
+	maxGitDiffBytes     = 4 << 20
+)
+
 func (s *Server) handleGit(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) != 2 {
 		writeError(w, r, http.StatusNotFound, "not_found", "git endpoint를 찾을 수 없어요")
@@ -105,7 +110,7 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 		canonicalRel = filepath.ToSlash(filepath.Clean(rel))
 		args = append(args, canonicalRel)
 	}
-	maxBytes, ok := queryNonNegativeLimitParam(w, r, "max_bytes", 1<<20, 4<<20, "invalid_git_diff")
+	maxBytes, ok := queryNonNegativeLimitParam(w, r, "max_bytes", defaultGitDiffBytes, maxGitDiffBytes, "invalid_git_diff")
 	if !ok {
 		return
 	}

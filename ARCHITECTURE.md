@@ -631,6 +631,8 @@ POST /api/v1/runs/{run_id}/retry
 
 Skill preview의 `max_bytes`는 기본 65536 byte, 최대 1048576 byte로 제한해서 저장된 SKILL.md/README.md를 외부 adapter용 bounded preview로만 반환해요.
 
+Subagent preview의 `max_prompt_bytes`, prompt 원문/렌더링의 `max_text_bytes`, transcript의 `max_markdown_bytes`, git diff의 `max_bytes` 최대값은 `/capabilities.limits`에도 노출해서 외부 adapter가 preview 요청을 실행 전에 같은 byte envelope로 맞추게 해요.
+
 파일 content preview의 `max_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한하고, `workspace.ReadFileRange`는 byte limit이 있으면 제한된 reader로 필요한 범위만 읽은 뒤 UTF-8 안전 경계에서 잘라요.
 
 LSP format preview는 입력 Go 파일을 8388608 byte까지 허용하고, formatted content preview도 `max_bytes`/UTF-8 안전 경계로 잘라 외부 adapter의 format preview 요청이 큰 파일에 과도한 gofmt 비용을 쓰지 않게 해요.

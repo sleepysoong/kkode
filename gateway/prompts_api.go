@@ -39,6 +39,11 @@ type PromptRenderResponse struct {
 	TextTruncated bool   `json:"text_truncated,omitempty"`
 }
 
+const (
+	defaultPromptTextBytes = 65536
+	maxPromptTextBytes     = 1 << 20
+)
+
 func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 1 {
 		if r.Method != http.MethodGet {
@@ -88,7 +93,7 @@ func (s *Server) getPromptTemplate(w http.ResponseWriter, r *http.Request, name 
 		writeError(w, r, http.StatusNotFound, "prompt_not_found", err.Error())
 		return
 	}
-	maxTextBytes, ok := queryNonNegativeLimitParam(w, r, "max_text_bytes", 65536, 1<<20, "invalid_prompt")
+	maxTextBytes, ok := queryNonNegativeLimitParam(w, r, "max_text_bytes", defaultPromptTextBytes, maxPromptTextBytes, "invalid_prompt")
 	if !ok {
 		return
 	}
@@ -117,10 +122,10 @@ func (s *Server) renderPromptTemplate(w http.ResponseWriter, r *http.Request, na
 
 func promptRenderTextLimit(limit int) int {
 	if limit <= 0 {
-		return 65536
+		return defaultPromptTextBytes
 	}
-	if limit > 1<<20 {
-		return 1 << 20
+	if limit > maxPromptTextBytes {
+		return maxPromptTextBytes
 	}
 	return limit
 }

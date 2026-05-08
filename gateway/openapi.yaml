@@ -2301,6 +2301,14 @@ components:
           type: integer
         max_skill_preview_bytes:
           type: integer
+        max_subagent_preview_prompt_bytes:
+          type: integer
+        max_prompt_text_bytes:
+          type: integer
+        max_transcript_markdown_bytes:
+          type: integer
+        max_git_diff_bytes:
+          type: integer
         max_lsp_format_input_bytes:
           type: integer
         max_lsp_format_preview_bytes:

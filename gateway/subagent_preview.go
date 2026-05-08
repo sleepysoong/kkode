@@ -22,6 +22,11 @@ type SubagentPreviewResponse struct {
 	Infer           *bool          `json:"infer,omitempty"`
 }
 
+const (
+	defaultSubagentPreviewPromptBytes = 65536
+	maxSubagentPreviewPromptBytes     = 1 << 20
+)
+
 type subagentPreviewConfig struct {
 	DisplayName  string         `json:"display_name"`
 	Description  string         `json:"description"`
@@ -34,7 +39,7 @@ type subagentPreviewConfig struct {
 }
 
 func (s *Server) previewSubagent(w http.ResponseWriter, r *http.Request, subagentID string) {
-	maxPromptBytes, ok := queryNonNegativeLimitParam(w, r, "max_prompt_bytes", 65536, 1<<20, "invalid_subagent_preview")
+	maxPromptBytes, ok := queryNonNegativeLimitParam(w, r, "max_prompt_bytes", defaultSubagentPreviewPromptBytes, maxSubagentPreviewPromptBytes, "invalid_subagent_preview")
 	if !ok {
 		return
 	}
