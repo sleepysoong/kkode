@@ -535,8 +535,14 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 		return
 	}
 	providers := providersForDiscovery(s.cfg.Providers)
-	limit := queryLimit(r, "limit", len(providers), 5000)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", len(providers), 5000, "invalid_provider_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_provider_list")
+	if !ok {
+		return
+	}
 	page, returned, truncated := pageSlice(providers, limit, offset)
 	writeJSON(w, ProviderListResponse{Providers: page, TotalProviders: len(providers), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
@@ -598,8 +604,14 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []st
 			out = append(out, ModelDTO{ID: model, Provider: provider.Name, DisplayName: model, Default: model == provider.DefaultModel, Capabilities: cloneAnyMap(provider.Capabilities), AuthStatus: provider.AuthStatus})
 		}
 	}
-	limit := queryLimit(r, "limit", len(out), 5000)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", len(out), 5000, "invalid_model_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_model_list")
+	if !ok {
+		return
+	}
 	page, returned, truncated := pageSlice(out, limit, offset)
 	writeJSON(w, ModelListResponse{Models: page, TotalModels: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }

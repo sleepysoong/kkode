@@ -1919,6 +1919,20 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if len(page.Models) != 1 || page.Models[0].ID != "gpt-5-mini" || page.TotalModels != 2 || page.Limit != 1 || page.Offset != 0 || page.NextOffset != 1 || !page.ResultTruncated {
 		t.Fatalf("model page가 이상해요: %+v", page)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai&"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 model list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("model list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("model list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai-compatible", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -2100,6 +2114,20 @@ func TestGatewayDiscoveryUsesStableProviderAndModelOrder(t *testing.T) {
 	}
 	if len(providerPage.Providers) != 1 || providerPage.Providers[0].Name != "zeta" || providerPage.TotalProviders != 2 || providerPage.Limit != 1 || providerPage.Offset != 1 || providerPage.NextOffset != 0 || providerPage.ResultTruncated {
 		t.Fatalf("provider page가 이상해요: %+v", providerPage)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/providers?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 provider list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("provider list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("provider list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/models", nil)
