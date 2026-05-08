@@ -14,6 +14,8 @@ import (
 
 const sessionExportFormatVersion = "kkode.session.export.v1"
 const maxSessionIDBytes = 128
+const maxSessionEventIDBytes = 128
+const maxSessionEventPayloadBytes = 1 << 20
 const maxRunIDBytes = 128
 
 // SessionExportResponse는 session 복구/이관/debug를 위해 관련 상태를 한 번에 묶은 JSON이에요.
@@ -484,6 +486,16 @@ func sanitizeImportedSession(sess session.Session, now time.Time) session.Sessio
 	sess.AgentName = strings.TrimSpace(sess.AgentName)
 	sess.Mode = session.AgentMode(strings.TrimSpace(string(sess.Mode)))
 	sess.Metadata = sanitizeRunMetadata(sess.Metadata)
+	for i := range sess.Turns {
+		sess.Turns[i].ID = strings.TrimSpace(sess.Turns[i].ID)
+	}
+	for i := range sess.Events {
+		sess.Events[i].ID = strings.TrimSpace(sess.Events[i].ID)
+		sess.Events[i].SessionID = strings.TrimSpace(sess.Events[i].SessionID)
+		sess.Events[i].TurnID = strings.TrimSpace(sess.Events[i].TurnID)
+		sess.Events[i].Type = strings.TrimSpace(sess.Events[i].Type)
+		sess.Events[i].Tool = strings.TrimSpace(sess.Events[i].Tool)
+	}
 	for i := range sess.Todos {
 		dto := TodoDTO{ID: sess.Todos[i].ID, Content: sess.Todos[i].Content, Status: string(sess.Todos[i].Status), Priority: sess.Todos[i].Priority, UpdatedAt: sess.Todos[i].UpdatedAt}
 		if todo, err := todoFromDTO(dto, now); err == nil {
@@ -515,10 +527,53 @@ func validateImportedSession(sess session.Session) error {
 	if err := validateRunMetadata(sess.Metadata); err != nil {
 		return err
 	}
+	turnIDs := map[string]bool{}
+	for _, turn := range sess.Turns {
+		if turn.ID == "" {
+			continue
+		}
+		if len(turn.ID) > maxSessionEventIDBytes {
+			return fmt.Errorf("turn id는 %d byte 이하여야 해요", maxSessionEventIDBytes)
+		}
+		if !validRunMetadataKey(turn.ID) {
+			return fmt.Errorf("turn id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		}
+		turnIDs[turn.ID] = true
+	}
+	for _, ev := range sess.Events {
+		if err := validateImportedSessionEvent(sess.ID, turnIDs, ev); err != nil {
+			return err
+		}
+	}
 	for _, todo := range sess.Todos {
 		if _, err := todoFromDTO(TodoDTO{ID: todo.ID, Content: todo.Content, Status: string(todo.Status), Priority: todo.Priority, UpdatedAt: todo.UpdatedAt}, time.Now().UTC()); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateImportedSessionEvent(sessionID string, turnIDs map[string]bool, ev session.Event) error {
+	if ev.ID == "" {
+		return fmt.Errorf("event id가 필요해요")
+	}
+	if len(ev.ID) > maxSessionEventIDBytes {
+		return fmt.Errorf("event id는 %d byte 이하여야 해요", maxSessionEventIDBytes)
+	}
+	if !validRunMetadataKey(ev.ID) {
+		return fmt.Errorf("event id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if ev.SessionID != "" && ev.SessionID != sessionID {
+		return fmt.Errorf("event session_id가 raw_session.id와 달라요")
+	}
+	if ev.TurnID != "" && !turnIDs[ev.TurnID] {
+		return fmt.Errorf("event turn_id가 raw_session에 없어요")
+	}
+	if ev.Type == "" {
+		return fmt.Errorf("event type이 필요해요")
+	}
+	if len(ev.Payload) > maxSessionEventPayloadBytes {
+		return fmt.Errorf("event payload는 %d byte 이하여야 해요", maxSessionEventPayloadBytes)
 	}
 	return nil
 }

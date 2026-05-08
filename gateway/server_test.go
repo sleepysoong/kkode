@@ -4775,8 +4775,29 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 		{name: "bad session todo", mutate: func(s *session.Session) {
 			s.Todos = []session.Todo{{ID: "bad id", Content: "todo", Status: session.TodoPending}}
 		}, want: "todo id"},
+		{name: "bad turn id", mutate: func(s *session.Session) { s.Turns[0].ID = "bad id" }, want: "turn id"},
+		{name: "bad event id", mutate: func(s *session.Session) {
+			s.Events = []session.Event{{ID: "bad id", SessionID: s.ID, Type: "turn.completed"}}
+		}, want: "event id"},
+		{name: "missing event type", mutate: func(s *session.Session) {
+			s.Events = []session.Event{{ID: "ev_missing_type", SessionID: s.ID}}
+		}, want: "event type"},
+		{name: "missing event turn", mutate: func(s *session.Session) {
+			s.Events = []session.Event{{ID: "ev_missing_turn", SessionID: s.ID, TurnID: "turn_missing", Type: "turn.completed"}}
+		}, want: "event turn_id"},
+		{name: "oversized event payload", mutate: func(s *session.Session) {
+			payload, err := json.Marshal(map[string]string{"value": strings.Repeat("x", maxSessionEventPayloadBytes+1)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.Events = []session.Event{{ID: "ev_huge_payload", SessionID: s.ID, Type: "tool.output", Payload: payload}}
+		}, want: "event payload"},
 	} {
 		raw := *sess
+		raw.Turns = append([]session.Turn(nil), sess.Turns...)
+		raw.Events = append([]session.Event(nil), sess.Events...)
+		raw.Todos = append([]session.Todo(nil), sess.Todos...)
+		raw.Metadata = cloneMap(sess.Metadata)
 		if tc.mutate != nil {
 			tc.mutate(&raw)
 		}

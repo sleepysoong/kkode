@@ -3184,6 +3184,8 @@ components:
           type: integer
         id:
           type: string
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.-]+$'
         session_id:
           type: string
         prompt:
@@ -3301,6 +3303,8 @@ components:
           type: integer
         id:
           type: string
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.-]+$'
         session_id:
           type: string
         turn_id:
@@ -3314,6 +3318,7 @@ components:
           type: string
         payload:
           nullable: true
+          description: session event payload JSON이에요. import 요청에서는 UTF-8 JSON 직렬화 기준 최대 1048576 byte까지 허용돼요.
         error:
           type: string
     CheckpointListResponse:
