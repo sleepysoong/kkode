@@ -169,6 +169,8 @@ paths:
           name: provider
           schema:
             type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -2480,6 +2482,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Model'
+        total_models:
+          type: integer
+          description: provider filter와 limit/offset 적용 전 model 수예요.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
+          description: limit 때문에 model 목록이 잘렸는지 알려줘요.
     Model:
       type: object
       required: [id, provider]

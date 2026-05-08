@@ -1646,8 +1646,24 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if len(listed.Models) != 2 {
 		t.Fatalf("openai model 목록이 이상해요: %+v", listed)
 	}
+	if listed.TotalModels != 2 || listed.Limit != 2 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("openai model 목록 metadata가 이상해요: %+v", listed)
+	}
 	if listed.Models[0].Provider != "openai" || listed.Models[0].ID != "gpt-5-mini" || !listed.Models[0].Default || listed.Models[0].AuthStatus != "configured" {
 		t.Fatalf("기본 model discovery가 이상해요: %+v", listed.Models[0])
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai&limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("model page status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var page ModelListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Models) != 1 || page.Models[0].ID != "gpt-5-mini" || page.TotalModels != 2 || page.Limit != 1 || page.Offset != 0 || page.NextOffset != 1 || !page.ResultTruncated {
+		t.Fatalf("model page가 이상해요: %+v", page)
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai-compatible", nil)
 	rec = httptest.NewRecorder()
@@ -1800,6 +1816,9 @@ func TestGatewayDiscoveryUsesStableProviderAndModelOrder(t *testing.T) {
 	got := []string{}
 	for _, model := range models.Models {
 		got = append(got, model.Provider+"/"+model.ID)
+	}
+	if models.TotalModels != 4 || models.Limit != 4 || models.Offset != 0 || models.NextOffset != 0 || models.ResultTruncated {
+		t.Fatalf("model discovery metadata가 이상해요: %+v", models)
 	}
 	if strings.Join(got, ",") != "alpha/alpha-default,alpha/alpha-extra,zeta/z-1,zeta/z-2" {
 		t.Fatalf("model discovery는 provider 이름순과 default-first 모델순이어야 해요: %+v", got)

@@ -379,7 +379,12 @@ type ModelDTO struct {
 }
 
 type ModelListResponse struct {
-	Models []ModelDTO `json:"models"`
+	Models          []ModelDTO `json:"models"`
+	TotalModels     int        `json:"total_models,omitempty"`
+	Limit           int        `json:"limit,omitempty"`
+	Offset          int        `json:"offset,omitempty"`
+	NextOffset      int        `json:"next_offset,omitempty"`
+	ResultTruncated bool       `json:"result_truncated,omitempty"`
 }
 
 // FeatureDTO는 외부 adapter가 kkode gateway 기능 상태와 endpoint를 발견할 때 쓰는 항목이에요.

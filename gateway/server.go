@@ -554,7 +554,10 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []st
 			out = append(out, ModelDTO{ID: model, Provider: provider.Name, DisplayName: model, Default: model == provider.DefaultModel, Capabilities: cloneAnyMap(provider.Capabilities), AuthStatus: provider.AuthStatus})
 		}
 	}
-	writeJSON(w, ModelListResponse{Models: out})
+	limit := queryLimit(r, "limit", len(out), 5000)
+	offset := queryOffset(r, "offset")
+	page, returned, truncated := pageSlice(out, limit, offset)
+	writeJSON(w, ModelListResponse{Models: page, TotalModels: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func providersForDiscovery(providers []ProviderDTO) []ProviderDTO {
