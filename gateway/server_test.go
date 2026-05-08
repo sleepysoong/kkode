@@ -2334,6 +2334,20 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("resource offset metadata가 이상해요: %+v", listed)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 resource list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("resource list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("resource list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/mcp/servers/%20"+created.ID+"%20", nil)
 	rec = httptest.NewRecorder()

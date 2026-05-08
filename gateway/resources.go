@@ -149,8 +149,14 @@ func (s *Server) withResource(w http.ResponseWriter, r *http.Request, kind sessi
 }
 
 func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute) {
-	limit := queryLimit(r, "limit", 100, 500)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 100, 500, "invalid_resource_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_resource_list")
+	if !ok {
+		return
+	}
 	var enabled *bool
 	if raw := strings.TrimSpace(r.URL.Query().Get("enabled")); raw != "" {
 		value := raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
