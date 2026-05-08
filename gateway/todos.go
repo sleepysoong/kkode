@@ -11,7 +11,6 @@ import (
 )
 
 type todoPersistStore interface {
-	LoadSession(ctx context.Context, id string) (*session.Session, error)
 	SaveTodos(ctx context.Context, sessionID string, todos []session.Todo) error
 }
 
@@ -135,12 +134,12 @@ func (s *Server) deleteSessionTodo(w http.ResponseWriter, r *http.Request, sessi
 }
 
 func (s *Server) saveTodos(ctx context.Context, sessionID string, todos []session.Todo) error {
+	if store, ok := s.cfg.Store.(todoPersistStore); ok {
+		return store.SaveTodos(ctx, sessionID, todos)
+	}
 	sess, err := s.cfg.Store.LoadSession(ctx, sessionID)
 	if err != nil {
 		return err
-	}
-	if store, ok := s.cfg.Store.(todoPersistStore); ok {
-		return store.SaveTodos(ctx, sessionID, todos)
 	}
 	sess.Todos = todos
 	sess.Touch()

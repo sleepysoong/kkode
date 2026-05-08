@@ -770,10 +770,18 @@ func (s *SQLiteStore) SaveTodos(ctx context.Context, sessionID string, todos []T
 		return err
 	}
 	defer tx.Rollback()
-	if err := replaceTodos(ctx, tx, sessionID, todos); err != nil {
+	result, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), sessionID)
+	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, formatTime(time.Now().UTC()), sessionID); err != nil {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("session not found")
+	}
+	if err := replaceTodos(ctx, tx, sessionID, todos); err != nil {
 		return err
 	}
 	return tx.Commit()

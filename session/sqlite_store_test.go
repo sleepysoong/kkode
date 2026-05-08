@@ -94,6 +94,13 @@ func TestSQLiteStoreSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreSaveTodosMissingSessionFails(t *testing.T) {
+	store := openSQLiteForTest(t)
+	if err := store.SaveTodos(context.Background(), "sess_missing", nil); err == nil {
+		t.Fatal("SaveTodos should fail for a missing session even when the todo list is empty")
+	}
+}
+
 func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	ctx := context.Background()
 	store := openSQLiteForTest(t)
