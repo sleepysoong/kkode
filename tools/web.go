@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 )
@@ -108,7 +109,21 @@ func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, ti
 	}
 	truncated := int64(len(data)) > maxBytes
 	if truncated {
-		data = data[:maxBytes]
+		data = truncateWebUTF8Bytes(data, int(maxBytes))
 	}
 	return &WebFetchResult{URL: rawURL, Status: resp.Status, StatusCode: resp.StatusCode, ContentType: resp.Header.Get("Content-Type"), Body: string(data), Truncated: truncated, FetchedAt: time.Now().UTC(), Header: resp.Header}, nil
+}
+
+func truncateWebUTF8Bytes(data []byte, maxBytes int) []byte {
+	if maxBytes <= 0 {
+		return nil
+	}
+	if len(data) <= maxBytes {
+		return data
+	}
+	data = data[:maxBytes]
+	for len(data) > 0 && !utf8.Valid(data) {
+		data = data[:len(data)-1]
+	}
+	return data
 }

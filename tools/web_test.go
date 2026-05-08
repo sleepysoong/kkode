@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 )
@@ -58,5 +59,20 @@ func TestWebFetchRejectsMaxBytesAboveConfiguredEnvelope(t *testing.T) {
 	_, handlers := WebTools(WebConfig{MaxBytes: 4})
 	if _, err := handlers.Execute(context.Background(), toolCall("web_fetch", `{"url":"https://example.test","max_bytes":5}`)); err == nil || !strings.Contains(err.Error(), "max_bytes") {
 		t.Fatalf("tool argument max_bytes 초과는 거부해야 해요: %v", err)
+	}
+}
+
+func TestWebFetchTruncatesAtUTF8Boundary(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("가나다"))
+	}))
+	defer server.Close()
+	out, err := Fetch(context.Background(), WebConfig{MaxBytes: 4}, server.URL, 4, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Truncated || out.Body != "가" || !utf8.ValidString(out.Body) {
+		t.Fatalf("web_fetch body should be UTF-8 bounded: body=%q truncated=%v valid=%v", out.Body, out.Truncated, utf8.ValidString(out.Body))
 	}
 }
