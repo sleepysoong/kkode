@@ -33,7 +33,7 @@ type WebFetchResult struct {
 func WebTools(cfg WebConfig) ([]llm.Tool, llm.ToolRegistry) {
 	strict := true
 	defs := []llm.Tool{
-		{Kind: llm.ToolFunction, Name: "web_fetch", Description: "HTTP/HTTPS URL을 가져와 text body와 status를 JSON으로 반환해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"url": stringSchema(), "max_bytes": integerSchema(), "timeout_ms": integerSchema()}, []string{"url"})},
+		{Kind: llm.ToolFunction, Name: "web_fetch", Description: "HTTP/HTTPS URL을 가져와 text body와 status를 JSON으로 반환해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"url": stringSchema(), "max_bytes": nonNegativeIntegerSchema(), "timeout_ms": nonNegativeIntegerSchema()}, []string{"url"})},
 	}
 	handlers := llm.ToolRegistry{
 		"web_fetch": llm.JSONToolHandler(func(ctx context.Context, in struct {
@@ -55,6 +55,12 @@ func WebTools(cfg WebConfig) ([]llm.Tool, llm.ToolRegistry) {
 func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, timeout time.Duration) (*WebFetchResult, error) {
 	if rawURL == "" {
 		return nil, fmt.Errorf("url is required")
+	}
+	if maxBytes < 0 {
+		return nil, fmt.Errorf("max_bytes must be >= 0")
+	}
+	if timeout < 0 {
+		return nil, fmt.Errorf("timeout_ms must be >= 0")
 	}
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		return nil, fmt.Errorf("only http/https URLs are supported: %s", rawURL)

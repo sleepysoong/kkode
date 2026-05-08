@@ -3393,6 +3393,24 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if called.Output != "he" || called.OutputBytes != len("hello") || !called.OutputTruncated {
 		t.Fatalf("tool output 제한 응답이 이상해요: %+v", called)
 	}
+
+	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md","max_bytes":-1}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("음수 file_read max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body = `{"project_root":"` + root + `","tool":"shell_run","arguments":{"command":"echo","timeout_ms":-1}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "timeout_ms") {
+		t.Fatalf("음수 shell_run timeout_ms는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayCallsWebFetchTool(t *testing.T) {
@@ -3416,6 +3434,15 @@ func TestGatewayCallsWebFetchTool(t *testing.T) {
 	}
 	if called.Tool != "web_fetch" || !strings.Contains(called.Output, "pong") {
 		t.Fatalf("web_fetch 결과가 이상해요: %+v", called)
+	}
+
+	body = `{"tool":"web_fetch","arguments":{"url":"` + upstream.URL + `","max_bytes":-1}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("음수 web_fetch max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

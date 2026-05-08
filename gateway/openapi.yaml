@@ -2871,12 +2871,15 @@ components:
           type: string
         timeout_ms:
           type: integer
+          minimum: 0
           description: 직접 tool 호출 전체에 적용할 timeout이에요. 0이면 gateway request context만 사용해요.
         web_max_bytes:
           type: integer
           format: int64
+          minimum: 0
         max_output_bytes:
           type: integer
+          minimum: 0
           description: tool 응답 output을 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
     ToolCallResponse:
       type: object

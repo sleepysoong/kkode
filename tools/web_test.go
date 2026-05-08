@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -38,5 +39,14 @@ func TestWebFetchRejectsUnsupportedScheme(t *testing.T) {
 	_, err := Fetch(context.Background(), WebConfig{}, "file:///etc/passwd", 0, 0)
 	if err == nil {
 		t.Fatal("expected unsupported scheme error")
+	}
+}
+
+func TestWebFetchRejectsNegativeBudgets(t *testing.T) {
+	if _, err := Fetch(context.Background(), WebConfig{}, "https://example.test", -1, 0); err == nil || !strings.Contains(err.Error(), "max_bytes") {
+		t.Fatalf("negative max_bytes는 거부해야 해요: %v", err)
+	}
+	if _, err := Fetch(context.Background(), WebConfig{}, "https://example.test", 0, -1); err == nil || !strings.Contains(err.Error(), "timeout_ms") {
+		t.Fatalf("negative timeout_ms는 거부해야 해요: %v", err)
 	}
 }

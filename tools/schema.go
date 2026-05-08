@@ -18,6 +18,9 @@ func ObjectSchema(properties map[string]any) map[string]any {
 
 func StringSchema() map[string]any  { return map[string]any{"type": "string"} }
 func IntegerSchema() map[string]any { return map[string]any{"type": "integer"} }
+func NonNegativeIntegerSchema() map[string]any {
+	return map[string]any{"type": "integer", "minimum": 0}
+}
 func BooleanSchema() map[string]any { return map[string]any{"type": "boolean"} }
 func ArraySchema(items map[string]any) map[string]any {
 	return map[string]any{"type": "array", "items": items}
@@ -27,8 +30,10 @@ func objectSchemaRequired(properties map[string]any, requiredNames []string) map
 	return ObjectSchemaRequired(properties, requiredNames)
 }
 
-func stringSchema() map[string]any  { return StringSchema() }
-func integerSchema() map[string]any { return IntegerSchema() }
+func stringSchema() map[string]any { return StringSchema() }
+func nonNegativeIntegerSchema() map[string]any {
+	return NonNegativeIntegerSchema()
+}
 func booleanSchema() map[string]any { return BooleanSchema() }
 func arraySchema(items map[string]any) map[string]any {
 	return ArraySchema(items)

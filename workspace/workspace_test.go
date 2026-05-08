@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -119,6 +120,24 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	matches, err := w.Grep("needle", GrepOptions{PathGlob: "src/**"})
 	if err != nil || len(matches) != 1 || matches[0].Line != 2 {
 		t.Fatalf("matches=%#v err=%v", matches, err)
+	}
+	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{MaxBytes: -1}); err == nil || !strings.Contains(err.Error(), "max_bytes") {
+		t.Fatalf("negative max_bytes는 거부해야 해요: %v", err)
+	}
+	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{OffsetLine: -1}); err == nil || !strings.Contains(err.Error(), "offset_line") {
+		t.Fatalf("negative offset_line은 거부해야 해요: %v", err)
+	}
+	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{LimitLines: -1}); err == nil || !strings.Contains(err.Error(), "limit_lines") {
+		t.Fatalf("negative limit_lines는 거부해야 해요: %v", err)
+	}
+	if _, err := w.Grep("needle", GrepOptions{MaxMatches: -1}); err == nil || !strings.Contains(err.Error(), "max_matches") {
+		t.Fatalf("negative max_matches는 거부해야 해요: %v", err)
+	}
+	if err := w.EditFile("src/a.txt", "needle", "patched", -1); err == nil || !strings.Contains(err.Error(), "expected_replacements") {
+		t.Fatalf("negative expected_replacements는 거부해야 해요: %v", err)
+	}
+	if _, err := w.RunDetailed(context.Background(), "echo", []string{"ok"}, CommandOptions{Timeout: -1 * time.Millisecond}); err == nil || !strings.Contains(err.Error(), "timeout_ms") {
+		t.Fatalf("negative timeout_ms는 거부해야 해요: %v", err)
 	}
 	patch := `*** Begin Patch
 *** Update File: src/a.txt
