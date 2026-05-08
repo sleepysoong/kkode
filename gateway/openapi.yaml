@@ -2760,6 +2760,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GitLogEntry'
+        limit:
+          type: integer
+        commits_truncated:
+          type: boolean
+          description: limit 때문에 commit 목록이 잘렸는지 알려줘요.
     GitLogEntry:
       type: object
       required: [hash, subject, raw]

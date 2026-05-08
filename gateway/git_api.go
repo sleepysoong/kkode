@@ -41,8 +41,10 @@ type GitLogEntryDTO struct {
 }
 
 type GitLogResponse struct {
-	ProjectRoot string           `json:"project_root"`
-	Commits     []GitLogEntryDTO `json:"commits"`
+	ProjectRoot      string           `json:"project_root"`
+	Commits          []GitLogEntryDTO `json:"commits"`
+	Limit            int              `json:"limit,omitempty"`
+	CommitsTruncated bool             `json:"commits_truncated,omitempty"`
 }
 
 func (s *Server) handleGit(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -113,12 +115,13 @@ func (s *Server) gitLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 20, 100)
-	out, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "-n", fmt.Sprint(limit)}, 512*1024)
+	out, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "-n", fmt.Sprint(limit + 1)}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_log_failed", err.Error())
 		return
 	}
-	writeJSON(w, GitLogResponse{ProjectRoot: root, Commits: parseGitLog(out)})
+	commits, truncated := limitGitLog(parseGitLog(out), limit)
+	writeJSON(w, GitLogResponse{ProjectRoot: root, Commits: commits, Limit: limit, CommitsTruncated: truncated})
 }
 
 func parseGitStatus(root string, out string) GitStatusResponse {
@@ -170,6 +173,13 @@ func parseGitLog(out string) []GitLogEntryDTO {
 		commits = append(commits, GitLogEntryDTO{Hash: hash, Subject: strings.TrimSpace(subject), Raw: line})
 	}
 	return commits
+}
+
+func limitGitLog(commits []GitLogEntryDTO, limit int) ([]GitLogEntryDTO, bool) {
+	if limit <= 0 || len(commits) <= limit {
+		return commits, false
+	}
+	return commits[:limit], true
 }
 
 func runGitCommand(ctx context.Context, root string, args []string, maxBytes int64) (string, bool, error) {

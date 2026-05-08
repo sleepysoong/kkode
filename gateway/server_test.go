@@ -3004,6 +3004,9 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "README.md"), "hello\n")
 	runTestGit(t, root, "add", "README.md")
 	runTestGit(t, root, "commit", "-m", "initial")
+	writeTestFile(t, filepath.Join(root, "CHANGELOG.md"), "changes\n")
+	runTestGit(t, root, "add", "CHANGELOG.md")
+	runTestGit(t, root, "commit", "-m", "second")
 	writeTestFile(t, filepath.Join(root, "README.md"), "hello\nworld\n")
 	writeTestFile(t, filepath.Join(root, "new.txt"), "new\n")
 
@@ -3061,7 +3064,7 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &log); err != nil {
 		t.Fatal(err)
 	}
-	if len(log.Commits) != 1 || log.Commits[0].Subject != "initial" {
+	if len(log.Commits) != 1 || log.Commits[0].Subject != "second" || log.Limit != 1 || !log.CommitsTruncated {
 		t.Fatalf("git log 응답이 이상해요: %+v", log)
 	}
 }
