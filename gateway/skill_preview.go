@@ -11,6 +11,9 @@ import (
 	"github.com/sleepysoong/kkode/session"
 )
 
+const defaultSkillPreviewBytes = 65536
+const maxSkillPreviewBytes = 1 << 20
+
 type SkillPreviewResponse struct {
 	Skill             ResourceDTO `json:"skill"`
 	Directory         string      `json:"directory,omitempty"`
@@ -27,8 +30,12 @@ type skillPreviewConfig struct {
 }
 
 func (s *Server) previewSkill(w http.ResponseWriter, r *http.Request, skillID string) {
-	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", 65536, "invalid_skill_preview")
+	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", defaultSkillPreviewBytes, "invalid_skill_preview")
 	if !ok {
+		return
+	}
+	if maxBytes > maxSkillPreviewBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_skill_preview", fmt.Sprintf("max_bytes는 %d 이하여야 해요", maxSkillPreviewBytes))
 		return
 	}
 	s.withResource(w, r, session.ResourceSkill, skillID, func(resource session.Resource) {
@@ -64,7 +71,7 @@ func readSkillPreview(resource session.Resource, maxBytes int) (SkillPreviewResp
 		}
 	}
 	if maxBytes <= 0 {
-		maxBytes = 65536
+		maxBytes = defaultSkillPreviewBytes
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {

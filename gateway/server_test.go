@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -4504,6 +4505,13 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
 		t.Fatalf("잘못된 skill preview max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes="+strconv.Itoa(maxSkillPreviewBytes+1), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("큰 skill preview max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

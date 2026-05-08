@@ -1310,6 +1310,8 @@ paths:
           schema:
             type: integer
             default: 65536
+            minimum: 0
+            maximum: 1048576
       responses:
         '200':
           description: skill preview예요.
