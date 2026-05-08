@@ -943,9 +943,16 @@ func defaultMCPDiagnosticChecks() []gateway.DiagnosticCheckDTO {
 		if item.Kind != "" {
 			message = strings.TrimSpace(message + " kind=" + item.Kind)
 		}
-		out = append(out, gateway.DiagnosticCheckDTO{Name: "default_mcp." + item.Name, Status: item.Status, Message: message})
+		out = append(out, gateway.DiagnosticCheckDTO{Name: "default_mcp." + item.Name, Status: defaultMCPDiagnosticStatus(item.Status), Message: message})
 	}
 	return out
+}
+
+func defaultMCPDiagnosticStatus(status string) string {
+	if status == "missing" {
+		return "warning"
+	}
+	return status
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

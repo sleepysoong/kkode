@@ -783,7 +783,7 @@ func TestDefaultMCPDiagnosticChecksExplainMissingSerena(t *testing.T) {
 	for _, check := range checks {
 		if check.Name == "default_mcp.serena" {
 			sawSerena = true
-			if check.Status != "missing" || !strings.Contains(check.Message, "uvx") {
+			if check.Status != "warning" || !strings.Contains(check.Message, "uvx") {
 				t.Fatalf("Serena diagnostics가 이상해요: %+v", check)
 			}
 		}

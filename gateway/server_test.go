@@ -1828,7 +1828,7 @@ func TestGatewayDiagnosticsMarksInjectedFailingCheckUnhealthy(t *testing.T) {
 	srv, err := New(Config{
 		Store:            store,
 		Version:          "test",
-		DiagnosticChecks: []DiagnosticCheckDTO{{Name: "default_mcp.serena", Status: "missing", Message: "uvx가 없어요"}},
+		DiagnosticChecks: []DiagnosticCheckDTO{{Name: "custom.required", Status: "missing", Message: "required dependency is missing"}},
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 			return &RunDTO{}, nil
 		},
@@ -1880,15 +1880,80 @@ func TestGatewayDiagnosticsMarksInjectedFailingCheckUnhealthy(t *testing.T) {
 	if diagnostics.OK {
 		t.Fatalf("injected missing diagnostics check는 unhealthy로 집계해야 해요: %+v", diagnostics)
 	}
-	if !containsString(diagnostics.FailingChecks, "default_mcp.serena") {
+	if !containsString(diagnostics.FailingChecks, "custom.required") {
 		t.Fatalf("injected check 실패 원인을 failing_checks에 담아야 해요: %+v", diagnostics)
 	}
 	for _, check := range diagnostics.Checks {
-		if check.Name == "default_mcp.serena" && check.Status == "missing" {
+		if check.Name == "custom.required" && check.Status == "missing" {
 			return
 		}
 	}
 	t.Fatalf("injected diagnostics check가 응답에 남아야 해요: %+v", diagnostics.Checks)
+}
+
+func TestGatewayDiagnosticsTreatsWarningsAsHealthy(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store:            store,
+		Version:          "test",
+		DiagnosticChecks: []DiagnosticCheckDTO{{Name: "default_mcp.serena", Status: "warning", Message: "uvx가 없어요"}},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			return &RunDTO{}, nil
+		},
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			return &RunPreviewResponse{}, nil
+		},
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			return nil
+		},
+		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
+			return &ProviderTestResponse{OK: true, Provider: provider}, nil
+		},
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID}, nil
+		},
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return nil, nil
+		},
+		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID, Status: "cancelled"}, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			return nil, nil
+		},
+		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
+			ch := make(chan RunDTO)
+			close(ch)
+			return ch, func() {}
+		},
+		RunEventSubscriber: func(ctx context.Context, runID string) (<-chan RunEventDTO, func()) {
+			ch := make(chan RunEventDTO)
+			close(ch)
+			return ch, func() {}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var diagnostics DiagnosticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if !diagnostics.OK || len(diagnostics.FailingChecks) != 0 {
+		t.Fatalf("warning diagnostics should not make gateway unhealthy: %+v", diagnostics)
+	}
+	for _, check := range diagnostics.Checks {
+		if check.Name == "default_mcp.serena" && check.Status == "warning" {
+			return
+		}
+	}
+	t.Fatalf("warning diagnostics check should remain visible: %+v", diagnostics.Checks)
 }
 
 func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {
