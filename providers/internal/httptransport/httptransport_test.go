@@ -73,6 +73,17 @@ func TestDoWithRetryRetriesServerErrors(t *testing.T) {
 	}
 }
 
+func TestDrainAndCloseRetryBodyIsBounded(t *testing.T) {
+	body := &trackingReadCloser{Reader: strings.NewReader("abcdef")}
+	drainAndCloseRetryBody(body, 3)
+	if !body.closed {
+		t.Fatal("retry body는 닫아야 해요")
+	}
+	if body.readBytes != 4 {
+		t.Fatalf("retry body drain은 max+1까지만 읽어야 해요: %d", body.readBytes)
+	}
+}
+
 func TestDoWithRetryReturnsFinalRetryableResponse(t *testing.T) {
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +104,23 @@ func TestDoWithRetryReturnsFinalRetryableResponse(t *testing.T) {
 	if attempts != 2 || res.StatusCode != http.StatusServiceUnavailable || string(data) != "still down\n" {
 		t.Fatalf("마지막 retryable 응답을 호출자가 해석해야 해요: attempts=%d status=%d body=%q", attempts, res.StatusCode, string(data))
 	}
+}
+
+type trackingReadCloser struct {
+	*strings.Reader
+	closed    bool
+	readBytes int
+}
+
+func (r *trackingReadCloser) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	r.readBytes += n
+	return n, err
+}
+
+func (r *trackingReadCloser) Close() error {
+	r.closed = true
+	return nil
 }
 
 func TestRetryBackoffHonorsRetryAfter(t *testing.T) {

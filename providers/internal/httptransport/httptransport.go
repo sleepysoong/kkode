@@ -142,13 +142,23 @@ func DoWithRetry(client *http.Client, req *http.Request, payload []byte, retry R
 		if IsRetryableStatus(res.StatusCode) && i < attempts-1 {
 			lastErr = fmt.Errorf("retryable status: %s", res.Status)
 			retryAfter = res.Header.Get("Retry-After")
-			_, _ = io.Copy(io.Discard, res.Body)
-			_ = res.Body.Close()
+			drainAndCloseRetryBody(res.Body, DefaultMaxResponseBodyBytes)
 			continue
 		}
 		return res, nil
 	}
 	return nil, lastErr
+}
+
+func drainAndCloseRetryBody(body io.ReadCloser, maxBytes int64) {
+	if body == nil {
+		return
+	}
+	defer body.Close()
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxResponseBodyBytes
+	}
+	_, _ = io.CopyN(io.Discard, body, maxBytes+1)
 }
 
 func retryBackoff(retry RetryConfig, attempt int, retryAfter string) time.Duration {
