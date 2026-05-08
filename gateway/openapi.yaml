@@ -2895,11 +2895,14 @@ components:
           type: string
         tool:
           type: string
+          maxLength: 128
         arguments:
           type: object
           additionalProperties: true
+          description: JSON 직렬화 기준 최대 1048576 byte까지 허용돼요.
         call_id:
           type: string
+          maxLength: 128
         timeout_ms:
           type: integer
           minimum: 0

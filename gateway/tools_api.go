@@ -16,6 +16,10 @@ import (
 	"github.com/sleepysoong/kkode/workspace"
 )
 
+const maxToolCallNameBytes = 128
+const maxToolCallIDBytes = 128
+const maxToolCallArgumentsBytes = 1 << 20
+
 // ToolDTO는 gateway가 외부 adapter에 노출하는 표준 tool 정의예요.
 type ToolDTO struct {
 	Kind              string         `json:"kind"`
@@ -117,16 +121,9 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Tool = strings.TrimSpace(req.Tool)
 	req.CallID = strings.TrimSpace(req.CallID)
-	if req.Tool == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "tool이 필요해요")
-		return
-	}
-	if req.MaxOutputBytes < 0 {
-		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "max_output_bytes는 0 이상이어야 해요")
-		return
-	}
-	if req.WebMaxBytes < 0 {
-		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "web_max_bytes는 0 이상이어야 해요")
+	args, err := validateToolCallRequest(req)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", err.Error())
 		return
 	}
 	if !gatewayToolExists(req.Tool) {
@@ -168,11 +165,6 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes, Timeout: toolCallTimeout(req.TimeoutMS)}).Parts()
-	args, err := json.Marshal(req.Arguments)
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_arguments", err.Error())
-		return
-	}
 	result, err := handlers.Execute(execCtx, llm.ToolCall{CallID: req.CallID, Name: req.Tool, Arguments: args})
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
@@ -180,6 +172,32 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	}
 	output, outputBytes, truncated := truncateToolOutput(result.Output, req.MaxOutputBytes)
 	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated})
+}
+
+func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
+	if req.Tool == "" {
+		return nil, errors.New("tool이 필요해요")
+	}
+	if len(req.Tool) > maxToolCallNameBytes {
+		return nil, fmt.Errorf("tool은 %d byte 이하여야 해요", maxToolCallNameBytes)
+	}
+	if len(req.CallID) > maxToolCallIDBytes {
+		return nil, fmt.Errorf("call_id는 %d byte 이하여야 해요", maxToolCallIDBytes)
+	}
+	if req.MaxOutputBytes < 0 {
+		return nil, errors.New("max_output_bytes는 0 이상이어야 해요")
+	}
+	if req.WebMaxBytes < 0 {
+		return nil, errors.New("web_max_bytes는 0 이상이어야 해요")
+	}
+	args, err := json.Marshal(req.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	if len(args) > maxToolCallArgumentsBytes {
+		return nil, fmt.Errorf("arguments는 %d byte 이하여야 해요", maxToolCallArgumentsBytes)
+	}
+	return args, nil
 }
 
 func gatewayToolDefinitions() []llm.Tool {

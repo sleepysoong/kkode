@@ -4105,6 +4105,27 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "web_max_bytes") {
 		t.Fatalf("음수 web_max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"`+strings.Repeat("x", maxToolCallNameBytes+1)+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "tool") {
+		t.Fatalf("긴 tool 이름은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","call_id":"`+strings.Repeat("x", maxToolCallIDBytes+1)+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "call_id") {
+		t.Fatalf("긴 call_id는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","arguments":{"url":"https://example.test","fill":"`+strings.Repeat("x", maxToolCallArgumentsBytes+1)+`"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "arguments") {
+		t.Fatalf("큰 tool arguments는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 
 	root := t.TempDir()
 	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":" call_1 "}`
