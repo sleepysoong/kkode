@@ -140,6 +140,20 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if cmd.Stdout != "ok\n" || cmd.ExitCode != 0 {
 		t.Fatalf("cmd=%#v", cmd)
 	}
+	if cmd.DurationMS < 0 || cmd.StartedAt.IsZero() || cmd.EndedAt.IsZero() {
+		t.Fatalf("cmd timing이 이상해요: %#v", cmd)
+	}
+	out, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "4", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
+	if err != nil {
+		t.Fatalf("non-zero command should still return structured output: %v", err)
+	}
+	cmd = CommandResult{}
+	if err := json.Unmarshal([]byte(out.Output), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	if cmd.ExitCode != 7 || cmd.Stdout != "out\n" || !strings.Contains(cmd.Stderr, "err") || cmd.DurationMS < 0 {
+		t.Fatalf("failed command result가 이상해요: %#v", cmd)
+	}
 }
 
 func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
@@ -199,6 +213,13 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	}
 	if _, err := w.RunDetailed(context.Background(), "echo", []string{"ok"}, CommandOptions{Timeout: MaxCommandTimeout + time.Millisecond}); err == nil || !strings.Contains(err.Error(), "timeout_ms") {
 		t.Fatalf("large timeout_ms는 거부해야 해요: %v", err)
+	}
+	res, err := w.RunDetailed(context.Background(), "sh", []string{"-c", "echo out; echo err >&2; exit 7"}, CommandOptions{Timeout: time.Second})
+	if err == nil {
+		t.Fatal("non-zero command should still return an execution error from RunDetailed")
+	}
+	if res.ExitCode != 7 || res.Stdout != "out\n" || !strings.Contains(res.Stderr, "err") || res.DurationMS < 0 || res.StartedAt.IsZero() || res.EndedAt.IsZero() {
+		t.Fatalf("structured command failure가 이상해요: %#v err=%v", res, err)
 	}
 	patch := `*** Begin Patch
 *** Update File: src/a.txt

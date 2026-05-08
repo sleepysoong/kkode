@@ -647,7 +647,7 @@ LSP format preview는 입력 Go 파일을 8388608 byte까지 허용하고, forma
 
 직접 tool 호출의 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte이고, `web_max_bytes`도 최대 8388608 byte로 제한해서 권한 프롬프트 없는 adapter tool 실행 응답이 bounded envelope를 유지하게 해요.
 
-`shell_run`과 legacy `workspace_run_command`의 `timeout_ms`는 workspace 계층에서 최대 300000ms로 제한해요. 같은 계층에서 stdout은 최대 8388608 byte, stderr는 최대 1048576 byte까지만 보존해서 agent/provider tool call이 direct tool API 출력 제한을 우회해 메모리를 과점하지 못하게 해요.
+`shell_run`과 legacy `workspace_run_command`의 `timeout_ms`는 workspace 계층에서 최대 300000ms로 제한해요. 같은 계층에서 stdout은 최대 8388608 byte, stderr는 최대 1048576 byte까지만 보존해서 agent/provider tool call이 direct tool API 출력 제한을 우회해 메모리를 과점하지 못하게 해요. 명령 실행 자체가 시작된 뒤에는 non-zero exit나 timeout도 tool transport 오류로 바꾸지 않고 `exit_code`, `stdout`, `stderr`, `duration_ms`, `timed_out`가 들어 있는 JSON `CommandResult`로 반환해요. 잘못된 `timeout_ms`처럼 실행 전 검증에 실패한 경우만 tool 오류로 처리해요.
 
 Provider live smoke의 `max_result_bytes`를 생략해도 결과 text와 streaming 누적 text는 8388608 byte envelope 안에서만 보존해요.
 
@@ -1084,7 +1084,7 @@ func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, ti
 | `file_list` | 디렉터리를 나열해요 |
 | `file_glob` | glob으로 파일을 찾아요 |
 | `file_grep` | literal/regex 검색을 해요 |
-| `shell_run` | command를 실행하고 JSON `CommandResult`를 반환해요 |
+| `shell_run` | command를 실행하고 exit code/stdout/stderr/duration이 있는 JSON `CommandResult`를 반환해요 |
 | `web_fetch` | HTTP/HTTPS URL을 가져와 JSON `WebFetchResult`를 반환해요 |
 
 `cmd/kkode-agent`는 기본적으로 `FileTools`와 `WebTools`를 agent에 붙여요. `web_fetch`를 끄고 싶으면 `-no-web`을 사용해요.

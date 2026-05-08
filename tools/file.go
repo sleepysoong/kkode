@@ -117,7 +117,10 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			}
 			res, err := ws.RunDetailed(ctx, in.Command, in.Args, workspace.CommandOptions{Timeout: time.Duration(in.TimeoutMS) * time.Millisecond})
 			b, _ := json.MarshalIndent(res, "", "  ")
-			return string(b), err
+			if err != nil && res.EndedAt.IsZero() {
+				return "", err
+			}
+			return string(b), nil
 		}),
 	}
 	return defs, handlers

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,17 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	grep, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_grep", CallID: "3", Arguments: []byte(`{"pattern":"needle","path_glob":"*.txt"}`)})
 	if err != nil || !strings.Contains(grep.Output, "needle") {
 		t.Fatalf("grep=%#v err=%v", grep, err)
+	}
+	shell, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "4", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
+	if err != nil {
+		t.Fatalf("non-zero shell command should return structured output: %v", err)
+	}
+	var cmd workspace.CommandResult
+	if err := json.Unmarshal([]byte(shell.Output), &cmd); err != nil {
+		t.Fatal(err)
+	}
+	if cmd.ExitCode != 7 || cmd.Stdout != "out\n" || !strings.Contains(cmd.Stderr, "err") || cmd.DurationMS < 0 {
+		t.Fatalf("shell_run result가 이상해요: %#v", cmd)
 	}
 }
 

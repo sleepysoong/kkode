@@ -4489,6 +4489,26 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 		t.Fatalf("tool output 기본 제한 응답이 이상해요: %+v", called)
 	}
 
+	body = `{"project_root":"` + root + `","tool":"shell_run","arguments":{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("non-zero shell_run should return structured output: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	called = ToolCallResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	var command workspace.CommandResult
+	if err := json.Unmarshal([]byte(called.Output), &command); err != nil {
+		t.Fatal(err)
+	}
+	if called.Error != "" || command.ExitCode != 7 || command.Stdout != "out\n" || !strings.Contains(command.Stderr, "err") || command.DurationMS < 0 {
+		t.Fatalf("non-zero shell_run result가 이상해요: response=%+v command=%+v", called, command)
+	}
+
 	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md","max_bytes":-1}}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

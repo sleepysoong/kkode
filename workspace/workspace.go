@@ -45,6 +45,7 @@ type CommandResult struct {
 	StderrTruncated bool      `json:"stderr_truncated,omitempty"`
 	StartedAt       time.Time `json:"started_at"`
 	EndedAt         time.Time `json:"ended_at"`
+	DurationMS      float64   `json:"duration_ms"`
 	TimedOut        bool      `json:"timed_out"`
 }
 
@@ -393,7 +394,7 @@ func (w *Workspace) Run(ctx context.Context, command string, args ...string) (st
 }
 
 func (w *Workspace) RunDetailed(ctx context.Context, command string, args []string, opts CommandOptions) (CommandResult, error) {
-	result := CommandResult{Command: append([]string{command}, args...), CWD: w.Root, StartedAt: time.Now().UTC()}
+	result := CommandResult{Command: append([]string{command}, args...), CWD: w.Root}
 	timeout := opts.Timeout
 	if timeout < 0 {
 		return result, errors.New("timeout_ms must be >= 0")
@@ -407,6 +408,7 @@ func (w *Workspace) RunDetailed(ctx context.Context, command string, args []stri
 	if timeout > MaxCommandTimeout {
 		return result, fmt.Errorf("timeout_ms must be <= %d", MaxCommandTimeout.Milliseconds())
 	}
+	result.StartedAt = time.Now().UTC()
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, command, args...)
@@ -421,6 +423,7 @@ func (w *Workspace) RunDetailed(ctx context.Context, command string, args []stri
 	cmd.Stderr = stderr
 	err := cmd.Run()
 	result.EndedAt = time.Now().UTC()
+	result.DurationMS = float64(result.EndedAt.Sub(result.StartedAt).Microseconds()) / 1000.0
 	result.Stdout = stdout.String()
 	result.Stderr = stderr.String()
 	result.StdoutTruncated = stdout.truncated
@@ -638,7 +641,10 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		}) (string, error) {
 			res, err := w.RunDetailed(ctx, in.Command, in.Args, CommandOptions{Timeout: time.Duration(in.TimeoutMS) * time.Millisecond})
 			b, _ := json.MarshalIndent(res, "", "  ")
-			return string(b), err
+			if err != nil && res.EndedAt.IsZero() {
+				return "", err
+			}
+			return string(b), nil
 		}),
 	}
 	return defs, handlers
