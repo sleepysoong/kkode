@@ -4144,10 +4144,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RunEvent'
+        after_seq:
+          type: integer
         limit:
           type: integer
         result_truncated:
           type: boolean
+        next_after_seq:
+          type: integer
     RequestCorrelationTranscriptResponse:
       type: object
       required: [request_id, transcripts, markdown, redacted]

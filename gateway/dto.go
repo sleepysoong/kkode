@@ -271,8 +271,10 @@ type RequestCorrelationResponse struct {
 type RequestCorrelationEventsResponse struct {
 	RequestID       string        `json:"request_id"`
 	Events          []RunEventDTO `json:"events"`
+	AfterSeq        int           `json:"after_seq,omitempty"`
 	Limit           int           `json:"limit,omitempty"`
 	ResultTruncated bool          `json:"result_truncated,omitempty"`
+	NextAfterSeq    int           `json:"next_after_seq,omitempty"`
 }
 
 // RunEventDTO는 run 상태 변경을 SSE/JSON replay로 표현해요.

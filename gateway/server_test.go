@@ -1011,6 +1011,7 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	store := openTestStore(t)
 	var query RunQuery
 	var eventRunID string
+	var gotAfterSeq int
 	srv, err := New(Config{
 		Store: store,
 		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
@@ -1019,6 +1020,7 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 		},
 		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
 			eventRunID = runID
+			gotAfterSeq = afterSeq
 			return []RunEventDTO{
 				{Seq: 1, At: time.Unix(2, 0).UTC(), Type: "run.completed", Run: RunDTO{ID: runID, Status: "completed"}},
 				{Seq: 2, At: time.Unix(1, 0).UTC(), Type: "run.queued", Run: RunDTO{ID: runID, Status: "queued"}},
@@ -1046,6 +1048,38 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}
 	if body.Limit != 5 || body.ResultTruncated {
 		t.Fatalf("request correlation event metadata가 이상해요: %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?after_seq=1&limit=5", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("after_seq status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if gotAfterSeq != 1 {
+		t.Fatalf("request correlation after_seq가 run event lister에 전달되지 않았어요: %d", gotAfterSeq)
+	}
+	body = RequestCorrelationEventsResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.AfterSeq != 1 {
+		t.Fatalf("request correlation after_seq metadata가 이상해요: %+v", body)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{name: "negative", query: "after_seq=-1"},
+		{name: "malformed", query: "after_seq=abc"},
+	} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?"+tc.query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
+			t.Fatalf("%s request after_seq는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
 	}
 }
 

@@ -291,6 +291,10 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
 		return
 	}
+	afterSeq, ok := queryAfterSeq(w, r)
+	if !ok {
+		return
+	}
 	limit := queryLimit(r, "limit", 200, 1000)
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: 200})
 	if err != nil {
@@ -298,26 +302,26 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if wantsSSE(r) {
-		s.writeRequestEventsSSE(w, r, runs, limit)
+		s.writeRequestEventsSSE(w, r, runs, limit, afterSeq)
 		return
 	}
-	events, err := s.collectRequestRunEvents(r, runs, limit+1)
+	events, err := s.collectRequestRunEvents(r, runs, limit+1, afterSeq)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_run_events_failed", err.Error())
 		return
 	}
-	events, truncated, _ := trimRunEvents(events, limit)
-	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events, Limit: limit, ResultTruncated: truncated})
+	events, truncated, nextAfterSeq := trimRunEvents(events, limit)
+	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq})
 }
 
-func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int) ([]RunEventDTO, error) {
+func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int, afterSeq int) ([]RunEventDTO, error) {
 	events := make([]RunEventDTO, 0, len(runs))
 	for _, run := range runs {
 		if len(events) >= limit {
 			break
 		}
 		remaining := limit - len(events)
-		runEvents, err := s.eventsForCorrelationRun(r, run, remaining)
+		runEvents, err := s.eventsForCorrelationRun(r, run, remaining, afterSeq)
 		if err != nil {
 			return nil, err
 		}
@@ -344,12 +348,12 @@ func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit i
 	return events, nil
 }
 
-func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int) ([]RunEventDTO, error) {
+func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int, afterSeq int) ([]RunEventDTO, error) {
 	if limit <= 0 {
 		return []RunEventDTO{}, nil
 	}
 	if s.cfg.RunEventLister != nil {
-		events, err := s.cfg.RunEventLister(r.Context(), run.ID, 0, limit)
+		events, err := s.cfg.RunEventLister(r.Context(), run.ID, afterSeq, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -360,10 +364,13 @@ func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int)
 			return events, nil
 		}
 	}
+	if afterSeq >= 1 {
+		return []RunEventDTO{}, nil
+	}
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}}, nil
 }
 
-func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int) {
+func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int, afterSeq int) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -428,7 +435,7 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 			}(ch)
 		}
 	}
-	events, err := s.collectRequestRunEvents(r, runs, limit)
+	events, err := s.collectRequestRunEvents(r, runs, limit, afterSeq)
 	if err != nil {
 		writeSSEFrame(w, flusher, 1, "error", map[string]string{"error": err.Error()})
 		return
