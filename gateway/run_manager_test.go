@@ -125,6 +125,31 @@ func TestAsyncRunManagerReusesInMemoryIdempotentRun(t *testing.T) {
 	}
 }
 
+func TestAsyncRunManagerRejectsInMemoryIdempotentRunFromDifferentSession(t *testing.T) {
+	block := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var starts int32
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		atomic.AddInt32(&starts, 1)
+		started <- struct{}{}
+		<-block
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	})
+	defer close(block)
+	req := RunStartRequest{RunID: "run_idem_session_scope", SessionID: "sess_1", Prompt: "go", Metadata: map[string]string{IdempotencyMetadataKey: "idem_same"}}
+	if _, err := manager.Start(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	req.SessionID = "sess_2"
+	if _, err := manager.Start(context.Background(), req); err == nil || !strings.Contains(err.Error(), "이미 존재") {
+		t.Fatalf("다른 session의 같은 run id/idempotency key는 재사용하면 안 돼요: err=%v", err)
+	}
+	if atomic.LoadInt32(&starts) != 1 {
+		t.Fatalf("거부된 duplicate run은 starter를 실행하면 안 돼요: starts=%d", starts)
+	}
+}
+
 func TestAsyncRunManagerCancelsRun(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		<-ctx.Done()
@@ -372,6 +397,46 @@ func TestAsyncRunManagerUsesDurableClaimForDuplicateRunID(t *testing.T) {
 	}
 	if second.ID != first.ID || second.Metadata[IdempotencyReusedMetadataKey] != "true" || atomic.LoadInt32(&starts) > 1 {
 		t.Fatalf("durable claim이 있으면 두 번째 manager는 실행하지 않아야 해요: first=%+v second=%+v starts=%d", first, second, starts)
+	}
+}
+
+func TestAsyncRunManagerRejectsDurableDuplicateRunIDFromDifferentSession(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	firstSession := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	secondSession := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, firstSession); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateSession(ctx, secondSession); err != nil {
+		t.Fatal(err)
+	}
+	block := make(chan struct{})
+	defer close(block)
+	var starts int32
+	firstManager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		atomic.AddInt32(&starts, 1)
+		<-block
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	}, store)
+	req := RunStartRequest{RunID: "run_idem_durable_scope", SessionID: firstSession.ID, Prompt: "go", Metadata: map[string]string{IdempotencyMetadataKey: "idem_durable"}}
+	if _, err := firstManager.Start(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	secondManager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		atomic.AddInt32(&starts, 1)
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil
+	}, store)
+	req.SessionID = secondSession.ID
+	if _, err := secondManager.Start(ctx, req); err == nil || !strings.Contains(err.Error(), "이미 존재") {
+		t.Fatalf("durable duplicate도 session이 다르면 재사용하면 안 돼요: err=%v", err)
+	}
+	if atomic.LoadInt32(&starts) > 1 {
+		t.Fatalf("거부된 durable duplicate run은 starter를 실행하면 안 돼요: starts=%d", starts)
 	}
 }
 

@@ -229,7 +229,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "queued", EventsURL: runEventsURL(runID), StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
 	m.mu.Lock()
 	if existing, exists := m.runs[runID]; exists {
-		if sameIdempotencyKey(existing.run.Metadata, req.Metadata) {
+		if sameIdempotentRun(existing.run, req) {
 			run := markIdempotencyReused(cloneRun(&existing.run))
 			m.mu.Unlock()
 			cancel()
@@ -254,6 +254,9 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		m.mu.Lock()
 		delete(m.runs, runID)
 		m.mu.Unlock()
+		if !sameIdempotentRun(accepted, req) {
+			return nil, errors.New("run id가 이미 존재해요")
+		}
 		return markIdempotencyReused(cloneRun(&accepted)), nil
 	}
 	m.publish(accepted)
@@ -281,9 +284,9 @@ func (m *AsyncRunManager) claimAcceptedRun(ctx context.Context, run *RunDTO) (bo
 	return true, nil
 }
 
-func sameIdempotencyKey(existing, requested map[string]string) bool {
-	key := strings.TrimSpace(requested[IdempotencyMetadataKey])
-	return key != "" && strings.TrimSpace(existing[IdempotencyMetadataKey]) == key
+func sameIdempotentRun(existing RunDTO, requested RunStartRequest) bool {
+	key := strings.TrimSpace(requested.Metadata[IdempotencyMetadataKey])
+	return key != "" && existing.SessionID == requested.SessionID && strings.TrimSpace(existing.Metadata[IdempotencyMetadataKey]) == key
 }
 
 func markIdempotencyReused(run *RunDTO) *RunDTO {
