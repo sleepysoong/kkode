@@ -1,8 +1,10 @@
 package tools
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -70,5 +72,24 @@ func TestMCPToolsRejectsUnknownServer(t *testing.T) {
 	_, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "mcp_call", Arguments: []byte(`{"server":"context7","tool":"lookup"}`)})
 	if err == nil || !strings.Contains(err.Error(), "available=serena") {
 		t.Fatalf("unknown server error should list configured servers: %v", err)
+	}
+}
+
+func TestReadMCPFrameRejectsOversizedContentLength(t *testing.T) {
+	frame := fmt.Sprintf("Content-Length: %d\r\n\r\n", maxMCPResponseBytes+1)
+	if _, err := readMCPFrame(bufio.NewReader(strings.NewReader(frame))); err == nil || !strings.Contains(err.Error(), "너무 커요") {
+		t.Fatalf("oversized stdio MCP frame should be rejected before allocation: %v", err)
+	}
+}
+
+func TestLimitedMCPStderrBuffer(t *testing.T) {
+	buf := &limitedMCPBuffer{max: 5}
+	n, err := buf.Write([]byte("abcdef"))
+	if err != nil || n != 6 {
+		t.Fatalf("stderr buffer should accept full producer payload: n=%d err=%v", n, err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "abcde") || strings.Contains(got, "f") || !strings.Contains(got, "stderr truncated") {
+		t.Fatalf("stderr buffer should be bounded and marked truncated: %q", got)
 	}
 }

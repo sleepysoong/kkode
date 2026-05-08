@@ -18,6 +18,7 @@ import (
 )
 
 const maxMCPResponseBytes = 8 << 20
+const maxMCPStderrBytes = 1 << 20
 
 type MCPToolCallResult struct {
 	Server          string         `json:"server"`
@@ -132,8 +133,8 @@ func runStdioMCPRequest(ctx context.Context, server llm.MCPServer, method string
 	if err != nil {
 		return nil, err
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := &limitedMCPBuffer{max: maxMCPStderrBytes}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -289,6 +290,9 @@ func readMCPFrame(r *bufio.Reader) ([]byte, error) {
 	if contentLength <= 0 {
 		return nil, fmt.Errorf("MCP Content-Length header가 필요해요")
 	}
+	if contentLength > maxMCPResponseBytes {
+		return nil, fmt.Errorf("MCP response body가 너무 커요: max_bytes=%d", maxMCPResponseBytes)
+	}
 	data := make([]byte, contentLength)
 	_, err := io.ReadFull(r, data)
 	return data, err
@@ -394,6 +398,47 @@ func withMCPStderr(err error, stderr string) error {
 		return err
 	}
 	return fmt.Errorf("%w stderr=%s", err, stderr)
+}
+
+type limitedMCPBuffer struct {
+	buf       bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func (b *limitedMCPBuffer) Write(p []byte) (int, error) {
+	if b.max <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		_, _ = b.buf.Write(p[:remaining])
+		b.truncated = true
+		return len(p), nil
+	}
+	_, _ = b.buf.Write(p)
+	return len(p), nil
+}
+
+func (b *limitedMCPBuffer) String() string {
+	data := b.buf.Bytes()
+	if !utf8.Valid(data) {
+		end := len(data)
+		for end > 0 && !utf8.Valid(data[:end]) {
+			end--
+		}
+		data = data[:end]
+	}
+	text := string(data)
+	if b.truncated {
+		return strings.TrimRight(text, "\n") + "\n[MCP stderr truncated]"
+	}
+	return text
 }
 
 func cloneMCPServers(servers map[string]llm.MCPServer) map[string]llm.MCPServer {
