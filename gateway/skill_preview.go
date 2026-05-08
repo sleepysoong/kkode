@@ -3,10 +3,12 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/session"
 )
@@ -73,12 +75,32 @@ func readSkillPreview(resource session.Resource, maxBytes int) (SkillPreviewResp
 	if maxBytes <= 0 {
 		maxBytes = defaultSkillPreviewBytes
 	}
-	data, err := os.ReadFile(file)
+	markdown, markdownBytes, truncated, err := readSkillPreviewMarkdown(file, maxBytes)
 	if err != nil {
 		return SkillPreviewResponse{}, err
 	}
-	markdown, markdownBytes, truncated := truncateToolOutput(string(data), maxBytes)
 	return SkillPreviewResponse{Skill: publicResourceDTO(resource), Directory: dir, File: file, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: truncated, Truncated: truncated}, nil
+}
+
+func readSkillPreviewMarkdown(file string, maxBytes int) (string, int, bool, error) {
+	info, err := os.Stat(file)
+	if err != nil {
+		return "", 0, false, err
+	}
+	if info.IsDir() {
+		return "", 0, false, fmt.Errorf("skill preview file is a directory: %s", file)
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return "", 0, false, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(maxBytes)+int64(utf8.UTFMax)))
+	if err != nil {
+		return "", 0, false, err
+	}
+	markdown, _, truncated := truncateToolOutput(string(data), maxBytes)
+	return markdown, int(info.Size()), truncated || info.Size() > int64(len(markdown)), nil
 }
 
 func firstExistingFile(paths ...string) string {

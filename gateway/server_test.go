@@ -4633,6 +4633,27 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 		t.Fatalf("skill preview가 이상해요: %+v", preview)
 	}
 
+	largeSkillDir := filepath.Join(root, "large-review")
+	largeMarkdown := strings.Repeat("x", maxSkillPreviewBytes+1)
+	writeTestFile(t, filepath.Join(largeSkillDir, "SKILL.md"), largeMarkdown)
+	largeResource, err := store.SaveResource(context.Background(), session.Resource{Kind: session.ResourceSkill, Name: "large-review", Enabled: true, Config: []byte(`{"path":"` + largeSkillDir + `"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+largeResource.ID+"/preview?max_bytes=32", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	preview = SkillPreviewResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.MarkdownBytes != len(largeMarkdown) || len(preview.Markdown) != 32 || !preview.MarkdownTruncated {
+		t.Fatalf("large skill preview metadata가 이상해요: %+v", preview)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes=-1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
