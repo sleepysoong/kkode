@@ -80,7 +80,14 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 	if !ok {
 		return
 	}
-	runLimit := queryLimit(r, "run_limit", 50, 200)
+	runLimit, ok := queryLimitParam(w, r, "run_limit", 50, 200, "invalid_transcript")
+	if !ok {
+		return
+	}
+	eventLimit, ok := queryLimitParam(w, r, "event_limit", 500, 5000, "invalid_transcript")
+	if !ok {
+		return
+	}
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: runLimit})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
@@ -99,7 +106,7 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 			}
 			sessionCache[run.SessionID] = sess
 		}
-		transcripts = append(transcripts, s.toRunTranscriptResponse(r, run, sess, redacted, maxMarkdownBytes))
+		transcripts = append(transcripts, s.toRunTranscriptResponse(r, run, sess, redacted, maxMarkdownBytes, eventLimit))
 	}
 	resp := RequestCorrelationTranscriptResponse{
 		RequestID:   requestID,
@@ -127,6 +134,10 @@ func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID 
 	if !ok {
 		return
 	}
+	eventLimit, ok := queryLimitParam(w, r, "event_limit", 500, 5000, "invalid_transcript")
+	if !ok {
+		return
+	}
 	run, err := s.cfg.RunGetter(r.Context(), runID)
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
@@ -138,13 +149,13 @@ func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID 
 		return
 	}
 	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
-	resp := s.toRunTranscriptResponse(r, *run, sess, redacted, maxMarkdownBytes)
+	resp := s.toRunTranscriptResponse(r, *run, sess, redacted, maxMarkdownBytes, eventLimit)
 	writeJSON(w, resp)
 }
 
-func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *session.Session, redacted bool, maxMarkdownBytes int) RunTranscriptResponse {
+func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *session.Session, redacted bool, maxMarkdownBytes int, eventLimit int) RunTranscriptResponse {
 	turn := s.runTranscriptTurn(r, run)
-	events := s.runTranscriptEvents(r, run)
+	events := s.runTranscriptEvents(r, run, eventLimit)
 	runEvents := s.runEventSnapshot(r, run.ID, run, 0, 200)
 	markdown := runTranscriptMarkdown(run, sess, turn, events, runEvents)
 	if redacted {
@@ -218,11 +229,10 @@ func (s *Server) runTranscriptTurn(r *http.Request, run RunDTO) *TurnDTO {
 	return nil
 }
 
-func (s *Server) runTranscriptEvents(r *http.Request, run RunDTO) []EventDTO {
+func (s *Server) runTranscriptEvents(r *http.Request, run RunDTO, limit int) []EventDTO {
 	if strings.TrimSpace(run.TurnID) == "" {
 		return nil
 	}
-	limit := queryLimit(r, "event_limit", 500, 5000)
 	out := []EventDTO{}
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
 		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: run.SessionID, Limit: limit})

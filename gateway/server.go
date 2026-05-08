@@ -1786,14 +1786,6 @@ func queryInt(r *http.Request, key string, fallback int) int {
 	return parsed
 }
 
-func queryLimit(r *http.Request, key string, fallback int, maxValue int) int {
-	limit := queryInt(r, key, fallback)
-	if maxValue > 0 && limit > maxValue {
-		return maxValue
-	}
-	return limit
-}
-
 func queryLimitParam(w http.ResponseWriter, r *http.Request, key string, fallback int, maxValue int, code string) (int, bool) {
 	return queryNonNegativeLimitParam(w, r, key, fallback, maxValue, code)
 }

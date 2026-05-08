@@ -2984,6 +2984,14 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
 		t.Fatalf("음수 run transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	for _, query := range []string{"event_limit=-1", "event_limit=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "event_limit") {
+			t.Fatalf("잘못된 run transcript event_limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
@@ -3031,6 +3039,18 @@ func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
 		t.Fatalf("잘못된 request transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, query := range []string{"run_limit=-1", "run_limit=abc", "event_limit=-1", "event_limit=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+requestID+"/transcript?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		want := "event_limit"
+		if strings.Contains(query, "run_limit") {
+			want = "run_limit"
+		}
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 request transcript limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
 	}
 }
 
