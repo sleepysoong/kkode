@@ -2573,6 +2573,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FileGrepMatch'
+        limit:
+          type: integer
+          description: 이번 응답에 적용된 match 제한이에요.
+        result_truncated:
+          type: boolean
+          description: max_matches 때문에 matches가 잘렸는지 알려줘요.
     FileGrepMatch:
       type: object
       required: [path, line, excerpt]

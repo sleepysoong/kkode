@@ -3727,8 +3727,9 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	srv := newTestServer(t, store, "")
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "src", "a.go"), "package main\n// TODO: wire api\n")
+	writeTestFile(t, filepath.Join(root, "src", "b.go"), "package main\n// TODO: second\n")
 	writeTestFile(t, filepath.Join(root, "notes.txt"), "TODO outside\n")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&path_glob=src/**&max_matches=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&path_glob=src/**&max_matches=1", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3738,7 +3739,7 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &grep); err != nil {
 		t.Fatal(err)
 	}
-	if grep.ProjectRoot != root || grep.Pattern != "todo" || grep.PathGlob != "src/**" || len(grep.Matches) != 1 || grep.Matches[0].Path != "src/a.go" || grep.Matches[0].Line != 2 {
+	if grep.ProjectRoot != root || grep.Pattern != "todo" || grep.PathGlob != "src/**" || len(grep.Matches) != 1 || grep.Matches[0].Path != "src/a.go" || grep.Matches[0].Line != 2 || grep.Limit != 1 || !grep.ResultTruncated {
 		t.Fatalf("grep 결과가 이상해요: %+v", grep)
 	}
 

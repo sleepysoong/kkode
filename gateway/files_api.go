@@ -52,11 +52,13 @@ type FileGlobResponse struct {
 
 // FileGrepResponse는 웹 패널 검색 결과를 file_grep tool과 같은 의미로 반환해요.
 type FileGrepResponse struct {
-	ProjectRoot string             `json:"project_root"`
-	Pattern     string             `json:"pattern"`
-	PathGlob    string             `json:"path_glob,omitempty"`
-	Regex       bool               `json:"regex,omitempty"`
-	Matches     []FileGrepMatchDTO `json:"matches"`
+	ProjectRoot     string             `json:"project_root"`
+	Pattern         string             `json:"pattern"`
+	PathGlob        string             `json:"path_glob,omitempty"`
+	Regex           bool               `json:"regex,omitempty"`
+	Matches         []FileGrepMatchDTO `json:"matches"`
+	Limit           int                `json:"limit,omitempty"`
+	ResultTruncated bool               `json:"result_truncated,omitempty"`
 }
 
 type FileGrepMatchDTO struct {
@@ -238,18 +240,23 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_grep", "pattern이 필요해요")
 		return
 	}
+	limit := queryLimit(r, "max_matches", 100, 1000)
 	opts := workspace.GrepOptions{
 		PathGlob:      strings.TrimSpace(r.URL.Query().Get("path_glob")),
 		Regex:         queryBool(r, "regex", false),
 		CaseSensitive: queryBool(r, "case_sensitive", false),
-		MaxMatches:    queryLimit(r, "max_matches", 100, 1000),
+		MaxMatches:    limit + 1,
 	}
 	matches, err := ws.Grep(pattern, opts)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "grep_files_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileGrepResponse{ProjectRoot: projectRoot, Pattern: pattern, PathGlob: opts.PathGlob, Regex: opts.Regex, Matches: fileGrepMatchDTOs(matches)})
+	truncated := len(matches) > limit
+	if truncated {
+		matches = matches[:limit]
+	}
+	writeJSON(w, FileGrepResponse{ProjectRoot: projectRoot, Pattern: pattern, PathGlob: opts.PathGlob, Regex: opts.Regex, Matches: fileGrepMatchDTOs(matches), Limit: limit, ResultTruncated: truncated})
 }
 
 func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
