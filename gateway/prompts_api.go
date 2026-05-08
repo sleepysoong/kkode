@@ -21,17 +21,22 @@ type PromptTemplateListResponse struct {
 }
 
 type PromptTemplateResponse struct {
-	Name string `json:"name"`
-	Text string `json:"text"`
+	Name          string `json:"name"`
+	Text          string `json:"text"`
+	TextBytes     int    `json:"text_bytes,omitempty"`
+	TextTruncated bool   `json:"text_truncated,omitempty"`
 }
 
 type PromptRenderRequest struct {
-	Data map[string]any `json:"data"`
+	Data         map[string]any `json:"data"`
+	MaxTextBytes int            `json:"max_text_bytes,omitempty"`
 }
 
 type PromptRenderResponse struct {
-	Name string `json:"name"`
-	Text string `json:"text"`
+	Name          string `json:"name"`
+	Text          string `json:"text"`
+	TextBytes     int    `json:"text_bytes,omitempty"`
+	TextTruncated bool   `json:"text_truncated,omitempty"`
 }
 
 func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -77,7 +82,8 @@ func (s *Server) getPromptTemplate(w http.ResponseWriter, r *http.Request, name 
 		writeError(w, r, http.StatusNotFound, "prompt_not_found", err.Error())
 		return
 	}
-	writeJSON(w, PromptTemplateResponse{Name: name, Text: text})
+	text, textBytes, truncated := truncateToolOutput(text, queryLimit(r, "max_text_bytes", 65536, 1<<20))
+	writeJSON(w, PromptTemplateResponse{Name: name, Text: text, TextBytes: textBytes, TextTruncated: truncated})
 }
 
 func (s *Server) renderPromptTemplate(w http.ResponseWriter, r *http.Request, name string) {
@@ -91,5 +97,16 @@ func (s *Server) renderPromptTemplate(w http.ResponseWriter, r *http.Request, na
 		writeError(w, r, http.StatusBadRequest, "render_prompt_failed", err.Error())
 		return
 	}
-	writeJSON(w, PromptRenderResponse{Name: name, Text: text})
+	text, textBytes, truncated := truncateToolOutput(text, promptRenderTextLimit(req.MaxTextBytes))
+	writeJSON(w, PromptRenderResponse{Name: name, Text: text, TextBytes: textBytes, TextTruncated: truncated})
+}
+
+func promptRenderTextLimit(limit int) int {
+	if limit <= 0 {
+		return 65536
+	}
+	if limit > 1<<20 {
+		return 1 << 20
+	}
+	return limit
 }

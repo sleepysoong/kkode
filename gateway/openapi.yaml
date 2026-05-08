@@ -949,6 +949,13 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: max_text_bytes
+          schema:
+            type: integer
+            default: 65536
+            maximum: 1048576
+          description: prompt template text preview를 이 byte 수까지 UTF-8 안전하게 잘라요.
       responses:
         '200':
           description: prompt template 원문이에요.
@@ -3980,12 +3987,23 @@ components:
           type: string
         text:
           type: string
+        text_bytes:
+          type: integer
+          description: 제한 전 prompt text byte 수예요.
+        text_truncated:
+          type: boolean
+          description: max_text_bytes 때문에 text가 잘렸는지 알려줘요.
     PromptRenderRequest:
       type: object
       properties:
         data:
           type: object
           additionalProperties: true
+        max_text_bytes:
+          type: integer
+          default: 65536
+          maximum: 1048576
+          description: 렌더링된 prompt text preview를 이 byte 수까지 UTF-8 안전하게 잘라요.
     PromptRenderResponse:
       type: object
       required: [name, text]
@@ -3994,6 +4012,12 @@ components:
           type: string
         text:
           type: string
+        text_bytes:
+          type: integer
+          description: 제한 전 렌더링 text byte 수예요.
+        text_truncated:
+          type: boolean
+          description: max_text_bytes 때문에 text가 잘렸는지 알려줘요.
     ResourceListResponse:
       type: object
       required: [resources]

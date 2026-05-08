@@ -1903,7 +1903,7 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 		t.Fatalf("prompt page next offset이 없어야 해요: %+v", page)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md?max_text_bytes=32", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -1913,11 +1913,11 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "agent-system.md" || !strings.Contains(got.Text, "{{.AgentName}}") {
+	if got.Name != "agent-system.md" || got.TextBytes <= len(got.Text) || !got.TextTruncated || !utf8.ValidString(got.Text) || strings.Contains(got.Text, "\uFFFD") {
 		t.Fatalf("prompt 원문이 이상해요: %+v", got)
 	}
 
-	body := bytes.NewBufferString(`{"data":{"AgentName":"kkode","ToolNames":["file_read","shell_run"]}}`)
+	body := bytes.NewBufferString(`{"data":{"AgentName":"kkode","ToolNames":["file_read","shell_run"]},"max_text_bytes":24}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/prompts/agent-system.md/render", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -1929,7 +1929,7 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &rendered); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(rendered.Text, "kkode") || !strings.Contains(rendered.Text, "shell_run") {
+	if !strings.Contains(rendered.Text, "kkode") || rendered.TextBytes <= len(rendered.Text) || !rendered.TextTruncated || !utf8.ValidString(rendered.Text) || strings.Contains(rendered.Text, "\uFFFD") {
 		t.Fatalf("prompt 렌더링이 이상해요: %+v", rendered)
 	}
 }
