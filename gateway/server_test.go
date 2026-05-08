@@ -4152,12 +4152,26 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_output_bytes") {
 		t.Fatalf("음수 max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","max_output_bytes":`+strconv.Itoa(maxToolCallOutputBytes+1)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_output_bytes") {
+		t.Fatalf("큰 max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","web_max_bytes":-1}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "web_max_bytes") {
 		t.Fatalf("음수 web_max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","web_max_bytes":`+strconv.FormatInt(maxToolCallWebBytes+1, 10)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "web_max_bytes") {
+		t.Fatalf("큰 web_max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"`+strings.Repeat("x", maxToolCallNameBytes+1)+`"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -4218,6 +4232,25 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	}
 	if called.Output != "he" || called.OutputBytes != len("hello") || !called.OutputTruncated {
 		t.Fatalf("tool output 제한 응답이 이상해요: %+v", called)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "notes", "large.txt"), []byte(strings.Repeat("x", defaultToolCallOutputBytes+1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/large.txt"}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	called = ToolCallResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.OutputBytes != defaultToolCallOutputBytes+1 || len(called.Output) != defaultToolCallOutputBytes || !called.OutputTruncated {
+		t.Fatalf("tool output 기본 제한 응답이 이상해요: %+v", called)
 	}
 
 	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md","max_bytes":-1}}`

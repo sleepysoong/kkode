@@ -2919,10 +2919,14 @@ components:
           type: integer
           format: int64
           minimum: 0
+          maximum: 8388608
+          description: web_fetch direct tool 호출의 HTTP body 최대 byte 수예요. 0이면 web_fetch 기본값을 사용해요.
         max_output_bytes:
           type: integer
           minimum: 0
-          description: tool 응답 output을 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
+          default: 1048576
+          maximum: 8388608
+          description: tool 응답 output을 이 byte 수까지 잘라서 반환해요. 0이면 gateway 기본값 1048576 byte를 사용해요.
     ToolCallResponse:
       type: object
       required: [tool]

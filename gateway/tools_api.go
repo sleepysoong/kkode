@@ -19,6 +19,9 @@ import (
 const maxToolCallNameBytes = 128
 const maxToolCallIDBytes = 128
 const maxToolCallArgumentsBytes = 1 << 20
+const defaultToolCallOutputBytes = 1 << 20
+const maxToolCallOutputBytes = 8 << 20
+const maxToolCallWebBytes = 8 << 20
 
 // ToolDTO는 gateway가 외부 adapter에 노출하는 표준 tool 정의예요.
 type ToolDTO struct {
@@ -160,7 +163,7 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
 			return
 		}
-		output, outputBytes, truncated := truncateToolOutput(output, req.MaxOutputBytes)
+		output, outputBytes, truncated := truncateToolOutput(output, toolCallOutputLimit(req.MaxOutputBytes))
 		writeJSON(w, ToolCallResponse{CallID: req.CallID, Tool: req.Tool, Output: output, OutputBytes: outputBytes, OutputTruncated: truncated})
 		return
 	}
@@ -170,7 +173,7 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
 		return
 	}
-	output, outputBytes, truncated := truncateToolOutput(result.Output, req.MaxOutputBytes)
+	output, outputBytes, truncated := truncateToolOutput(result.Output, toolCallOutputLimit(req.MaxOutputBytes))
 	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated})
 }
 
@@ -187,8 +190,14 @@ func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
 	if req.MaxOutputBytes < 0 {
 		return nil, errors.New("max_output_bytes는 0 이상이어야 해요")
 	}
+	if req.MaxOutputBytes > maxToolCallOutputBytes {
+		return nil, fmt.Errorf("max_output_bytes는 %d 이하여야 해요", maxToolCallOutputBytes)
+	}
 	if req.WebMaxBytes < 0 {
 		return nil, errors.New("web_max_bytes는 0 이상이어야 해요")
+	}
+	if req.WebMaxBytes > maxToolCallWebBytes {
+		return nil, fmt.Errorf("web_max_bytes는 %d 이하여야 해요", maxToolCallWebBytes)
 	}
 	args, err := json.Marshal(req.Arguments)
 	if err != nil {
@@ -198,6 +207,13 @@ func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
 		return nil, fmt.Errorf("arguments는 %d byte 이하여야 해요", maxToolCallArgumentsBytes)
 	}
 	return args, nil
+}
+
+func toolCallOutputLimit(value int) int {
+	if value <= 0 {
+		return defaultToolCallOutputBytes
+	}
+	return value
 }
 
 func gatewayToolDefinitions() []llm.Tool {
