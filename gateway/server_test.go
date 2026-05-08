@@ -3409,7 +3409,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":"call_1"}`
+	body := `{"project_root":"` + root + `","tool":"file_write","arguments":{"path":"notes/todo.md","content":"hello"},"call_id":" call_1 "}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -3537,7 +3537,7 @@ func TestGatewayListsAndCallsLSPTools(t *testing.T) {
 		t.Fatalf("LSP tool metadata가 이상해요: %+v", findTool(listed.Tools, "lsp_symbols"))
 	}
 
-	body := `{"project_root":"` + root + `","tool":"lsp_symbols","arguments":{"query":"Runner","limit":10},"call_id":"lsp_1"}`
+	body := `{"project_root":"` + root + `","tool":"lsp_symbols","arguments":{"query":"Runner","limit":10},"call_id":" lsp_1 "}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()

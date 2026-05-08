@@ -110,6 +110,7 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Tool = strings.TrimSpace(req.Tool)
+	req.CallID = strings.TrimSpace(req.CallID)
 	if req.Tool == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "tool이 필요해요")
 		return
