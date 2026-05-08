@@ -2305,6 +2305,10 @@ components:
           type: integer
         max_run_metadata_value_bytes:
           type: integer
+        max_request_id_bytes:
+          type: integer
+        max_idempotency_key_bytes:
+          type: integer
         max_run_provider_model_bytes:
           type: integer
     DiagnosticsResponse:

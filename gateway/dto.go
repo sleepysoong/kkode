@@ -482,6 +482,8 @@ type LimitDTO struct {
 	MaxRunMetadataEntries    int   `json:"max_run_metadata_entries,omitempty"`
 	MaxRunMetadataKeyBytes   int   `json:"max_run_metadata_key_bytes,omitempty"`
 	MaxRunMetadataValueBytes int   `json:"max_run_metadata_value_bytes,omitempty"`
+	MaxRequestIDBytes        int   `json:"max_request_id_bytes,omitempty"`
+	MaxIdempotencyKeyBytes   int   `json:"max_idempotency_key_bytes,omitempty"`
 	MaxRunProviderModelBytes int   `json:"max_run_provider_model_bytes,omitempty"`
 }
 

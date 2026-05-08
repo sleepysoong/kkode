@@ -742,6 +742,8 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxRunMetadataEntries:    maxRunMetadataEntries,
 		MaxRunMetadataKeyBytes:   maxRunMetadataKeyBytes,
 		MaxRunMetadataValueBytes: maxRunMetadataValueBytes,
+		MaxRequestIDBytes:        maxRequestIDBytes,
+		MaxIdempotencyKeyBytes:   maxIdempotencyKeyBytes,
 		MaxRunProviderModelBytes: maxRunProviderModelBytes,
 	}
 }
