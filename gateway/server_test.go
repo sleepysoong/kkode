@@ -2872,6 +2872,25 @@ func main() {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
 		t.Fatalf("잘못된 LSP format max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+
+	largePath := filepath.Join(root, "large.go")
+	large, err := os.Create(largePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := large.Truncate(int64(maxLSPFormatInputBytes + 1)); err != nil {
+		_ = large.Close()
+		t.Fatal(err)
+	}
+	if err := large.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/format-preview?project_root="+root+"&path=large.go", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "format preview input") {
+		t.Fatalf("큰 LSP format input은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayLSPDiagnosticsAndHover(t *testing.T) {

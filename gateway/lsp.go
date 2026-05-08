@@ -17,6 +17,10 @@ import (
 	"strings"
 )
 
+const defaultLSPFormatPreviewBytes = 1 << 20
+const maxLSPFormatPreviewBytes = 8 << 20
+const maxLSPFormatInputBytes = 8 << 20
+
 // LSPSymbolDTO는 외부 패널이 코드 탐색 UI를 만들 때 쓰는 LSP-style symbol 항목이에요.
 type LSPSymbolDTO struct {
 	Name      string `json:"name"`
@@ -203,7 +207,7 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		writeJSON(w, preview)
 	case "format-preview":
 		relPath := strings.TrimSpace(r.URL.Query().Get("path"))
-		maxBytes, ok := queryNonNegativeLimitParam(w, r, "max_bytes", 1<<20, 8<<20, "invalid_lsp_format_preview")
+		maxBytes, ok := queryNonNegativeLimitParam(w, r, "max_bytes", defaultLSPFormatPreviewBytes, maxLSPFormatPreviewBytes, "invalid_lsp_format_preview")
 		if !ok {
 			return
 		}
@@ -545,6 +549,13 @@ func scanGoFormatPreview(root string, relPath string, maxBytes int) (LSPFormatPr
 	path, err := resolveRelativeGoFile(absRoot, relPath)
 	if err != nil {
 		return LSPFormatPreviewResponse{}, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return LSPFormatPreviewResponse{}, err
+	}
+	if info.Size() > maxLSPFormatInputBytes {
+		return LSPFormatPreviewResponse{}, fmt.Errorf("format preview input은 %d byte 이하여야 해요", maxLSPFormatInputBytes)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

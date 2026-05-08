@@ -1653,7 +1653,7 @@ paths:
             type: string
         - in: query
           name: max_bytes
-          description: formatted content preview 최대 byte 수예요. UTF-8 문자 경계를 보존해요.
+          description: formatted content preview 최대 byte 수예요. UTF-8 문자 경계를 보존해요. 입력 Go 파일은 최대 8388608 byte까지 format preview를 허용해요.
           schema:
             type: integer
             default: 1048576
