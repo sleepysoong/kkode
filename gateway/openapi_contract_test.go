@@ -63,6 +63,7 @@ func TestFeatureCatalogEndpointsExistInAPIIndexLinks(t *testing.T) {
 
 func TestAPIIndexOperationsMatchLinks(t *testing.T) {
 	links := APIIndexLinks()
+	linkMethods := apiIndexLinkMethods()
 	operations := APIIndexOperations()
 	if len(operations) != len(links) {
 		t.Fatalf("API index operations count = %d, links count = %d", len(operations), len(links))
@@ -78,6 +79,13 @@ func TestAPIIndexOperationsMatchLinks(t *testing.T) {
 		seen[op.Name] = true
 		if links[op.Name] != op.Path {
 			t.Fatalf("API index operation %s path = %q, link path = %q", op.Name, op.Path, links[op.Name])
+		}
+		wantMethod := "GET"
+		if explicitMethod := linkMethods[op.Name]; explicitMethod != "" {
+			wantMethod = explicitMethod
+		}
+		if op.Method != wantMethod {
+			t.Fatalf("API index operation %s method = %q, want %q", op.Name, op.Method, wantMethod)
 		}
 		if op.Method != strings.ToUpper(op.Method) {
 			t.Fatalf("API index operation %s method must be uppercase: %q", op.Name, op.Method)
