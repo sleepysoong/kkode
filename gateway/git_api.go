@@ -50,6 +50,7 @@ type GitLogResponse struct {
 const (
 	defaultGitDiffBytes = 1 << 20
 	maxGitDiffBytes     = 4 << 20
+	maxGitStderrBytes   = 1 << 20
 )
 
 func (s *Server) handleGit(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -204,13 +205,16 @@ func runGitCommand(ctx context.Context, root string, args []string, maxBytes int
 	}
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
 	stdout := &boundedBuffer{max: maxBytes}
-	var stderr bytes.Buffer
+	stderr := &boundedBuffer{max: maxGitStderrBytes}
 	cmd.Stdout = stdout
-	cmd.Stderr = &stderr
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
+		}
+		if stderr.truncated {
+			msg = strings.TrimRight(msg, "\n") + "\n[git stderr truncated]"
 		}
 		return "", stdout.truncated, fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
