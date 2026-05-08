@@ -29,7 +29,12 @@ type ToolDTO struct {
 }
 
 type ToolListResponse struct {
-	Tools []ToolDTO `json:"tools"`
+	Tools           []ToolDTO `json:"tools"`
+	TotalTools      int       `json:"total_tools,omitempty"`
+	Limit           int       `json:"limit,omitempty"`
+	Offset          int       `json:"offset,omitempty"`
+	NextOffset      int       `json:"next_offset,omitempty"`
+	ResultTruncated bool      `json:"result_truncated,omitempty"`
 }
 
 type ToolCallRequest struct {
@@ -77,7 +82,10 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 	for _, tool := range defs {
 		out = append(out, toToolDTO(tool))
 	}
-	writeJSON(w, ToolListResponse{Tools: out})
+	limit := queryLimit(r, "limit", len(out), 500)
+	offset := queryOffset(r, "offset")
+	page, returned, truncated := pageSlice(out, limit, offset)
+	writeJSON(w, ToolListResponse{Tools: page, TotalTools: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) getTool(w http.ResponseWriter, r *http.Request, name string) {

@@ -448,6 +448,9 @@ paths:
     get:
       operationId: getTools
       summary: 표준 file/shell/web tool 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -2746,6 +2749,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tool'
+        total_tools:
+          type: integer
+          description: limit/offset 적용 전 tool 수예요.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
+          description: limit 때문에 tool 목록이 잘렸는지 알려줘요.
     Tool:
       type: object
       required: [kind, name]

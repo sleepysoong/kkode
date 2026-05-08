@@ -3070,6 +3070,9 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
 		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
 	}
+	if listed.TotalTools != len(listed.Tools) || listed.Limit != len(listed.Tools) || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("tool 목록 metadata가 이상해요: %+v", listed)
+	}
 	seenTools := map[string]bool{}
 	for _, tool := range listed.Tools {
 		if seenTools[tool.Name] {
@@ -3085,6 +3088,29 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	}
 	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
 		t.Fatalf("adapter form 생성을 위한 tool 예제가 필요해요: %+v", listed.Tools)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools?limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tool page status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var page ToolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Tools) != 1 || page.TotalTools != listed.TotalTools || page.Limit != 1 || page.Offset != 1 {
+		t.Fatalf("tool page가 이상해요: %+v", page)
+	}
+	if wantTruncated := page.TotalTools > 2; page.ResultTruncated != wantTruncated {
+		t.Fatalf("tool page truncation flag가 이상해요: got=%v want=%v page=%+v", page.ResultTruncated, wantTruncated, page)
+	}
+	if page.ResultTruncated && page.NextOffset != 2 {
+		t.Fatalf("tool page next offset이 이상해요: %+v", page)
+	}
+	if !page.ResultTruncated && page.NextOffset != 0 {
+		t.Fatalf("tool page next offset이 없어야 해요: %+v", page)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools/web_fetch", nil)
