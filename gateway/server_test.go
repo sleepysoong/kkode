@@ -3481,6 +3481,12 @@ func TestGatewayPreviewsSubagentManifest(t *testing.T) {
 func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	turn1 := session.NewTurn("첫 요청", llm.Request{Model: "gpt"})
+	turn1.ID = "turn_1"
+	sess.AppendTurn(turn1)
+	turn2 := session.NewTurn("둘째 요청", llm.Request{Model: "gpt"})
+	turn2.ID = "turn_2"
+	sess.AppendTurn(turn2)
 	if err := store.CreateSession(context.Background(), sess); err != nil {
 		t.Fatal(err)
 	}
@@ -3498,6 +3504,20 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	}
 	if created.ID == "" || created.SessionID != sess.ID || !strings.Contains(string(created.Payload), "저장") {
 		t.Fatalf("checkpoint 생성 응답이 이상해요: %+v", created)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/checkpoints", bytes.NewBufferString(`{"turn_id":"turn_missing","payload":{"summary":"bad"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_checkpoint") {
+		t.Fatalf("없는 turn checkpoint는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/sess_missing/checkpoints", bytes.NewBufferString(`{"payload":{"summary":"bad"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "session_not_found") {
+		t.Fatalf("없는 session checkpoint는 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/checkpoints", bytes.NewBufferString(`{"turn_id":"turn_2","payload":{"summary":"다음"}}`))
 	req.Header.Set("Content-Type", "application/json")

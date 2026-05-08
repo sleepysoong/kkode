@@ -71,6 +71,9 @@ func (s *Server) createSessionCheckpoint(w http.ResponseWriter, r *http.Request,
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	if ok := s.validateCheckpointTarget(w, r, sessionID, strings.TrimSpace(req.TurnID)); !ok {
+		return
+	}
 	cp := session.Checkpoint{ID: strings.TrimSpace(req.ID), SessionID: sessionID, TurnID: strings.TrimSpace(req.TurnID), CreatedAt: req.CreatedAt, Payload: req.Payload}
 	if cp.ID == "" {
 		cp.ID = session.NewID("cp")
@@ -91,6 +94,24 @@ func (s *Server) createSessionCheckpoint(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	writeJSONStatus(w, http.StatusCreated, toCheckpointDTO(loaded))
+}
+
+func (s *Server) validateCheckpointTarget(w http.ResponseWriter, r *http.Request, sessionID string, turnID string) bool {
+	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+		return false
+	}
+	if turnID == "" {
+		return true
+	}
+	for _, turn := range sess.Turns {
+		if turn.ID == turnID {
+			return true
+		}
+	}
+	writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", "turn_id가 session에 없어요")
+	return false
 }
 
 func (s *Server) getSessionCheckpoint(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string, checkpointID string) {
