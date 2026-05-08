@@ -1660,7 +1660,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
 
-	body := bytes.NewBufferString(`{"name":"filesystem","description":"파일 MCP예요","config":{"kind":"stdio","command":"mcp-fs","args":["."]}}`)
+	body := bytes.NewBufferString(`{"name":"filesystem","description":"파일 MCP예요","config":{"kind":"stdio","command":"mcp-fs","args":["."],"headers":{"Authorization":"Bearer secret-token"}}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers", body)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -1673,6 +1673,16 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if created.ID == "" || created.Kind != string(session.ResourceMCPServer) || created.Config["command"] != "mcp-fs" {
 		t.Fatalf("생성된 MCP manifest가 이상해요: %+v", created)
+	}
+	if created.Config["headers"].(map[string]any)["Authorization"] != "[REDACTED]" {
+		t.Fatalf("생성 응답은 secret config를 숨겨야 해요: %+v", created.Config)
+	}
+	loadedResource, err := store.LoadResource(context.Background(), session.ResourceMCPServer, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(loadedResource.Config), "secret-token") {
+		t.Fatalf("저장소에는 실행용 원본 config가 남아 있어야 해요: %s", loadedResource.Config)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+created.ID, nil)
@@ -1687,6 +1697,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if got.Name != "filesystem" {
 		t.Fatalf("조회된 MCP manifest가 이상해요: %+v", got)
+	}
+	if got.Config["headers"].(map[string]any)["Authorization"] != "[REDACTED]" {
+		t.Fatalf("조회 응답은 secret config를 숨겨야 해요: %+v", got.Config)
 	}
 
 	body = bytes.NewBufferString(`{"name":"planner","config":{"prompt":"계획을 세워요","tools":["file_read"]}}`)
@@ -1846,6 +1859,62 @@ func main() {
 	if !sawCtor {
 		t.Fatalf("reference excerpt가 이상해요: %+v", refs.References)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/definitions?project_root="+root+"&path=main.go&line=11&column=4", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	defs = LSPLocationListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &defs); err != nil {
+		t.Fatal(err)
+	}
+	if len(defs.Locations) != 1 || defs.Locations[0].Name != "Run" || defs.Locations[0].Container != "Runner" {
+		t.Fatalf("커서 기반 definition 결과가 이상해요: %+v", defs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/references?project_root="+root+"&path=main.go&line=11&column=4&limit=20", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	refs = LSPReferenceListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &refs); err != nil {
+		t.Fatal(err)
+	}
+	if len(refs.References) < 2 {
+		t.Fatalf("커서 기반 reference 결과가 너무 적어요: %+v", refs)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/rename-preview?project_root="+root+"&path=main.go&line=11&column=4&new_name=Execute&limit=20", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var rename LSPRenamePreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &rename); err != nil {
+		t.Fatal(err)
+	}
+	if rename.Symbol != "Run" || rename.NewName != "Execute" || len(rename.Edits) < 2 || rename.Limit != 20 {
+		t.Fatalf("rename preview 결과가 이상해요: %+v", rename)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/format-preview?project_root="+root+"&path=main.go&max_bytes=64", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var formatPreview LSPFormatPreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &formatPreview); err != nil {
+		t.Fatal(err)
+	}
+	if formatPreview.File != "main.go" || formatPreview.Content == "" || formatPreview.ContentBytes == 0 {
+		t.Fatalf("format preview 결과가 이상해요: %+v", formatPreview)
+	}
 }
 
 func TestGatewayLSPDiagnosticsAndHover(t *testing.T) {
@@ -1894,6 +1963,20 @@ func Broken( {
 	}
 	if !hover.Found || hover.Symbol != "Run" || !strings.Contains(hover.Documentation, "실행 진입점") || !strings.Contains(hover.Signature, "func (r *Runner) Run()") {
 		t.Fatalf("hover 결과가 이상해요: %+v", hover)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/hover?project_root="+root+"&path=main.go&line=7&column=18", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	hover = LSPHoverResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &hover); err != nil {
+		t.Fatal(err)
+	}
+	if !hover.Found || hover.Symbol != "Run" || hover.Container != "Runner" {
+		t.Fatalf("커서 기반 hover 결과가 이상해요: %+v", hover)
 	}
 }
 
@@ -2319,6 +2402,9 @@ func TestGatewayProbesHTTPMCPServerTools(t *testing.T) {
 	}
 	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "http_echo" || tools.Tools[0].Category != "mcp" || tools.Tools[0].ExampleArguments["text"] != "value" {
 		t.Fatalf("HTTP MCP tools/list 결과가 이상해요: %+v", tools)
+	}
+	if tools.Server.Config["headers"].(map[string]any)["X-Test-Token"] != "[REDACTED]" {
+		t.Fatalf("MCP probe 응답은 server secret config를 숨겨야 해요: %+v", tools.Server.Config)
 	}
 }
 
@@ -2898,7 +2984,7 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := newTestServer(t, store, "")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes=8", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes=7", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -2908,7 +2994,7 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.Skill.ID != resource.ID || preview.File == "" || !preview.Truncated || !strings.Contains(preview.Markdown, "리뷰") {
+	if preview.Skill.ID != resource.ID || preview.File == "" || !preview.Truncated || !utf8.ValidString(preview.Markdown) || strings.Contains(preview.Markdown, "\uFFFD") {
 		t.Fatalf("skill preview가 이상해요: %+v", preview)
 	}
 }

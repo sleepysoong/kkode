@@ -49,5 +49,5 @@ func subagentPreviewFromResource(resource session.Resource) (SubagentPreviewResp
 			return SubagentPreviewResponse{}, err
 		}
 	}
-	return SubagentPreviewResponse{Subagent: toResourceDTO(resource), Name: resource.ID, DisplayName: firstNonEmptyString(cfg.DisplayName, resource.Name), Description: firstNonEmptyString(cfg.Description, resource.Description), Prompt: cfg.Prompt, Tools: cfg.Tools, MCPServers: cfg.MCPServers, MCPServerIDs: cfg.MCPServerIDs, Skills: cfg.Skills, Infer: cfg.Infer}, nil
+	return SubagentPreviewResponse{Subagent: publicResourceDTO(resource), Name: resource.ID, DisplayName: firstNonEmptyString(cfg.DisplayName, resource.Name), Description: firstNonEmptyString(cfg.Description, resource.Description), Prompt: cfg.Prompt, Tools: cfg.Tools, MCPServers: cfg.MCPServers, MCPServerIDs: cfg.MCPServerIDs, Skills: cfg.Skills, Infer: cfg.Infer}, nil
 }

@@ -64,11 +64,8 @@ func readSkillPreview(resource session.Resource, maxBytes int) (SkillPreviewResp
 	if err != nil {
 		return SkillPreviewResponse{}, err
 	}
-	truncated := len(data) > maxBytes
-	if truncated {
-		data = data[:maxBytes]
-	}
-	return SkillPreviewResponse{Skill: toResourceDTO(resource), Directory: dir, File: file, Markdown: string(data), Truncated: truncated}, nil
+	markdown, _, truncated := truncateToolOutput(string(data), maxBytes)
+	return SkillPreviewResponse{Skill: publicResourceDTO(resource), Directory: dir, File: file, Markdown: markdown, Truncated: truncated}, nil
 }
 
 func firstExistingFile(paths ...string) string {

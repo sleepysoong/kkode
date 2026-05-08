@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/printer"
 	"go/scanner"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -50,6 +52,33 @@ type LSPReferenceListResponse struct {
 	References      []LSPReferenceDTO `json:"references"`
 	Limit           int               `json:"limit,omitempty"`
 	ResultTruncated bool              `json:"result_truncated,omitempty"`
+}
+
+type LSPRenameEditDTO struct {
+	File      string `json:"file"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"end_line"`
+	EndColumn int    `json:"end_column"`
+	OldText   string `json:"old_text"`
+	NewText   string `json:"new_text"`
+	Excerpt   string `json:"excerpt,omitempty"`
+}
+
+type LSPRenamePreviewResponse struct {
+	Symbol          string             `json:"symbol"`
+	NewName         string             `json:"new_name"`
+	Edits           []LSPRenameEditDTO `json:"edits"`
+	Limit           int                `json:"limit,omitempty"`
+	ResultTruncated bool               `json:"result_truncated,omitempty"`
+}
+
+type LSPFormatPreviewResponse struct {
+	File             string `json:"file"`
+	Content          string `json:"content"`
+	ContentBytes     int    `json:"content_bytes,omitempty"`
+	ContentTruncated bool   `json:"content_truncated,omitempty"`
+	Changed          bool   `json:"changed"`
 }
 
 type LSPDiagnosticDTO struct {
@@ -110,7 +139,11 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		}
 		writeJSON(w, LSPSymbolListResponse{Symbols: symbols})
 	case "definitions":
-		symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
+		symbol, err := lspSymbolFromQuery(root, r)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
+			return
+		}
 		limit := queryLimit(r, "limit", 50, 200)
 		definitions, err := scanGoDefinitions(root, symbol, limit+1)
 		if err != nil {
@@ -120,7 +153,11 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		definitions, truncated := limitLSPSymbols(definitions, limit)
 		writeJSON(w, LSPLocationListResponse{Locations: definitions, Limit: limit, ResultTruncated: truncated})
 	case "references":
-		symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
+		symbol, err := lspSymbolFromQuery(root, r)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
+			return
+		}
 		limit := queryLimit(r, "limit", 100, 1000)
 		references, err := scanGoReferences(root, symbol, limit+1)
 		if err != nil {
@@ -129,6 +166,33 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		}
 		references, truncated := limitLSPReferences(references, limit)
 		writeJSON(w, LSPReferenceListResponse{References: references, Limit: limit, ResultTruncated: truncated})
+	case "rename-preview":
+		symbol, err := lspSymbolFromQuery(root, r)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
+			return
+		}
+		newName := strings.TrimSpace(r.URL.Query().Get("new_name"))
+		limit := queryLimit(r, "limit", 1000, 5000)
+		preview, err := scanGoRenamePreview(root, symbol, newName, limit+1)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "scan_rename_preview_failed", err.Error())
+			return
+		}
+		edits, truncated := limitLSPRenameEdits(preview.Edits, limit)
+		preview.Edits = edits
+		preview.Limit = limit
+		preview.ResultTruncated = truncated
+		writeJSON(w, preview)
+	case "format-preview":
+		relPath := strings.TrimSpace(r.URL.Query().Get("path"))
+		maxBytes := queryLimit(r, "max_bytes", 1<<20, 8<<20)
+		preview, err := scanGoFormatPreview(root, relPath, maxBytes)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "scan_format_preview_failed", err.Error())
+			return
+		}
+		writeJSON(w, preview)
 	case "diagnostics":
 		limit := queryLimit(r, "limit", 200, 1000)
 		diagnostics, err := scanGoDiagnostics(root, strings.TrimSpace(r.URL.Query().Get("path")), limit+1)
@@ -139,7 +203,12 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		diagnostics, truncated := limitLSPDiagnostics(diagnostics, limit)
 		writeJSON(w, LSPDiagnosticListResponse{Diagnostics: diagnostics, Limit: limit, ResultTruncated: truncated})
 	case "hover":
-		hover, err := scanGoHover(root, strings.TrimSpace(r.URL.Query().Get("symbol")))
+		symbol, err := lspSymbolFromQuery(root, r)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
+			return
+		}
+		hover, err := scanGoHover(root, symbol)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_hover_failed", err.Error())
 			return
@@ -150,6 +219,73 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 	}
 }
 
+func lspSymbolFromQuery(root string, r *http.Request) (string, error) {
+	if symbol := strings.TrimSpace(r.URL.Query().Get("symbol")); symbol != "" {
+		return symbol, nil
+	}
+	relPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	lineText := strings.TrimSpace(r.URL.Query().Get("line"))
+	columnText := strings.TrimSpace(r.URL.Query().Get("column"))
+	if relPath == "" && lineText == "" && columnText == "" {
+		return "", fmt.Errorf("symbol 또는 path,line,column이 필요해요")
+	}
+	if relPath == "" || lineText == "" || columnText == "" {
+		return "", fmt.Errorf("커서 위치 조회에는 path,line,column이 모두 필요해요")
+	}
+	line, err := strconv.Atoi(lineText)
+	if err != nil || line <= 0 {
+		return "", fmt.Errorf("line은 1 이상의 정수여야 해요")
+	}
+	column, err := strconv.Atoi(columnText)
+	if err != nil || column < 0 {
+		return "", fmt.Errorf("column은 0 이상의 정수여야 해요")
+	}
+	if column == 0 {
+		column = 1
+	}
+	return scanGoIdentifierAt(root, relPath, line, column)
+}
+
+func scanGoIdentifierAt(root string, relPath string, line int, column int) (string, error) {
+	absRoot, err := normalizeProjectRoot(root)
+	if err != nil {
+		return "", err
+	}
+	path, err := resolveRelativeGoFile(absRoot, relPath)
+	if err != nil {
+		return "", err
+	}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return "", err
+	}
+	var found string
+	ast.Inspect(file, func(node ast.Node) bool {
+		if found != "" {
+			return false
+		}
+		ident, ok := node.(*ast.Ident)
+		if !ok || ident.Name == "_" {
+			return true
+		}
+		start := fset.Position(ident.Pos())
+		end := fset.Position(ident.End())
+		if start.Line != line || end.Line != line {
+			return true
+		}
+		if column >= start.Column && column < end.Column {
+			found = ident.Name
+			return false
+		}
+		return true
+	})
+	if found == "" {
+		return "", fmt.Errorf("커서 위치의 Go 식별자를 찾지 못했어요: %s:%d:%d", relPath, line, column)
+	}
+	return found, nil
+}
+
 func limitLSPSymbols(items []LSPSymbolDTO, limit int) ([]LSPSymbolDTO, bool) {
 	if limit <= 0 || len(items) <= limit {
 		return items, false
@@ -158,6 +294,13 @@ func limitLSPSymbols(items []LSPSymbolDTO, limit int) ([]LSPSymbolDTO, bool) {
 }
 
 func limitLSPReferences(items []LSPReferenceDTO, limit int) ([]LSPReferenceDTO, bool) {
+	if limit <= 0 || len(items) <= limit {
+		return items, false
+	}
+	return items[:limit], true
+}
+
+func limitLSPRenameEdits(items []LSPRenameEditDTO, limit int) ([]LSPRenameEditDTO, bool) {
 	if limit <= 0 || len(items) <= limit {
 		return items, false
 	}
@@ -334,6 +477,60 @@ func scanGoReferences(root string, symbol string, limit int) ([]LSPReferenceDTO,
 		return nil
 	})
 	return out, err
+}
+
+func scanGoRenamePreview(root string, symbol string, newName string, limit int) (LSPRenamePreviewResponse, error) {
+	symbol = strings.TrimSpace(symbol)
+	newName = strings.TrimSpace(newName)
+	if symbol == "" {
+		return LSPRenamePreviewResponse{}, fmt.Errorf("symbol이 필요해요")
+	}
+	if !token.IsIdentifier(newName) {
+		return LSPRenamePreviewResponse{}, fmt.Errorf("new_name은 Go 식별자여야 해요")
+	}
+	if limit <= 0 {
+		limit = 1000
+	}
+	refs, err := scanGoReferences(root, symbol, limit)
+	if err != nil {
+		return LSPRenamePreviewResponse{}, err
+	}
+	edits := make([]LSPRenameEditDTO, 0, len(refs))
+	for _, ref := range refs {
+		edits = append(edits, LSPRenameEditDTO{
+			File:      ref.File,
+			Line:      ref.Line,
+			Column:    ref.Column,
+			EndLine:   ref.Line,
+			EndColumn: ref.Column + len(ref.Name),
+			OldText:   ref.Name,
+			NewText:   newName,
+			Excerpt:   ref.Excerpt,
+		})
+	}
+	return LSPRenamePreviewResponse{Symbol: symbol, NewName: newName, Edits: edits}, nil
+}
+
+func scanGoFormatPreview(root string, relPath string, maxBytes int) (LSPFormatPreviewResponse, error) {
+	absRoot, err := normalizeProjectRoot(root)
+	if err != nil {
+		return LSPFormatPreviewResponse{}, err
+	}
+	path, err := resolveRelativeGoFile(absRoot, relPath)
+	if err != nil {
+		return LSPFormatPreviewResponse{}, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return LSPFormatPreviewResponse{}, err
+	}
+	formatted, err := format.Source(data)
+	if err != nil {
+		return LSPFormatPreviewResponse{}, err
+	}
+	content, contentBytes, truncated := truncateToolOutput(string(formatted), maxBytes)
+	rel, _ := filepath.Rel(absRoot, path)
+	return LSPFormatPreviewResponse{File: filepath.ToSlash(rel), Content: content, ContentBytes: contentBytes, ContentTruncated: truncated, Changed: !bytes.Equal(data, formatted)}, nil
 }
 
 func matchesLSPSymbol(symbol string, name string, container string) bool {

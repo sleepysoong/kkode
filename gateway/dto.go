@@ -343,6 +343,7 @@ type ProviderTestResponse struct {
 	AuthStatus      string                     `json:"auth_status,omitempty"`
 	Live            bool                       `json:"live,omitempty"`
 	Stream          bool                       `json:"stream,omitempty"`
+	Code            string                     `json:"code,omitempty"`
 	Message         string                     `json:"message,omitempty"`
 	ProviderRequest *ProviderRequestPreviewDTO `json:"provider_request,omitempty"`
 	Result          *ProviderTestResultDTO     `json:"result,omitempty"`

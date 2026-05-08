@@ -106,7 +106,7 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 	switch r.Method {
 	case http.MethodGet:
 		s.withResource(w, r, route.Kind, id, func(resource session.Resource) {
-			writeJSON(w, toResourceDTO(resource))
+			writeJSON(w, publicResourceDTO(resource))
 		})
 	case http.MethodPut:
 		s.saveResource(w, r, store, route, id)
@@ -150,7 +150,7 @@ func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store ses
 	resources, truncated := trimResources(resources, limit)
 	out := make([]ResourceDTO, 0, len(resources))
 	for _, resource := range resources {
-		out = append(out, toResourceDTO(resource))
+		out = append(out, publicResourceDTO(resource))
 	}
 	writeJSON(w, ResourceListResponse{Resources: out, Limit: limit, ResultTruncated: truncated})
 }
@@ -175,7 +175,7 @@ func (s *Server) saveResource(w http.ResponseWriter, r *http.Request, store sess
 	if id == "" {
 		status = http.StatusCreated
 	}
-	writeJSONStatus(w, status, toResourceDTO(saved))
+	writeJSONStatus(w, status, publicResourceDTO(saved))
 }
 
 func (s *Server) resourceStore() session.ResourceStore {
@@ -220,6 +220,10 @@ func toResourceDTO(resource session.Resource) ResourceDTO {
 	}
 	enabled := resource.Enabled
 	return ResourceDTO{ID: resource.ID, Kind: string(resource.Kind), Name: resource.Name, Description: resource.Description, Enabled: &enabled, Config: config, CreatedAt: resource.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: resource.UpdatedAt.Format(time.RFC3339Nano)}
+}
+
+func publicResourceDTO(resource session.Resource) ResourceDTO {
+	return RedactResourceDTO(toResourceDTO(resource))
 }
 
 func cloneResourceDTOs(resources []ResourceDTO) []ResourceDTO {

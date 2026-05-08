@@ -410,6 +410,7 @@ func syncProviderTester() gateway.ProviderTester {
 			out.ProviderRequest = toProviderRequestPreviewDTO(preview)
 		}
 		if err != nil {
+			out.Code = "provider_preview_failed"
 			out.Message = err.Error()
 			return out, nil
 		}
@@ -427,6 +428,7 @@ func syncProviderTester() gateway.ProviderTester {
 		handle, err := app.BuildProviderWithOptions(spec.Name, ".", app.ProviderOptions{})
 		if err != nil {
 			out.OK = false
+			out.Code = "provider_build_failed"
 			out.Message = err.Error()
 			return out, nil
 		}
@@ -435,6 +437,7 @@ func syncProviderTester() gateway.ProviderTester {
 		}
 		if handle.Provider == nil {
 			out.OK = false
+			out.Code = "provider_build_failed"
 			out.Message = "provider factory가 nil provider를 반환했어요"
 			return out, nil
 		}
@@ -442,6 +445,7 @@ func syncProviderTester() gateway.ProviderTester {
 			result, err := smokeStreamProvider(liveCtx, handle.Provider, providerReq, req.MaxResultBytes)
 			if err != nil {
 				out.OK = false
+				out.Code = "provider_live_stream_failed"
 				out.Message = err.Error()
 				return out, nil
 			}
@@ -452,6 +456,7 @@ func syncProviderTester() gateway.ProviderTester {
 		resp, err := handle.Provider.Generate(liveCtx, providerReq)
 		if err != nil {
 			out.OK = false
+			out.Code = "provider_live_failed"
 			out.Message = err.Error()
 			return out, nil
 		}

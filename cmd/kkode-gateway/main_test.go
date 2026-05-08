@@ -489,7 +489,7 @@ func TestSyncProviderTesterAppliesLiveTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.OK || !resp.Live || !strings.Contains(resp.Message, "context deadline exceeded") {
+	if resp.OK || resp.Code != "provider_live_failed" || !resp.Live || !strings.Contains(resp.Message, "context deadline exceeded") {
 		t.Fatalf("provider live smoke timeout이 적용돼야 해요: %+v", resp)
 	}
 	if _, err := providerTestTimeout(-1); err == nil {
@@ -534,6 +534,33 @@ func TestSyncProviderTesterTruncatesLiveResult(t *testing.T) {
 	}
 	if strings.Contains(resp.Result.Text, "ghp_") || !strings.Contains(resp.Result.Text, "[REDACTED]") {
 		t.Fatalf("provider live smoke 결과는 secret을 먼저 숨겨야 해요: %+v", resp.Result)
+	}
+}
+
+func TestSyncProviderTesterReturnsPreviewErrorCode(t *testing.T) {
+	unregister, err := app.RegisterHTTPJSONProvider(app.HTTPJSONProviderRegistration{
+		Name:         "provider-preview-error-test",
+		Profile:      "openai-compatible",
+		BaseURL:      "https://preview-error.example.test/v1",
+		DefaultModel: "gpt-5-mini",
+		Models:       []string{"gpt-5-mini"},
+		Routes: []app.ProviderRouteSpec{{
+			Operation: "responses.create",
+			Method:    "POST",
+			Path:      "/deployments/{metadata.deployment}/responses",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unregister()
+
+	resp, err := syncProviderTester()(context.Background(), "provider-preview-error-test", gateway.ProviderTestRequest{Model: "gpt-5-mini"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.OK || resp.Code != "provider_preview_failed" || !strings.Contains(resp.Message, "metadata.deployment") {
+		t.Fatalf("provider preview 오류 코드를 반환해야 해요: %+v", resp)
 	}
 }
 

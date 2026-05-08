@@ -142,7 +142,7 @@ func (s *Server) readMCPServerResource(w http.ResponseWriter, r *http.Request, s
 			writeError(w, r, http.StatusBadGateway, "mcp_resource_read_failed", err.Error())
 			return
 		}
-		writeJSON(w, MCPResourceReadResponse{Server: toResourceDTO(resource), URI: uri, Contents: contents})
+		writeJSON(w, MCPResourceReadResponse{Server: publicResourceDTO(resource), URI: uri, Contents: contents})
 	})
 }
 
@@ -160,7 +160,7 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 			writeError(w, r, http.StatusBadGateway, "mcp_prompt_get_failed", err.Error())
 			return
 		}
-		writeJSON(w, MCPPromptGetResponse{Server: toResourceDTO(resource), Prompt: promptName, Messages: messages})
+		writeJSON(w, MCPPromptGetResponse{Server: publicResourceDTO(resource), Prompt: promptName, Messages: messages})
 	})
 }
 
@@ -173,21 +173,21 @@ func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, 
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
-			writeJSON(w, MCPToolListResponse{Server: toResourceDTO(resource), Tools: tools})
+			writeJSON(w, MCPToolListResponse{Server: publicResourceDTO(resource), Tools: tools})
 		case "resources":
 			resources, err := probeMCPResources(r.Context(), resource)
 			if err != nil {
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
-			writeJSON(w, MCPResourceListResponse{Server: toResourceDTO(resource), Resources: resources})
+			writeJSON(w, MCPResourceListResponse{Server: publicResourceDTO(resource), Resources: resources})
 		case "prompts":
 			prompts, err := probeMCPPrompts(r.Context(), resource)
 			if err != nil {
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
-			writeJSON(w, MCPPromptListResponse{Server: toResourceDTO(resource), Prompts: prompts})
+			writeJSON(w, MCPPromptListResponse{Server: publicResourceDTO(resource), Prompts: prompts})
 		}
 	})
 }
@@ -207,7 +207,7 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 			return
 		}
 		result, resultBytes, truncated := truncateMCPToolResult(result, req.MaxOutputBytes)
-		writeJSON(w, MCPToolCallResponse{Server: toResourceDTO(resource), Tool: toolName, Result: result, ResultBytes: resultBytes, ResultTruncated: truncated})
+		writeJSON(w, MCPToolCallResponse{Server: publicResourceDTO(resource), Tool: toolName, Result: result, ResultBytes: resultBytes, ResultTruncated: truncated})
 	})
 }
 

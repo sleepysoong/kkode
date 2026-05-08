@@ -131,6 +131,9 @@ func Use(r Runner) {
 	writeFile(t, filepath.Join(root, "bad.go"), `package bad
 func Broken( {
 `)
+	writeFile(t, filepath.Join(root, "pkg", "ugly.go"), `package pkg
+func Ugly( ){println("x")}
+`)
 
 	defs, err := scanGoDefinitions(root, "Runner.Run", 10)
 	if err != nil {
@@ -146,6 +149,30 @@ func Broken( {
 	}
 	if len(refs) < 2 {
 		t.Fatalf("reference scan이 부족해요: %+v", refs)
+	}
+
+	rename, err := scanGoRenamePreview(root, "Runner.Run", "Execute", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rename.Symbol != "Runner.Run" || rename.NewName != "Execute" || len(rename.Edits) < 2 {
+		t.Fatalf("rename preview가 부족해요: %+v", rename)
+	}
+	for _, edit := range rename.Edits {
+		if edit.OldText != "Run" || edit.NewText != "Execute" || edit.EndColumn <= edit.Column {
+			t.Fatalf("rename edit 범위가 이상해요: %+v", edit)
+		}
+	}
+	if _, err := scanGoRenamePreview(root, "Runner.Run", "for", 10); err == nil {
+		t.Fatal("Go keyword는 rename new_name으로 거부해야 해요")
+	}
+
+	formatPreview, err := scanGoFormatPreview(root, "pkg/ugly.go", 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !formatPreview.Changed || !formatPreview.ContentTruncated || formatPreview.ContentBytes <= len(formatPreview.Content) {
+		t.Fatalf("format preview가 이상해요: %+v", formatPreview)
 	}
 
 	diagnostics, err := scanGoDiagnostics(root, "", 10)
