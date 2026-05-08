@@ -272,7 +272,7 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_grep", "pattern이 필요해요")
 		return
 	}
-	limit, ok := queryLimitParam(w, r, "max_matches", 100, 1000, "invalid_file_grep")
+	limit, ok := queryLimitParam(w, r, "max_matches", 100, workspace.MaxGrepMatches, "invalid_file_grep")
 	if !ok {
 		return
 	}
@@ -284,18 +284,22 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	maxMatches := limit
+	if limit < workspace.MaxGrepMatches {
+		maxMatches = limit + 1
+	}
 	opts := workspace.GrepOptions{
 		PathGlob:      strings.TrimSpace(r.URL.Query().Get("path_glob")),
 		Regex:         regex,
 		CaseSensitive: caseSensitive,
-		MaxMatches:    limit + 1,
+		MaxMatches:    maxMatches,
 	}
 	matches, err := ws.Grep(pattern, opts)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "grep_files_failed", err.Error())
 		return
 	}
-	truncated := len(matches) > limit
+	truncated := len(matches) > limit || len(matches) == workspace.MaxGrepMatches
 	if truncated {
 		matches = matches[:limit]
 	}

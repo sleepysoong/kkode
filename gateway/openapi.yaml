@@ -2329,6 +2329,8 @@ components:
           format: int64
         max_workspace_file_read_bytes:
           type: integer
+        max_workspace_grep_matches:
+          type: integer
         max_lsp_format_input_bytes:
           type: integer
         max_lsp_format_preview_bytes:

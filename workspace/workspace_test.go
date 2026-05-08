@@ -136,6 +136,9 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	if _, err := w.Grep("needle", GrepOptions{MaxMatches: -1}); err == nil || !strings.Contains(err.Error(), "max_matches") {
 		t.Fatalf("negative max_matches는 거부해야 해요: %v", err)
 	}
+	if _, err := w.Grep("needle", GrepOptions{MaxMatches: MaxGrepMatches + 1}); err == nil || !strings.Contains(err.Error(), "max_matches") {
+		t.Fatalf("large max_matches는 거부해야 해요: %v", err)
+	}
 	if err := w.EditFile("src/a.txt", "needle", "patched", -1); err == nil || !strings.Contains(err.Error(), "expected_replacements") {
 		t.Fatalf("negative expected_replacements는 거부해야 해요: %v", err)
 	}

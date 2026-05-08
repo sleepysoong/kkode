@@ -71,6 +71,7 @@ var defaultWalkSkipDirs = map[string]struct{}{
 }
 
 const MaxFileReadBytes = 8 << 20
+const MaxGrepMatches = 1000
 const MaxCommandTimeout = 5 * time.Minute
 
 func New(root string) (*Workspace, error) {
@@ -271,6 +272,9 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 	}
 	if opts.MaxMatches < 0 {
 		return nil, errors.New("max_matches must be >= 0")
+	}
+	if opts.MaxMatches > MaxGrepMatches {
+		return nil, fmt.Errorf("max_matches must be <= %d", MaxGrepMatches)
 	}
 	maxMatches := opts.MaxMatches
 	if maxMatches <= 0 {

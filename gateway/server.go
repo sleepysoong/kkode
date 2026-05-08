@@ -765,6 +765,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxProviderTestTimeoutMS:    MaxProviderTestTimeoutMS,
 		MaxHTTPJSONResponseBytes:    httpjson.MaxResponseBytes,
 		MaxWorkspaceFileReadBytes:   workspace.MaxFileReadBytes,
+		MaxWorkspaceGrepMatches:     workspace.MaxGrepMatches,
 		MaxLSPFormatInputBytes:      maxLSPFormatInputBytes,
 		MaxLSPFormatPreviewBytes:    maxLSPFormatPreviewBytes,
 		MaxRunPromptBytes:           maxRunPromptBytes,
