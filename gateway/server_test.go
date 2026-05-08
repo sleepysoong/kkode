@@ -1896,8 +1896,15 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
+	body = bytes.NewBufferString(`{"name":"reviewer","config":{"prompt":"검토해요","tools":["file_read"]}}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/subagents", body)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?limit=1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -1907,11 +1914,28 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Resources) != 1 || listed.Resources[0].Name != "planner" {
+	if len(listed.Resources) != 1 {
 		t.Fatalf("subagent 목록이 이상해요: %+v", listed)
 	}
-	if listed.Limit == 0 || listed.ResultTruncated {
+	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
 		t.Fatalf("resource list metadata가 이상해요: %+v", listed)
+	}
+	firstPageID := listed.Resources[0].ID
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = ResourceListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Resources) != 1 || listed.Resources[0].ID == firstPageID {
+		t.Fatalf("subagent offset page가 이상해요: %+v", listed)
+	}
+	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("resource offset metadata가 이상해요: %+v", listed)
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/mcp/servers/"+created.ID, nil)

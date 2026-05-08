@@ -30,6 +30,7 @@ type ResourceQuery struct {
 	Kind    ResourceKind
 	Enabled *bool
 	Limit   int
+	Offset  int
 }
 
 type ResourceStore interface {

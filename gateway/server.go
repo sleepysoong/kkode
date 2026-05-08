@@ -1421,12 +1421,12 @@ func trimSessionSummaries(sessions []session.SessionSummary, limit int) ([]sessi
 	return sessions, truncated
 }
 
-func trimResources(resources []session.Resource, limit int) ([]session.Resource, bool) {
+func trimResources(resources []session.Resource, limit int) ([]session.Resource, int, bool) {
 	truncated := len(resources) > limit
 	if truncated {
 		resources = resources[:limit]
 	}
-	return resources, truncated
+	return resources, len(resources), truncated
 }
 
 func trimCheckpoints(checkpoints []session.Checkpoint, limit int) ([]session.Checkpoint, bool) {

@@ -942,6 +942,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -1151,6 +1152,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -1251,6 +1253,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -2049,6 +2052,13 @@ components:
         type: integer
         default: 100
         maximum: 500
+    Offset:
+      in: query
+      name: offset
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
   responses:
     Error:
       description: 표준 error envelope이에요.
@@ -3745,6 +3755,10 @@ components:
           items:
             $ref: '#/components/schemas/Resource'
         limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
           type: integer
         result_truncated:
           type: boolean

@@ -234,7 +234,25 @@ func TestResourceStorePersistsManifests(t *testing.T) {
 	if len(items) != 1 || items[0].ID != saved.ID {
 		t.Fatalf("resource list가 이상해요: %+v", items)
 	}
+	second, err := store.SaveResource(ctx, Resource{Kind: ResourceMCPServer, Name: "ctx", Enabled: enabled, Config: []byte(`{"url":"https://example.test/mcp"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPage, err := store.ListResources(ctx, ResourceQuery{Kind: ResourceMCPServer, Enabled: &enabled, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offsetPage, err := store.ListResources(ctx, ResourceQuery{Kind: ResourceMCPServer, Enabled: &enabled, Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage) != 1 || len(offsetPage) != 1 || firstPage[0].ID == offsetPage[0].ID {
+		t.Fatalf("resource offset list가 이상해요: first=%+v offset=%+v", firstPage, offsetPage)
+	}
 	if err := store.DeleteResource(ctx, ResourceMCPServer, saved.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteResource(ctx, ResourceMCPServer, second.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.LoadResource(ctx, ResourceMCPServer, saved.ID); err == nil {

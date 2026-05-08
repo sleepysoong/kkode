@@ -25,6 +25,8 @@ type ResourceDTO struct {
 type ResourceListResponse struct {
 	Resources       []ResourceDTO `json:"resources"`
 	Limit           int           `json:"limit,omitempty"`
+	Offset          int           `json:"offset,omitempty"`
+	NextOffset      int           `json:"next_offset,omitempty"`
 	ResultTruncated bool          `json:"result_truncated,omitempty"`
 }
 
@@ -137,22 +139,23 @@ func (s *Server) withResource(w http.ResponseWriter, r *http.Request, kind sessi
 
 func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute) {
 	limit := queryLimit(r, "limit", 100, 500)
+	offset := queryOffset(r, "offset")
 	var enabled *bool
 	if raw := strings.TrimSpace(r.URL.Query().Get("enabled")); raw != "" {
 		value := raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
 		enabled = &value
 	}
-	resources, err := store.ListResources(r.Context(), session.ResourceQuery{Kind: route.Kind, Enabled: enabled, Limit: limit + 1})
+	resources, err := store.ListResources(r.Context(), session.ResourceQuery{Kind: route.Kind, Enabled: enabled, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_resources_failed", err.Error())
 		return
 	}
-	resources, truncated := trimResources(resources, limit)
+	resources, returned, truncated := trimResources(resources, limit)
 	out := make([]ResourceDTO, 0, len(resources))
 	for _, resource := range resources {
 		out = append(out, publicResourceDTO(resource))
 	}
-	writeJSON(w, ResourceListResponse{Resources: out, Limit: limit, ResultTruncated: truncated})
+	writeJSON(w, ResourceListResponse{Resources: out, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) saveResource(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute, id string) {
