@@ -355,6 +355,8 @@ const (
 	MaxRunPreviewBytes          = 8 << 20
 	MaxProviderTestPreviewBytes = 8 << 20
 	MaxProviderTestResultBytes  = 8 << 20
+	MaxProviderTestOutputTokens = 8192
+	MaxProviderTestTimeoutMS    = 300000
 )
 
 // ProviderTestResultDTO는 provider live smoke 결과를 adapter 친화적으로 요약해요.
@@ -493,6 +495,8 @@ type LimitDTO struct {
 	MaxRunPreviewBytes          int   `json:"max_run_preview_bytes,omitempty"`
 	MaxProviderTestPreviewBytes int   `json:"max_provider_test_preview_bytes,omitempty"`
 	MaxProviderTestResultBytes  int   `json:"max_provider_test_result_bytes,omitempty"`
+	MaxProviderTestOutputTokens int   `json:"max_provider_test_output_tokens,omitempty"`
+	MaxProviderTestTimeoutMS    int   `json:"max_provider_test_timeout_ms,omitempty"`
 	MaxLSPFormatInputBytes      int   `json:"max_lsp_format_input_bytes,omitempty"`
 	MaxLSPFormatPreviewBytes    int   `json:"max_lsp_format_preview_bytes,omitempty"`
 	MaxRunPromptBytes           int   `json:"max_run_prompt_bytes,omitempty"`

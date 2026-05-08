@@ -2315,6 +2315,10 @@ components:
           type: integer
         max_provider_test_result_bytes:
           type: integer
+        max_provider_test_output_tokens:
+          type: integer
+        max_provider_test_timeout_ms:
+          type: integer
         max_lsp_format_input_bytes:
           type: integer
         max_lsp_format_preview_bytes:

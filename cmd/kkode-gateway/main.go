@@ -487,12 +487,16 @@ func validateProviderTestBudgets(req gateway.ProviderTestRequest) error {
 		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", gateway.MaxProviderTestPreviewBytes)
 	case req.MaxOutputTokens < 0:
 		return fmt.Errorf("max_output_tokens는 0 이상이어야 해요")
+	case req.MaxOutputTokens > gateway.MaxProviderTestOutputTokens:
+		return fmt.Errorf("max_output_tokens는 %d 이하여야 해요", gateway.MaxProviderTestOutputTokens)
 	case req.MaxResultBytes < 0:
 		return fmt.Errorf("max_result_bytes는 0 이상이어야 해요")
 	case req.MaxResultBytes > gateway.MaxProviderTestResultBytes:
 		return fmt.Errorf("max_result_bytes는 %d 이하여야 해요", gateway.MaxProviderTestResultBytes)
 	case req.TimeoutMS < 0:
 		return fmt.Errorf("timeout_ms는 0 이상이어야 해요")
+	case req.TimeoutMS > gateway.MaxProviderTestTimeoutMS:
+		return fmt.Errorf("timeout_ms는 %d 이하여야 해요", gateway.MaxProviderTestTimeoutMS)
 	default:
 		return nil
 	}
@@ -504,6 +508,9 @@ func providerTestTimeout(timeoutMS int) (time.Duration, error) {
 	}
 	if timeoutMS == 0 {
 		return 60 * time.Second, nil
+	}
+	if timeoutMS > gateway.MaxProviderTestTimeoutMS {
+		return 0, fmt.Errorf("timeout_ms는 %d 이하여야 해요", gateway.MaxProviderTestTimeoutMS)
 	}
 	return time.Duration(timeoutMS) * time.Millisecond, nil
 }

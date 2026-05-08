@@ -626,9 +626,17 @@ func TestSyncProviderTesterTruncatesLiveResult(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "max_preview_bytes") {
 		t.Fatalf("large max_preview_bytes는 거부해야 해요: %v", err)
 	}
+	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{MaxOutputTokens: gateway.MaxProviderTestOutputTokens + 1})
+	if err == nil || !strings.Contains(err.Error(), "max_output_tokens") {
+		t.Fatalf("large max_output_tokens는 거부해야 해요: %v", err)
+	}
 	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{MaxResultBytes: gateway.MaxProviderTestResultBytes + 1})
 	if err == nil || !strings.Contains(err.Error(), "max_result_bytes") {
 		t.Fatalf("large max_result_bytes는 거부해야 해요: %v", err)
+	}
+	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{TimeoutMS: gateway.MaxProviderTestTimeoutMS + 1})
+	if err == nil || !strings.Contains(err.Error(), "timeout_ms") {
+		t.Fatalf("large timeout_ms는 거부해야 해요: %v", err)
 	}
 }
 

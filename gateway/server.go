@@ -609,12 +609,16 @@ func validateProviderTestRequest(req ProviderTestRequest) error {
 		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", MaxProviderTestPreviewBytes)
 	case req.MaxOutputTokens < 0:
 		return errors.New("max_output_tokens는 0 이상이어야 해요")
+	case req.MaxOutputTokens > MaxProviderTestOutputTokens:
+		return fmt.Errorf("max_output_tokens는 %d 이하여야 해요", MaxProviderTestOutputTokens)
 	case req.MaxResultBytes < 0:
 		return errors.New("max_result_bytes는 0 이상이어야 해요")
 	case req.MaxResultBytes > MaxProviderTestResultBytes:
 		return fmt.Errorf("max_result_bytes는 %d 이하여야 해요", MaxProviderTestResultBytes)
 	case req.TimeoutMS < 0:
 		return errors.New("timeout_ms는 0 이상이어야 해요")
+	case req.TimeoutMS > MaxProviderTestTimeoutMS:
+		return fmt.Errorf("timeout_ms는 %d 이하여야 해요", MaxProviderTestTimeoutMS)
 	default:
 		return validateRunMetadata(req.Metadata)
 	}
@@ -751,6 +755,8 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxRunPreviewBytes:          MaxRunPreviewBytes,
 		MaxProviderTestPreviewBytes: MaxProviderTestPreviewBytes,
 		MaxProviderTestResultBytes:  MaxProviderTestResultBytes,
+		MaxProviderTestOutputTokens: MaxProviderTestOutputTokens,
+		MaxProviderTestTimeoutMS:    MaxProviderTestTimeoutMS,
 		MaxLSPFormatInputBytes:      maxLSPFormatInputBytes,
 		MaxLSPFormatPreviewBytes:    maxLSPFormatPreviewBytes,
 		MaxRunPromptBytes:           maxRunPromptBytes,
