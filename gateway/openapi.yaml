@@ -2331,6 +2331,10 @@ components:
           type: integer
         max_workspace_file_write_bytes:
           type: integer
+        max_workspace_list_entries:
+          type: integer
+        max_workspace_glob_matches:
+          type: integer
         max_workspace_grep_matches:
           type: integer
         max_workspace_patch_bytes:

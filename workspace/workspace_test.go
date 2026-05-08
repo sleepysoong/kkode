@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,34 @@ func TestWorkspaceReadWriteSearchAndPathBoundary(t *testing.T) {
 	}
 	if err := w.WriteFile("large.txt", strings.Repeat("x", MaxFileWriteBytes+1)); err == nil || !strings.Contains(err.Error(), "content") {
 		t.Fatalf("large write는 거부해야 해요: %v", err)
+	}
+}
+
+func TestWorkspaceListAndGlobUseBoundedEnvelope(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < MaxListEntries+2; i++ {
+		name := fmt.Sprintf("entry-%05d.txt", i)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listed, err := w.List(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != MaxListEntries {
+		t.Fatalf("list should cap at %d entries, got %d", MaxListEntries, len(listed))
+	}
+	matches, err := w.Glob("*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != MaxGlobMatches {
+		t.Fatalf("glob should cap at %d matches, got %d", MaxGlobMatches, len(matches))
 	}
 }
 

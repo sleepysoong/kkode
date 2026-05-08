@@ -766,6 +766,8 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxHTTPJSONResponseBytes:    httpjson.MaxResponseBytes,
 		MaxWorkspaceFileReadBytes:   workspace.MaxFileReadBytes,
 		MaxWorkspaceFileWriteBytes:  workspace.MaxFileWriteBytes,
+		MaxWorkspaceListEntries:     workspace.MaxListEntries,
+		MaxWorkspaceGlobMatches:     workspace.MaxGlobMatches,
 		MaxWorkspaceGrepMatches:     workspace.MaxGrepMatches,
 		MaxWorkspacePatchBytes:      workspace.MaxPatchBytes,
 		MaxLSPFormatInputBytes:      maxLSPFormatInputBytes,

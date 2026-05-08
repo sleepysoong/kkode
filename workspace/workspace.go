@@ -72,6 +72,8 @@ var defaultWalkSkipDirs = map[string]struct{}{
 
 const MaxFileReadBytes = 8 << 20
 const MaxFileWriteBytes = 8 << 20
+const MaxListEntries = 5000
+const MaxGlobMatches = 5000
 const MaxGrepMatches = 1000
 const MaxPatchBytes = 1 << 20
 const MaxCommandTimeout = 5 * time.Minute
@@ -226,8 +228,13 @@ func (w *Workspace) List(rel string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(path)
+	dir, err := os.Open(path)
 	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	entries, err := dir.ReadDir(MaxListEntries)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	out := make([]string, 0, len(entries))
@@ -249,6 +256,9 @@ func (w *Workspace) Glob(pattern string) ([]string, error) {
 	err := w.walkFiles(func(_ string, rel string, _ os.DirEntry) error {
 		if globMatches(pattern, rel) {
 			matches = append(matches, rel)
+			if len(matches) >= MaxGlobMatches {
+				return filepath.SkipAll
+			}
 		}
 		return nil
 	})

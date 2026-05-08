@@ -502,6 +502,8 @@ type LimitDTO struct {
 	MaxHTTPJSONResponseBytes    int64 `json:"max_http_json_response_bytes,omitempty"`
 	MaxWorkspaceFileReadBytes   int   `json:"max_workspace_file_read_bytes,omitempty"`
 	MaxWorkspaceFileWriteBytes  int   `json:"max_workspace_file_write_bytes,omitempty"`
+	MaxWorkspaceListEntries     int   `json:"max_workspace_list_entries,omitempty"`
+	MaxWorkspaceGlobMatches     int   `json:"max_workspace_glob_matches,omitempty"`
 	MaxWorkspaceGrepMatches     int   `json:"max_workspace_grep_matches,omitempty"`
 	MaxWorkspacePatchBytes      int   `json:"max_workspace_patch_bytes,omitempty"`
 	MaxLSPFormatInputBytes      int   `json:"max_lsp_format_input_bytes,omitempty"`

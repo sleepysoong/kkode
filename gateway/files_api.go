@@ -135,7 +135,7 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "list_files_failed", err.Error())
 		return
 	}
-	limit, ok := queryLimitParam(w, r, "limit", 500, 5000, "invalid_file_list")
+	limit, ok := queryLimitParam(w, r, "limit", 500, workspace.MaxListEntries, "invalid_file_list")
 	if !ok {
 		return
 	}
@@ -321,7 +321,7 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "glob_files_failed", err.Error())
 		return
 	}
-	limit, ok := queryLimitParam(w, r, "limit", 500, 5000, "invalid_file_glob")
+	limit, ok := queryLimitParam(w, r, "limit", 500, workspace.MaxGlobMatches, "invalid_file_glob")
 	if !ok {
 		return
 	}
@@ -330,17 +330,18 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total := len(paths)
+	workspaceTruncated := total == workspace.MaxGlobMatches
 	if offset >= total {
 		paths = nil
 	} else if offset > 0 {
 		paths = paths[offset:]
 	}
-	truncated := len(paths) > limit
-	if truncated {
+	pageTruncated := len(paths) > limit
+	if pageTruncated {
 		paths = paths[:limit]
 	}
 	returned := len(paths)
-	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths, TotalPaths: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), PathsTruncated: truncated})
+	writeJSON(w, FileGlobResponse{ProjectRoot: projectRoot, Pattern: pattern, Paths: paths, TotalPaths: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, pageTruncated), PathsTruncated: pageTruncated || workspaceTruncated})
 }
 
 func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {
