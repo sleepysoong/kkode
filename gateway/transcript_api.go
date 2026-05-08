@@ -11,29 +11,35 @@ import (
 
 // TranscriptResponse는 외부 adapter가 session 대화를 한 번에 렌더링하거나 내보낼 때 쓰는 응답이에요.
 type TranscriptResponse struct {
-	Session  SessionDTO `json:"session"`
-	Turns    []TurnDTO  `json:"turns"`
-	Markdown string     `json:"markdown"`
-	Redacted bool       `json:"redacted"`
+	Session           SessionDTO `json:"session"`
+	Turns             []TurnDTO  `json:"turns"`
+	Markdown          string     `json:"markdown"`
+	MarkdownBytes     int        `json:"markdown_bytes,omitempty"`
+	MarkdownTruncated bool       `json:"markdown_truncated,omitempty"`
+	Redacted          bool       `json:"redacted"`
 }
 
 // RunTranscriptResponse는 run id 하나로 외부 adapter가 결과와 trace를 렌더링할 때 쓰는 응답이에요.
 type RunTranscriptResponse struct {
-	Run       RunDTO        `json:"run"`
-	Session   SessionDTO    `json:"session"`
-	Turn      *TurnDTO      `json:"turn,omitempty"`
-	Events    []EventDTO    `json:"events,omitempty"`
-	RunEvents []RunEventDTO `json:"run_events,omitempty"`
-	Markdown  string        `json:"markdown"`
-	Redacted  bool          `json:"redacted"`
+	Run               RunDTO        `json:"run"`
+	Session           SessionDTO    `json:"session"`
+	Turn              *TurnDTO      `json:"turn,omitempty"`
+	Events            []EventDTO    `json:"events,omitempty"`
+	RunEvents         []RunEventDTO `json:"run_events,omitempty"`
+	Markdown          string        `json:"markdown"`
+	MarkdownBytes     int           `json:"markdown_bytes,omitempty"`
+	MarkdownTruncated bool          `json:"markdown_truncated,omitempty"`
+	Redacted          bool          `json:"redacted"`
 }
 
 // RequestCorrelationTranscriptResponse는 외부 request id 하나에서 파생된 run transcript 묶음이에요.
 type RequestCorrelationTranscriptResponse struct {
-	RequestID   string                  `json:"request_id"`
-	Transcripts []RunTranscriptResponse `json:"transcripts"`
-	Markdown    string                  `json:"markdown"`
-	Redacted    bool                    `json:"redacted"`
+	RequestID         string                  `json:"request_id"`
+	Transcripts       []RunTranscriptResponse `json:"transcripts"`
+	Markdown          string                  `json:"markdown"`
+	MarkdownBytes     int                     `json:"markdown_bytes,omitempty"`
+	MarkdownTruncated bool                    `json:"markdown_truncated,omitempty"`
+	Redacted          bool                    `json:"redacted"`
 }
 
 func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -48,6 +54,7 @@ func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, se
 	}
 	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
 	resp := toTranscriptResponse(sess, redacted)
+	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(r, resp.Markdown)
 	writeJSON(w, resp)
 }
 
@@ -95,6 +102,7 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 	if redacted {
 		resp.Markdown = llm.RedactSecrets(resp.Markdown)
 	}
+	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(r, resp.Markdown)
 	writeJSON(w, resp)
 }
 
@@ -160,9 +168,15 @@ func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *sess
 				runEvents[i].Payload = redactRawJSON(runEvents[i].Payload)
 			}
 		}
-		return RunTranscriptResponse{Run: run, Session: sessionDTO, Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, Redacted: redacted}
+		markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(r, markdown)
+		return RunTranscriptResponse{Run: run, Session: sessionDTO, Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: markdownTruncated, Redacted: redacted}
 	}
-	return RunTranscriptResponse{Run: run, Session: toSessionDTO(sess), Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, Redacted: redacted}
+	markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(r, markdown)
+	return RunTranscriptResponse{Run: run, Session: toSessionDTO(sess), Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: markdownTruncated, Redacted: redacted}
+}
+
+func limitTranscriptMarkdown(r *http.Request, markdown string) (string, int, bool) {
+	return truncateToolOutput(markdown, queryLimit(r, "max_markdown_bytes", 1<<20, 8<<20))
 }
 
 func (s *Server) runTranscriptTurn(r *http.Request, run RunDTO) *TurnDTO {

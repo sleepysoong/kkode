@@ -2362,7 +2362,7 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript?max_markdown_bytes=48", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -2372,7 +2372,7 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Run.ID != "run_transcript" || got.Turn == nil || got.Turn.ID != turn.ID || len(got.Events) != 1 || len(got.RunEvents) != 1 || !strings.Contains(got.Markdown, "Run events") {
+	if got.Run.ID != "run_transcript" || got.Turn == nil || got.Turn.ID != turn.ID || len(got.Events) != 1 || len(got.RunEvents) != 1 || got.MarkdownBytes <= len(got.Markdown) || !got.MarkdownTruncated {
 		t.Fatalf("run transcript 응답이 이상해요: %+v", got)
 	}
 	body := rec.Body.String()
@@ -2403,7 +2403,7 @@ func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+requestID+"/transcript", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+requestID+"/transcript?max_markdown_bytes=64", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -2413,7 +2413,7 @@ func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.RequestID != requestID || len(got.Transcripts) != 1 || got.Transcripts[0].Run.ID != run.ID || !strings.Contains(got.Markdown, "kkode request transcript") || !strings.Contains(got.Markdown, "run_request_transcript") {
+	if got.RequestID != requestID || len(got.Transcripts) != 1 || got.Transcripts[0].Run.ID != run.ID || !strings.Contains(got.Markdown, "kkode request transcript") || got.MarkdownBytes <= len(got.Markdown) || !got.MarkdownTruncated || !got.Transcripts[0].MarkdownTruncated {
 		t.Fatalf("request transcript 응답이 이상해요: %+v", got)
 	}
 	body := rec.Body.String()
@@ -3859,7 +3859,7 @@ func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	}
 	srv := newTestServer(t, store, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript?max_markdown_bytes=180", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3869,7 +3869,7 @@ func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Session.ID != sess.ID || len(got.Turns) != 1 || !got.Redacted || !strings.Contains(got.Markdown, "[REDACTED]") {
+	if got.Session.ID != sess.ID || len(got.Turns) != 1 || !got.Redacted || !strings.Contains(got.Markdown, "[REDACTED]") || got.MarkdownBytes <= len(got.Markdown) || !got.MarkdownTruncated {
 		t.Fatalf("transcript 응답이 이상해요: %+v", got)
 	}
 	if strings.Contains(got.Markdown, "abc1234567890secretvalue") || strings.Contains(got.Turns[0].Prompt, "abc1234567890secretvalue") {

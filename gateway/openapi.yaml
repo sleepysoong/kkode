@@ -711,6 +711,13 @@ paths:
             type: boolean
             default: true
           description: false면 secret redaction 없이 원문 transcript를 반환해요.
+        - in: query
+          name: max_markdown_bytes
+          schema:
+            type: integer
+            default: 1048576
+            maximum: 8388608
+          description: markdown preview를 이 byte 수까지 UTF-8 안전하게 잘라요. 0이면 제한하지 않아요.
       responses:
         '200':
           description: session transcript예요.
@@ -1898,6 +1905,13 @@ paths:
             type: boolean
             default: true
           description: false면 secret redaction 없이 request transcript를 반환해요.
+        - in: query
+          name: max_markdown_bytes
+          schema:
+            type: integer
+            default: 1048576
+            maximum: 8388608
+          description: request markdown preview와 각 run markdown preview를 이 byte 수까지 UTF-8 안전하게 잘라요. 0이면 제한하지 않아요.
       responses:
         '200':
           description: request id와 연결된 run transcript 묶음이에요.
@@ -1993,6 +2007,13 @@ paths:
             default: 200
             maximum: 1000
           description: durable run event를 읽을 최대 개수예요.
+        - in: query
+          name: max_markdown_bytes
+          schema:
+            type: integer
+            default: 1048576
+            maximum: 8388608
+          description: markdown preview를 이 byte 수까지 UTF-8 안전하게 잘라요. 0이면 제한하지 않아요.
       responses:
         '200':
           description: run 단위 transcript예요.
@@ -3052,6 +3073,12 @@ components:
             $ref: '#/components/schemas/Turn'
         markdown:
           type: string
+        markdown_bytes:
+          type: integer
+          description: 제한 전 markdown byte 수예요.
+        markdown_truncated:
+          type: boolean
+          description: max_markdown_bytes 때문에 markdown이 잘렸는지 알려줘요.
         redacted:
           type: boolean
     RunTranscriptResponse:
@@ -3074,6 +3101,12 @@ components:
             $ref: '#/components/schemas/RunEvent'
         markdown:
           type: string
+        markdown_bytes:
+          type: integer
+          description: 제한 전 markdown byte 수예요.
+        markdown_truncated:
+          type: boolean
+          description: max_markdown_bytes 때문에 markdown이 잘렸는지 알려줘요.
         redacted:
           type: boolean
     EventListResponse:
@@ -3937,6 +3970,12 @@ components:
             $ref: '#/components/schemas/RunTranscriptResponse'
         markdown:
           type: string
+        markdown_bytes:
+          type: integer
+          description: 제한 전 request markdown byte 수예요.
+        markdown_truncated:
+          type: boolean
+          description: max_markdown_bytes 때문에 request markdown이 잘렸는지 알려줘요.
         redacted:
           type: boolean
     RunEventListResponse:
