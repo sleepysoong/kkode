@@ -20,6 +20,7 @@ import (
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
+	ktools "github.com/sleepysoong/kkode/tools"
 )
 
 // safeResponseRecorder는 스트리밍 핸들러를 테스트할 때 본문을 동시에 읽고 쓰는 레이스를 피하려고 써요.
@@ -2827,11 +2828,11 @@ func TestGatewayCallsHTTPMCPServerToolJSON(t *testing.T) {
 }
 
 func TestReadLimitedBodyRejectsOversizedHTTPMCPResponse(t *testing.T) {
-	data, err := readLimitedBody(strings.NewReader("12345"), 5)
+	data, err := ktools.ReadLimitedMCPBody(strings.NewReader("12345"), 5)
 	if err != nil || string(data) != "12345" {
 		t.Fatalf("제한 안의 HTTP MCP body는 읽어야 해요: data=%q err=%v", data, err)
 	}
-	if _, err := readLimitedBody(strings.NewReader("123456"), 5); err == nil || !strings.Contains(err.Error(), "너무 커요") {
+	if _, err := ktools.ReadLimitedMCPBody(strings.NewReader("123456"), 5); err == nil || !strings.Contains(err.Error(), "너무 커요") {
 		t.Fatalf("제한을 넘는 HTTP MCP body는 거부해야 해요: %v", err)
 	}
 }

@@ -207,7 +207,7 @@ func postHTTPMCP(ctx context.Context, server llm.MCPServer, payload map[string]a
 	if nextSessionID == "" {
 		nextSessionID = res.Header.Get("MCP-Session-Id")
 	}
-	data, err := readLimitedMCPBody(res.Body, maxMCPResponseBytes)
+	data, err := ReadLimitedMCPBody(res.Body, maxMCPResponseBytes)
 	if err != nil {
 		return nil, nextSessionID, err
 	}
@@ -294,28 +294,49 @@ func readMCPFrame(r *bufio.Reader) ([]byte, error) {
 func readHTTPSSEMCPResponse(data []byte, id int) (map[string]any, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), maxMCPResponseBytes)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
+	var eventData strings.Builder
+	flush := func() (map[string]any, bool, error) {
+		if eventData.Len() == 0 {
+			return nil, false, nil
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
-			continue
-		}
+		raw := strings.TrimSpace(eventData.String())
+		eventData.Reset()
 		var msg map[string]any
-		if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-			return nil, err
+		if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+			return nil, false, err
 		}
 		if rawErr, ok := msg["error"]; ok {
-			return nil, fmt.Errorf("mcp error: %v", rawErr)
+			return nil, false, fmt.Errorf("mcp error: %v", rawErr)
 		}
 		if intMCPValue(msg["id"]) == id {
-			return msg, nil
+			return msg, true, nil
+		}
+		return nil, false, nil
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			if msg, ok, err := flush(); ok || err != nil {
+				return msg, err
+			}
+			continue
+		}
+		if value, ok := strings.CutPrefix(line, "data:"); ok {
+			value = strings.TrimSpace(value)
+			if value == "" || value == "[DONE]" {
+				continue
+			}
+			if eventData.Len() > 0 {
+				eventData.WriteByte('\n')
+			}
+			eventData.WriteString(value)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+	if msg, ok, err := flush(); ok || err != nil {
+		return msg, err
 	}
 	return nil, fmt.Errorf("HTTP MCP SSE response id %d를 찾지 못했어요", id)
 }
@@ -350,7 +371,7 @@ func truncateMCPUTF8(text string, maxBytes int) string {
 	return text[:end]
 }
 
-func readLimitedMCPBody(r io.Reader, maxBytes int) ([]byte, error) {
+func ReadLimitedMCPBody(r io.Reader, maxBytes int) ([]byte, error) {
 	if maxBytes <= 0 {
 		return io.ReadAll(r)
 	}
