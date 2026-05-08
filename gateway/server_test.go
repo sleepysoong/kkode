@@ -4066,6 +4066,9 @@ func TestGatewayCompactsSessionAndCreatesCheckpoint(t *testing.T) {
 	if got.Session.ID != sess.ID || got.Summary == "" || !strings.Contains(got.Summary, "둘째 요청") || got.Checkpoint == nil {
 		t.Fatalf("compact 응답이 이상해요: %+v", got)
 	}
+	if got.TotalTurns != 3 || got.CompactedTurns != 1 || got.PreservedTurns != 2 || got.PreserveFirstNTurns != 1 || got.PreserveLastNTurns != 1 || got.SummaryBytes != len(got.Summary) || !got.CheckpointCreated {
+		t.Fatalf("compact metadata가 이상해요: %+v", got)
+	}
 	loaded, err := store.LoadSession(context.Background(), sess.ID)
 	if err != nil {
 		t.Fatal(err)

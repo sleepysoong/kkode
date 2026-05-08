@@ -16,9 +16,16 @@ type SessionCompactRequest struct {
 
 // SessionCompactResponse는 compaction 결과와 갱신된 session 요약을 반환해요.
 type SessionCompactResponse struct {
-	Session    SessionDTO     `json:"session"`
-	Summary    string         `json:"summary"`
-	Checkpoint *CheckpointDTO `json:"checkpoint,omitempty"`
+	Session             SessionDTO     `json:"session"`
+	Summary             string         `json:"summary"`
+	TotalTurns          int            `json:"total_turns,omitempty"`
+	CompactedTurns      int            `json:"compacted_turns,omitempty"`
+	PreservedTurns      int            `json:"preserved_turns,omitempty"`
+	PreserveFirstNTurns int            `json:"preserve_first_n_turns,omitempty"`
+	PreserveLastNTurns  int            `json:"preserve_last_n_turns,omitempty"`
+	SummaryBytes        int            `json:"summary_bytes,omitempty"`
+	CheckpointCreated   bool           `json:"checkpoint_created,omitempty"`
+	Checkpoint          *CheckpointDTO `json:"checkpoint,omitempty"`
 }
 
 func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -46,6 +53,8 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionI
 	if preserveLast <= 0 {
 		preserveLast = 4
 	}
+	totalTurns := len(sess.Turns)
+	compactedTurns := compactedTurnCount(totalTurns, preserveFirst, preserveLast)
 	summary := session.BuildExtractiveSummary(sess, preserveFirst, preserveLast)
 	if summary != "" {
 		sess.Summary = summary
@@ -55,15 +64,39 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionI
 			return
 		}
 	}
-	resp := SessionCompactResponse{Session: toSessionDTO(sess), Summary: sess.Summary}
+	resp := SessionCompactResponse{
+		Session:             toSessionDTO(sess),
+		Summary:             sess.Summary,
+		TotalTurns:          totalTurns,
+		CompactedTurns:      compactedTurns,
+		PreservedTurns:      totalTurns - compactedTurns,
+		PreserveFirstNTurns: preserveFirst,
+		PreserveLastNTurns:  preserveLast,
+		SummaryBytes:        len(sess.Summary),
+	}
 	if req.Checkpoint {
 		checkpoint, ok := s.saveCompactionCheckpoint(w, r, sess, summary, preserveFirst, preserveLast)
 		if !ok {
 			return
 		}
+		resp.CheckpointCreated = true
 		resp.Checkpoint = checkpoint
 	}
 	writeJSON(w, resp)
+}
+
+func compactedTurnCount(total int, preserveFirst int, preserveLast int) int {
+	if total <= 0 {
+		return 0
+	}
+	compacted := 0
+	for i := 0; i < total; i++ {
+		preserved := (preserveFirst > 0 && i < preserveFirst) || (preserveLast > 0 && i >= total-preserveLast)
+		if !preserved {
+			compacted++
+		}
+	}
+	return compacted
 }
 
 func (s *Server) saveCompactionCheckpoint(w http.ResponseWriter, r *http.Request, sess *session.Session, summary string, preserveFirst int, preserveLast int) (*CheckpointDTO, bool) {

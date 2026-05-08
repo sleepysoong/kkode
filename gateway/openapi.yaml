@@ -3090,6 +3090,20 @@ components:
           $ref: '#/components/schemas/Session'
         summary:
           type: string
+        total_turns:
+          type: integer
+        compacted_turns:
+          type: integer
+        preserved_turns:
+          type: integer
+        preserve_first_n_turns:
+          type: integer
+        preserve_last_n_turns:
+          type: integer
+        summary_bytes:
+          type: integer
+        checkpoint_created:
+          type: boolean
         checkpoint:
           $ref: '#/components/schemas/Checkpoint'
     TurnListResponse:
