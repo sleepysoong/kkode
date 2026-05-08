@@ -4010,6 +4010,31 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 	}
 }
 
+func TestGatewayImportRejectsUnknownResourceKindBeforeSavingSession(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	body, err := json.Marshal(SessionImportRequest{
+		FormatVersion: sessionExportFormatVersion,
+		RawSession:    sess,
+		Resources:     []ResourceDTO{{ID: "res_bad", Kind: "unknown", Name: "bad", Config: map[string]any{}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_resource") {
+		t.Fatalf("unknown resource kind import는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("resource preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
+	}
+}
+
 func hasResourceDTO(resources []ResourceDTO, id string) bool {
 	for _, resource := range resources {
 		if resource.ID == id {

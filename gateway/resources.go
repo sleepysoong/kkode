@@ -226,6 +226,8 @@ func validateResourceConfig(kind session.ResourceKind, config map[string]any) er
 		}
 	case session.ResourceSubagent:
 		return validateSubagentResourceConfig(config)
+	default:
+		return fmt.Errorf("resource kind는 mcp_server, skill, subagent 중 하나여야 해요")
 	}
 	return nil
 }
