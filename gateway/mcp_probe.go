@@ -169,6 +169,10 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 				return
 			}
 		}
+		if req.MaxMessageBytes < 0 {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", "max_message_bytes는 0 이상이어야 해요")
+			return
+		}
 		messages, err := getMCPPrompt(r.Context(), resource, promptName, req.Arguments)
 		if err != nil {
 			writeError(w, r, http.StatusBadGateway, "mcp_prompt_get_failed", err.Error())
@@ -238,6 +242,10 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 				writeJSONDecodeError(w, r, err)
 				return
 			}
+		}
+		if req.MaxOutputBytes < 0 {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", "max_output_bytes는 0 이상이어야 해요")
+			return
 		}
 		result, err := callMCPTool(r.Context(), resource, toolName, req.Arguments)
 		if err != nil {

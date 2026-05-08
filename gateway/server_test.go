@@ -2896,6 +2896,13 @@ while True:
 	if promptGet.Prompt != "review" || len(promptGet.Messages) != 1 || promptGet.Messages[0].Content["text"] != "review revie" || promptGet.MessageBytes <= 12 || !promptGet.MessageTruncated {
 		t.Fatalf("MCP prompts/get 결과가 이상해요: %+v", promptGet)
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"max_message_bytes":-1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_prompt") {
+		t.Fatalf("음수 max_message_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayCallsMCPServerTool(t *testing.T) {
@@ -2966,6 +2973,14 @@ while True:
 	first, _ = content[0].(map[string]any)
 	if first["text"] != "hello k" || got.ResultBytes <= 7 || !got.ResultTruncated {
 		t.Fatalf("MCP tools/call 출력 제한 응답이 이상해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/echo/call", bytes.NewBufferString(`{"max_output_bytes":-1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_tool_call") {
+		t.Fatalf("음수 MCP max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -3220,6 +3235,20 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "tool_not_found") {
 		t.Fatalf("없는 tool 직접 호출은 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","max_output_bytes":-1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_output_bytes") {
+		t.Fatalf("음수 max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","web_max_bytes":-1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "web_max_bytes") {
+		t.Fatalf("음수 web_max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	root := t.TempDir()

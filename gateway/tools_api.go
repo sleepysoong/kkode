@@ -112,6 +112,14 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "tool이 필요해요")
 		return
 	}
+	if req.MaxOutputBytes < 0 {
+		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "max_output_bytes는 0 이상이어야 해요")
+		return
+	}
+	if req.WebMaxBytes < 0 {
+		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", "web_max_bytes는 0 이상이어야 해요")
+		return
+	}
 	if !gatewayToolExists(req.Tool) {
 		writeError(w, r, http.StatusNotFound, "tool_not_found", "tool을 찾을 수 없어요")
 		return
