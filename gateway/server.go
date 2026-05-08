@@ -920,6 +920,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.Model = strings.TrimSpace(req.Model)
+	req.Agent = strings.TrimSpace(req.Agent)
 	if req.ProjectRoot == "" || req.Provider == "" || req.Model == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_session", "project_root, provider, model이 필요해요")
 		return
@@ -927,6 +928,9 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	mode := session.AgentMode(strings.TrimSpace(req.Mode))
 	if mode == "" {
 		mode = session.AgentModeBuild
+	} else if !validAgentMode(mode) {
+		writeError(w, r, http.StatusBadRequest, "invalid_session", "mode는 build, plan, ask 중 하나여야 해요")
+		return
 	}
 	sess := session.NewSession(req.ProjectRoot, req.Provider, req.Model, req.Agent, mode)
 	if req.Metadata != nil {
@@ -937,6 +941,15 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusCreated, toSessionDTO(sess))
+}
+
+func validAgentMode(mode session.AgentMode) bool {
+	switch mode {
+	case session.AgentModeBuild, session.AgentModePlan, session.AgentModeAsk:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request, sessionID string) {
