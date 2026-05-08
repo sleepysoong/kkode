@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -664,6 +665,9 @@ func (m *AsyncRunManager) recordProgressEvent(ctx context.Context, runID string,
 	if event.At.IsZero() {
 		event.At = m.timestamp()
 	}
+	event.Message = llm.RedactSecrets(event.Message)
+	event.Error = llm.RedactSecrets(event.Error)
+	event.Payload = redactRawJSON(event.Payload)
 	event.Run = run
 	saved, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{
 		RunID:   runID,

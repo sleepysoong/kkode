@@ -656,7 +656,13 @@ func TestAsyncRunManagerRecordsProgressEventsFromRunContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
-		if ok := ReportRunEvent(ctx, RunEventDTO{Type: "tool.completed", Tool: "file_read", Message: "token=abc1234567890secretvalue"}); !ok {
+		if ok := ReportRunEvent(ctx, RunEventDTO{
+			Type:    "tool.completed",
+			Tool:    "file_read",
+			Message: "token=abc1234567890secretvalue",
+			Error:   "stderr token=abc1234567890secretvalue",
+			Payload: []byte(`{"value":"token=abc1234567890secretvalue"}`),
+		}); !ok {
 			t.Fatal("run context에 progress reporter가 필요해요")
 		}
 		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
@@ -671,7 +677,7 @@ func TestAsyncRunManagerRecordsProgressEventsFromRunContext(t *testing.T) {
 	for _, event := range replay {
 		if event.Type == "tool.completed" && event.Tool == "file_read" {
 			sawTrace = true
-			if event.Run.ID != run.ID || event.Message != "token=abc1234567890secretvalue" {
+			if event.Run.ID != run.ID || !strings.Contains(event.Message, "[REDACTED]") || strings.Contains(event.Message, "abc1234567890secretvalue") || strings.Contains(event.Error, "abc1234567890secretvalue") || strings.Contains(string(event.Payload), "abc1234567890secretvalue") {
 				t.Fatalf("progress event replay가 이상해요: %+v", event)
 			}
 		}
