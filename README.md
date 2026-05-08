@@ -436,8 +436,8 @@ go vet ./...
 
 ```bash
 ./scripts/verify-go-examples.sh
-./scripts/copilot-smoke.sh gpt-5-mini
-./scripts/copilot-tool-smoke.sh gpt-5-mini
+./scripts/copilot-smoke.sh gpt-5-mini       # Copilot auth가 없으면 SKIP 처리해요
+./scripts/copilot-tool-smoke.sh gpt-5-mini  # Copilot auth가 없으면 SKIP 처리해요
 ./scripts/codexcli-smoke.sh gpt-5.3-codex
 ./scripts/omniroute-smoke.sh   # OmniRoute가 안 떠 있으면 SKIP 처리해요
 ```
