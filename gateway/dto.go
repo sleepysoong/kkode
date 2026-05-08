@@ -484,6 +484,11 @@ type LimitDTO struct {
 	MaxRunMetadataValueBytes int   `json:"max_run_metadata_value_bytes,omitempty"`
 	MaxRequestIDBytes        int   `json:"max_request_id_bytes,omitempty"`
 	MaxIdempotencyKeyBytes   int   `json:"max_idempotency_key_bytes,omitempty"`
+	MaxToolCallNameBytes     int   `json:"max_tool_call_name_bytes,omitempty"`
+	MaxToolCallIDBytes       int   `json:"max_tool_call_id_bytes,omitempty"`
+	MaxToolCallArgumentBytes int   `json:"max_tool_call_argument_bytes,omitempty"`
+	MaxToolCallOutputBytes   int   `json:"max_tool_call_output_bytes,omitempty"`
+	MaxToolCallWebBytes      int64 `json:"max_tool_call_web_bytes,omitempty"`
 	MaxRunProviderModelBytes int   `json:"max_run_provider_model_bytes,omitempty"`
 }
 

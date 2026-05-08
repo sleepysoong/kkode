@@ -2309,6 +2309,17 @@ components:
           type: integer
         max_idempotency_key_bytes:
           type: integer
+        max_tool_call_name_bytes:
+          type: integer
+        max_tool_call_id_bytes:
+          type: integer
+        max_tool_call_argument_bytes:
+          type: integer
+        max_tool_call_output_bytes:
+          type: integer
+        max_tool_call_web_bytes:
+          type: integer
+          format: int64
         max_run_provider_model_bytes:
           type: integer
     DiagnosticsResponse:
