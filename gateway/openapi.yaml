@@ -107,6 +107,9 @@ paths:
     get:
       operationId: getProviders
       summary: gateway가 알고 있는 provider 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -2342,6 +2345,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Provider'
+        total_providers:
+          type: integer
+          description: limit/offset 적용 전 provider 수예요.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
+          description: limit 때문에 provider 목록이 잘렸는지 알려줘요.
     ProviderTestRequest:
       type: object
       properties:

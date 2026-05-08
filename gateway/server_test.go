@@ -1706,6 +1706,9 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if openaiProvider.Conversion == nil || openaiProvider.Conversion.Source != "http-json+sse" || openaiProvider.Conversion.Operations[0] != "responses.create" {
 		t.Fatalf("provider 변환 profile discovery가 필요해요: %+v", openaiProvider)
 	}
+	if providers.TotalProviders != 2 || providers.Limit != 2 || providers.Offset != 0 || providers.NextOffset != 0 || providers.ResultTruncated {
+		t.Fatalf("provider 목록 metadata가 이상해요: %+v", providers)
+	}
 	if len(openaiProvider.Aliases) != 1 || openaiProvider.Aliases[0] != "openai-compatible" {
 		t.Fatalf("provider alias discovery가 필요해요: %+v", openaiProvider)
 	}
@@ -1801,6 +1804,23 @@ func TestGatewayDiscoveryUsesStableProviderAndModelOrder(t *testing.T) {
 	}
 	if len(providers.Providers) != 2 || providers.Providers[0].Name != "alpha" || providers.Providers[1].Name != "zeta" {
 		t.Fatalf("provider discovery는 이름순으로 안정적이어야 해요: %+v", providers.Providers)
+	}
+	if providers.TotalProviders != 2 || providers.Limit != 2 || providers.Offset != 0 || providers.NextOffset != 0 || providers.ResultTruncated {
+		t.Fatalf("provider discovery metadata가 이상해요: %+v", providers)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers?limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("provider page status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var providerPage ProviderListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &providerPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(providerPage.Providers) != 1 || providerPage.Providers[0].Name != "zeta" || providerPage.TotalProviders != 2 || providerPage.Limit != 1 || providerPage.Offset != 1 || providerPage.NextOffset != 0 || providerPage.ResultTruncated {
+		t.Fatalf("provider page가 이상해요: %+v", providerPage)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/models", nil)

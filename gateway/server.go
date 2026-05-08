@@ -514,7 +514,11 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 		writeError(w, r, http.StatusNotFound, "not_found", "provider endpoint를 찾을 수 없어요")
 		return
 	}
-	writeJSON(w, ProviderListResponse{Providers: providersForDiscovery(s.cfg.Providers)})
+	providers := providersForDiscovery(s.cfg.Providers)
+	limit := queryLimit(r, "limit", len(providers), 5000)
+	offset := queryOffset(r, "offset")
+	page, returned, truncated := pageSlice(providers, limit, offset)
+	writeJSON(w, ProviderListResponse{Providers: page, TotalProviders: len(providers), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerName string) {

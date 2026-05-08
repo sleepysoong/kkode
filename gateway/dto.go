@@ -328,7 +328,12 @@ type RouteDTO struct {
 }
 
 type ProviderListResponse struct {
-	Providers []ProviderDTO `json:"providers"`
+	Providers       []ProviderDTO `json:"providers"`
+	TotalProviders  int           `json:"total_providers,omitempty"`
+	Limit           int           `json:"limit,omitempty"`
+	Offset          int           `json:"offset,omitempty"`
+	NextOffset      int           `json:"next_offset,omitempty"`
+	ResultTruncated bool          `json:"result_truncated,omitempty"`
 }
 
 // ProviderTestRequest는 session 없이 provider 변환/인증/live smoke를 점검할 때 써요.
