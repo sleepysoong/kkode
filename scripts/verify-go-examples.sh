@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="${TMPDIR:-/tmp}/kkode-go-verify"
-rm -rf "$work"
-mkdir -p "$work"
+work="$(mktemp -d "${TMPDIR:-/tmp}/kkode-go-verify.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
 
 printf 'Go: '
 go version
