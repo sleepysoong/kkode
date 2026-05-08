@@ -1642,6 +1642,13 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || gotReq.Metadata[DefaultMCPMetadataKey] != "context7" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","max_preview_bytes":-1}`))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_preview_bytes") {
+		t.Fatalf("negative max_preview_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func containsString(values []string, target string) bool {

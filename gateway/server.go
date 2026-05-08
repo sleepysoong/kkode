@@ -1318,6 +1318,9 @@ func validateRunStartRequest(req RunStartRequest) error {
 	if strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.Prompt) == "" {
 		return errors.New("session_id와 prompt가 필요해요")
 	}
+	if req.MaxPreviewBytes < 0 {
+		return errors.New("max_preview_bytes는 0 이상이어야 해요")
+	}
 	return nil
 }
 
