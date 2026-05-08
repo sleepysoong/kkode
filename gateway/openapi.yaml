@@ -255,6 +255,9 @@ paths:
           name: max_bytes
           schema:
             type: integer
+            default: 1048576
+            minimum: 0
+            maximum: 8388608
       responses:
         '200':
           description: file content예요.

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +10,9 @@ import (
 
 	"github.com/sleepysoong/kkode/workspace"
 )
+
+const defaultFileContentBytes = 1 << 20
+const maxFileContentBytes = 8 << 20
 
 type FileEntryDTO struct {
 	Name    string    `json:"name"`
@@ -191,8 +195,15 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", 0, "invalid_file_range")
+	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", defaultFileContentBytes, "invalid_file_range")
 	if !ok {
+		return
+	}
+	if maxBytes <= 0 {
+		maxBytes = defaultFileContentBytes
+	}
+	if maxBytes > maxFileContentBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_range", fmt.Sprintf("max_bytes는 %d 이하여야 해요", maxFileContentBytes))
 		return
 	}
 	opts := workspace.ReadOptions{OffsetLine: offsetLine, LimitLines: limitLines, MaxBytes: maxBytes}

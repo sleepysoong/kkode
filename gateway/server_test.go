@@ -5338,6 +5338,21 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 		t.Fatalf("file content byte 제한 metadata가 이상해요: %+v", content)
 	}
 
+	writeTestFile(t, filepath.Join(root, "docs", "large.md"), strings.Repeat("x", defaultFileContentBytes+1))
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/large.md", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	content = FileContentResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &content); err != nil {
+		t.Fatal(err)
+	}
+	if content.ContentBytes != defaultFileContentBytes || content.FileBytes != int64(defaultFileContentBytes+1) || !content.ContentTruncated {
+		t.Fatalf("file content 기본 byte 제한 metadata가 이상해요: %+v", content)
+	}
+
 	invalidRanges := []struct {
 		name  string
 		query string
@@ -5349,6 +5364,7 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 		{name: "bad limit", query: "limit_lines=abc", want: "limit_lines"},
 		{name: "negative max bytes", query: "max_bytes=-1", want: "max_bytes"},
 		{name: "bad max bytes", query: "max_bytes=abc", want: "max_bytes"},
+		{name: "large max bytes", query: "max_bytes=" + strconv.Itoa(maxFileContentBytes+1), want: "max_bytes"},
 	}
 	for _, tc := range invalidRanges {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/b.md&"+tc.query, nil)

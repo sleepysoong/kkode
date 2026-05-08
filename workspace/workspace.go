@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,7 +120,7 @@ func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	b, err := os.ReadFile(path)
+	b, err := readFileBytes(path, opts.MaxBytes)
 	if err != nil {
 		return "", err
 	}
@@ -140,6 +141,18 @@ func (w *Workspace) ReadFileRange(rel string, opts ReadOptions) (string, error) 
 		text = strings.Join(lines[start:end], "\n")
 	}
 	return text, nil
+}
+
+func readFileBytes(path string, maxBytes int) ([]byte, error) {
+	if maxBytes <= 0 {
+		return os.ReadFile(path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, int64(maxBytes)+int64(utf8.UTFMax)))
 }
 
 func truncateUTF8Bytes(b []byte, maxBytes int) []byte {

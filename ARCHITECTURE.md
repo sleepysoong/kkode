@@ -631,6 +631,8 @@ POST /api/v1/runs/{run_id}/retry
 
 Skill preview의 `max_bytes`는 기본 65536 byte, 최대 1048576 byte로 제한해서 저장된 SKILL.md/README.md를 외부 adapter용 bounded preview로만 반환해요.
 
+파일 content preview의 `max_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한하고, `workspace.ReadFileRange`는 byte limit이 있으면 제한된 reader로 필요한 범위만 읽은 뒤 UTF-8 안전 경계에서 잘라요.
+
 Run event replay와 request correlation event replay는 같은 incremental cursor 계약을 공유해요. JSON과 SSE 요청은 durable event를 읽기 전에 `after_seq`를 검증하고, adapter가 polling을 이어가야 하면 JSON 응답에 `next_after_seq`를 노출해요.
 
 Manifest 저장/import 경계에서는 MCP server, skill, subagent config를 검증한 뒤 identifier-like 문자열과 목록을 canonical 값으로 정리해요. 이 때문에 export, preview, run assembly가 같은 resource 값을 사용하고 외부 adapter는 공백/중복이 제거된 manifest 계약을 기준으로 UI cache와 diff를 만들 수 있어요.
