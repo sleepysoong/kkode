@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const DefaultMaxResponseBodyBytes int64 = 32 << 20
@@ -91,9 +92,23 @@ func ReadResponseBody(body io.Reader, maxBytes int64) ([]byte, bool, error) {
 	}
 	truncated := int64(len(data)) > maxBytes
 	if truncated {
-		data = data[:maxBytes]
+		data = truncateUTF8Bytes(data, int(maxBytes))
 	}
 	return data, truncated, nil
+}
+
+func truncateUTF8Bytes(data []byte, maxBytes int) []byte {
+	if maxBytes <= 0 {
+		return nil
+	}
+	if len(data) <= maxBytes {
+		return data
+	}
+	data = data[:maxBytes]
+	for len(data) > 0 && !utf8.Valid(data) {
+		data = data[:len(data)-1]
+	}
+	return data
 }
 
 func ResponseBodyTooLarge(label string, maxBytes int64) error {

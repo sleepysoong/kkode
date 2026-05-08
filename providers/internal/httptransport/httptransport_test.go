@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestNewJSONRequestAppliesSharedHeaders(t *testing.T) {
@@ -44,6 +45,16 @@ func TestDoJSONRawReturnsErrorBody(t *testing.T) {
 	var httpErr *HTTPError
 	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusBadGateway || httpErr.Body != "nope\n" {
 		t.Fatalf("공통 HTTP 오류 분류가 필요해요: %#v", err)
+	}
+}
+
+func TestReadResponseBodyTruncatesAtUTF8Boundary(t *testing.T) {
+	data, truncated, err := ReadResponseBody(strings.NewReader("가나다"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !truncated || string(data) != "가" || !utf8.Valid(data) {
+		t.Fatalf("provider body should be UTF-8 bounded: data=%q truncated=%v valid=%v", string(data), truncated, utf8.Valid(data))
 	}
 }
 
