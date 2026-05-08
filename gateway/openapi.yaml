@@ -2499,7 +2499,7 @@ components:
           type: string
     StatsResponse:
       type: object
-      required: [sessions, turns, events, todos, checkpoints, runs, resources]
+      required: [sessions, turns, events, todos, checkpoints, total_runs, runs, total_resources, resources]
       properties:
         sessions:
           type: integer

@@ -168,6 +168,15 @@ func TestOpenAPISchemaContractCoversGatewayDTOs(t *testing.T) {
 	}
 }
 
+func TestOpenAPIStatsResponseRequiresDashboardTotals(t *testing.T) {
+	required := readOpenAPISchemaRequired(t, "StatsResponse")
+	for _, field := range []string{"sessions", "turns", "events", "todos", "checkpoints", "total_runs", "runs", "total_resources", "resources"} {
+		if !required[field] {
+			t.Fatalf("StatsResponse OpenAPI required에 %s 필드가 필요해요: %+v", field, sortedKeys(required))
+		}
+	}
+}
+
 func coreDTOSchemaCases() []dtoSchemaCase {
 	return []dtoSchemaCase{
 		{schema: "HealthResponse", dto: HealthResponse{}},
@@ -713,6 +722,40 @@ func readOpenAPISchemaProperties(t *testing.T) map[string]map[string]bool {
 		}
 	}
 	return out
+}
+
+func readOpenAPISchemaRequired(t *testing.T, schema string) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemaRe := regexp.MustCompile(`^    ([A-Za-z0-9]+):$`)
+	requiredRe := regexp.MustCompile(`^\s*required:\s*\[([^\]]*)\]`)
+	current := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if m := schemaRe.FindStringSubmatch(line); m != nil {
+			current = m[1]
+			continue
+		}
+		if current != schema {
+			continue
+		}
+		m := requiredRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		out := map[string]bool{}
+		for _, field := range strings.Split(m[1], ",") {
+			field = strings.TrimSpace(field)
+			if field != "" {
+				out[field] = true
+			}
+		}
+		return out
+	}
+	t.Fatalf("OpenAPI schema %s required 목록을 찾지 못했어요", schema)
+	return nil
 }
 
 func readOpenAPIComponentNames(t *testing.T, text string) map[string]map[string]bool {
