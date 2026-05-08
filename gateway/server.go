@@ -1411,6 +1411,10 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		writeError(w, r, http.StatusNotImplemented, "run_getter_missing", "이 gateway에는 RunGetter가 연결되지 않았어요")
 		return
 	}
+	afterSeq, ok := queryAfterSeq(w, r)
+	if !ok {
+		return
+	}
 	var live <-chan RunDTO
 	var liveEvents <-chan RunEventDTO
 	var unsubscribe func()
@@ -1428,20 +1432,18 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		return
 	}
 	if !wantsSSE(r) {
-		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run))
+		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq))
 		return
 	}
-	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe)
+	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq)
 }
 
-func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO) []RunEventDTO {
-	afterSeq := queryInt(r, "after_seq", 0)
+func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO, afterSeq int) []RunEventDTO {
 	limit := queryLimit(r, "limit", 200, 1000)
 	return s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit)
 }
 
-func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO) RunEventListResponse {
-	afterSeq := queryInt(r, "after_seq", 0)
+func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO, afterSeq int) RunEventListResponse {
 	limit := queryLimit(r, "limit", 200, 1000)
 	events := s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit+1)
 	events, truncated, nextAfterSeq := trimRunEvents(events, limit)
@@ -1535,7 +1537,7 @@ func trimRunEvents(events []RunEventDTO, limit int) ([]RunEventDTO, bool, int) {
 	return events, truncated, next
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func()) {
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int) {
 	if unsubscribe != nil {
 		defer unsubscribe()
 	}
@@ -1545,7 +1547,7 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	flusher, _ := w.(http.Flusher)
 	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
 	defer heartbeat.Stop()
-	events := s.runEventSnapshot(r, runID, initial)
+	events := s.runEventSnapshot(r, runID, initial, afterSeq)
 	seq := 0
 	lastStatus := initial.Status
 	for _, event := range events {

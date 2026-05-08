@@ -2619,6 +2619,38 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 	}
 }
 
+func TestGatewayRunEventsRejectInvalidAfterSeq(t *testing.T) {
+	store := openTestStore(t)
+	run := RunDTO{ID: "run_after_seq", SessionID: "sess_1", Status: "completed", EventsURL: runEventsURL("run_after_seq")}
+	srv, err := New(Config{
+		Store: store,
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			copy := run
+			return &copy, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			return []RunEventDTO{{Seq: 1, At: time.Now().UTC(), Type: "run.completed", Run: run}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{name: "negative", query: "after_seq=-1"},
+		{name: "malformed", query: "after_seq=abc"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?"+tc.query, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
+			t.Fatalf("%s run after_seq는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestGatewayRunSSESendsHeartbeat(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
