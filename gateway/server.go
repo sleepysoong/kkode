@@ -1732,6 +1732,30 @@ func queryLimit(r *http.Request, key string, fallback int, maxValue int) int {
 	return limit
 }
 
+func queryNonNegativeIntParam(w http.ResponseWriter, r *http.Request, key string, fallback int, code string) (int, bool) {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return fallback, true
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		writeError(w, r, http.StatusBadRequest, code, key+"는 0 이상이어야 해요")
+		return 0, false
+	}
+	return parsed, true
+}
+
+func queryNonNegativeLimitParam(w http.ResponseWriter, r *http.Request, key string, fallback int, maxValue int, code string) (int, bool) {
+	value, ok := queryNonNegativeIntParam(w, r, key, fallback, code)
+	if !ok {
+		return 0, false
+	}
+	if maxValue > 0 && value > maxValue {
+		return maxValue, true
+	}
+	return value, true
+}
+
 func queryOffset(r *http.Request, key string) int {
 	return queryInt(r, key, 0)
 }

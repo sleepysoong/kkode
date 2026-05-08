@@ -27,8 +27,12 @@ type skillPreviewConfig struct {
 }
 
 func (s *Server) previewSkill(w http.ResponseWriter, r *http.Request, skillID string) {
+	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", 65536, "invalid_skill_preview")
+	if !ok {
+		return
+	}
 	s.withResource(w, r, session.ResourceSkill, skillID, func(resource session.Resource) {
-		preview, err := readSkillPreview(resource, queryInt(r, "max_bytes", 65536))
+		preview, err := readSkillPreview(resource, maxBytes)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "skill_preview_failed", err.Error())
 			return

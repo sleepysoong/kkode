@@ -3780,6 +3780,20 @@ func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
 	if preview.Skill.ID != resource.ID || preview.File == "" || preview.MarkdownBytes <= len(preview.Markdown) || !preview.MarkdownTruncated || !preview.Truncated || !utf8.ValidString(preview.Markdown) || strings.Contains(preview.Markdown, "\uFFFD") {
 		t.Fatalf("skill preview가 이상해요: %+v", preview)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("음수 skill preview max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/"+resource.ID+"/preview?max_bytes=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("잘못된 skill preview max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayPreviewsSubagentManifest(t *testing.T) {
@@ -3802,6 +3816,20 @@ func TestGatewayPreviewsSubagentManifest(t *testing.T) {
 	context7, _ := preview.MCPServers["context7"].(map[string]any)
 	if preview.Subagent.ID != resource.ID || preview.DisplayName != "Planner" || preview.Prompt == "" || preview.PromptBytes <= len(preview.Prompt) || !preview.PromptTruncated || !utf8.ValidString(preview.Prompt) || strings.Contains(preview.Prompt, "\uFFFD") || len(preview.Tools) != 1 || preview.MCPServers["fs"] != "mcp-fs" || len(preview.MCPServerIDs) != 1 || context7["url"] != "https://mcp.context7.com/mcp" || preview.Infer == nil || !*preview.Infer {
 		t.Fatalf("subagent preview가 이상해요: %+v", preview)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents/"+resource.ID+"/preview?max_prompt_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_prompt_bytes") {
+		t.Fatalf("음수 subagent preview max_prompt_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents/"+resource.ID+"/preview?max_prompt_bytes=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_prompt_bytes") {
+		t.Fatalf("잘못된 subagent preview max_prompt_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -34,8 +34,12 @@ type subagentPreviewConfig struct {
 }
 
 func (s *Server) previewSubagent(w http.ResponseWriter, r *http.Request, subagentID string) {
+	maxPromptBytes, ok := queryNonNegativeLimitParam(w, r, "max_prompt_bytes", 65536, 1<<20, "invalid_subagent_preview")
+	if !ok {
+		return
+	}
 	s.withResource(w, r, session.ResourceSubagent, subagentID, func(resource session.Resource) {
-		preview, err := subagentPreviewFromResource(resource, queryLimit(r, "max_prompt_bytes", 65536, 1<<20))
+		preview, err := subagentPreviewFromResource(resource, maxPromptBytes)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "subagent_preview_failed", err.Error())
 			return
