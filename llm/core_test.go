@@ -20,6 +20,20 @@ func TestTemplateRenderAndValidate(t *testing.T) {
 	}
 }
 
+func TestTemplateRenderCacheUsesTextInKey(t *testing.T) {
+	first, err := (Template{Name: "shared", Text: "first {{.Name}}"}).Render(map[string]any{"Name": "kkode"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := (Template{Name: "shared", Text: "second {{.Name}}"}).Render(map[string]any{"Name": "kkode"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != "first kkode" || second != "second kkode" {
+		t.Fatalf("same-name templates with different text should not share parsed bodies: first=%q second=%q", first, second)
+	}
+}
+
 func TestRouterAndUsage(t *testing.T) {
 	p := scriptedTextProvider{}
 	r := NewRouter()
