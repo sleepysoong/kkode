@@ -1223,6 +1223,30 @@ func TestGatewayRequestCorrelationSSESendsHeartbeat(t *testing.T) {
 	}
 }
 
+func TestGatewayRequestCorrelationSSERejectsInvalidHeartbeat(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return []RunDTO{{ID: "run_req_bad_heartbeat", SessionID: "sess_1", Status: "running", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{"heartbeat_ms=-1", "heartbeat_ms=abc"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_bad_heartbeat/events?stream=true&"+query, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "heartbeat_ms") {
+			t.Fatalf("잘못된 request SSE heartbeat_ms는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("heartbeat_ms 오류는 SSE stream을 열기 전에 반환해야 해요: query=%s header=%s", query, rec.Header().Get("Content-Type"))
+		}
+	}
+}
+
 func TestGatewayRequestCorrelationSSECatchesUpdateDuringReplay(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
@@ -2897,6 +2921,32 @@ func TestGatewayRunSSESendsHeartbeat(t *testing.T) {
 	}
 	if !strings.Contains(rec.BodyString(), ": heartbeat") {
 		t.Fatalf("run SSE heartbeat가 필요해요: %s", rec.BodyString())
+	}
+}
+
+func TestGatewayRunSSERejectsInvalidHeartbeat(t *testing.T) {
+	store := openTestStore(t)
+	run := RunDTO{ID: "run_bad_heartbeat", SessionID: "sess_1", Status: "running", EventsURL: runEventsURL("run_bad_heartbeat")}
+	srv, err := New(Config{
+		Store: store,
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			copy := run
+			return &copy, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{"heartbeat_ms=-1", "heartbeat_ms=abc"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_bad_heartbeat/events?stream=true&"+query, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "heartbeat_ms") {
+			t.Fatalf("잘못된 run SSE heartbeat_ms는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("heartbeat_ms 오류는 SSE stream을 열기 전에 반환해야 해요: query=%s header=%s", query, rec.Header().Get("Content-Type"))
+		}
 	}
 }
 

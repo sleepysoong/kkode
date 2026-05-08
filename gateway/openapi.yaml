@@ -1907,7 +1907,9 @@ paths:
           schema:
             type: integer
             default: 15000
-          description: SSE idle heartbeat 주기예요. 너무 낮으면 10ms로 보정해요.
+            minimum: 0
+            maximum: 300000
+          description: SSE idle heartbeat 주기예요. 잘못된 값은 400으로 거부하고 0은 기본 15초, 너무 낮은 값은 10ms로 보정해요.
       responses:
         '200':
           description: request id와 연결된 run event 목록이에요.
@@ -2019,7 +2021,9 @@ paths:
           schema:
             type: integer
             default: 15000
-          description: SSE idle heartbeat 주기예요. 너무 낮으면 10ms로 보정해요.
+            minimum: 0
+            maximum: 300000
+          description: SSE idle heartbeat 주기예요. 잘못된 값은 400으로 거부하고 0은 기본 15초, 너무 낮은 값은 10ms로 보정해요.
       responses:
         '200':
           description: run event snapshot 또는 live stream이에요.

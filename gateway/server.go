@@ -305,13 +305,21 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	heartbeatInterval := 15 * time.Second
+	if wantsSSE(r) {
+		var ok bool
+		heartbeatInterval, ok = querySSEHeartbeatInterval(w, r, "invalid_request_events")
+		if !ok {
+			return
+		}
+	}
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: 200})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
 	if wantsSSE(r) {
-		s.writeRequestEventsSSE(w, r, runs, limit, afterSeq)
+		s.writeRequestEventsSSE(w, r, runs, limit, afterSeq, heartbeatInterval)
 		return
 	}
 	events, err := s.collectRequestRunEvents(r, runs, limit+1, afterSeq)
@@ -379,12 +387,12 @@ func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int,
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}}, nil
 }
 
-func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int, afterSeq int) {
+func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int, afterSeq int, heartbeatInterval time.Duration) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
-	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
+	heartbeat := time.NewTicker(heartbeatInterval)
 	defer heartbeat.Stop()
 	updates := make(chan RunEventDTO, len(runs)*2)
 	active := 0
@@ -1468,6 +1476,14 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 	if !ok {
 		return
 	}
+	heartbeatInterval := 15 * time.Second
+	if wantsSSE(r) {
+		var ok bool
+		heartbeatInterval, ok = querySSEHeartbeatInterval(w, r, "invalid_run_events")
+		if !ok {
+			return
+		}
+	}
 	var live <-chan RunDTO
 	var liveEvents <-chan RunEventDTO
 	var unsubscribe func()
@@ -1488,7 +1504,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq, limit))
 		return
 	}
-	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq, limit)
+	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq, limit, heartbeatInterval)
 }
 
 func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) []RunEventDTO {
@@ -1588,7 +1604,7 @@ func trimRunEvents(events []RunEventDTO, limit int) ([]RunEventDTO, bool, int) {
 	return events, truncated, next
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int, limit int) {
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int, limit int, heartbeatInterval time.Duration) {
 	if unsubscribe != nil {
 		defer unsubscribe()
 	}
@@ -1596,7 +1612,7 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
-	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
+	heartbeat := time.NewTicker(heartbeatInterval)
 	defer heartbeat.Stop()
 	events := s.runEventSnapshot(r, runID, initial, afterSeq, limit)
 	seq := 0
@@ -1671,15 +1687,18 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	}
 }
 
-func sseHeartbeatInterval(r *http.Request) time.Duration {
-	ms := queryInt(r, "heartbeat_ms", 15000)
-	if ms <= 0 {
+func querySSEHeartbeatInterval(w http.ResponseWriter, r *http.Request, code string) (time.Duration, bool) {
+	ms, ok := queryNonNegativeLimitParam(w, r, "heartbeat_ms", 15000, 300000, code)
+	if !ok {
+		return 0, false
+	}
+	if ms == 0 {
 		ms = 15000
 	}
 	if ms < 10 {
 		ms = 10
 	}
-	return time.Duration(ms) * time.Millisecond
+	return time.Duration(ms) * time.Millisecond, true
 }
 
 func writeSSEHeartbeat(w http.ResponseWriter, flusher http.Flusher) {
@@ -1772,18 +1791,6 @@ func splitPath(path string) []string {
 		}
 	}
 	return out
-}
-
-func queryInt(r *http.Request, key string, fallback int) int {
-	value := strings.TrimSpace(r.URL.Query().Get(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed < 0 {
-		return fallback
-	}
-	return parsed
 }
 
 func queryLimitParam(w http.ResponseWriter, r *http.Request, key string, fallback int, maxValue int, code string) (int, bool) {
