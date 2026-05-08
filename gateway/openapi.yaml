@@ -1032,6 +1032,8 @@ paths:
       summary: MCP stdio/http server를 probe해서 tools/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: MCP tool 목록이에요.
@@ -1049,6 +1051,8 @@ paths:
       summary: MCP stdio/http server를 probe해서 resources/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: MCP resource 목록이에요.
@@ -1088,6 +1092,8 @@ paths:
       summary: MCP stdio/http server를 probe해서 prompts/list 결과를 반환해요.
       parameters:
         - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: MCP prompt 목록이에요.
@@ -3359,6 +3365,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPTool'
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
     MCPTool:
       type: object
       required: [name]
@@ -3395,6 +3409,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPResource'
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
     MCPResource:
       type: object
       required: [uri]
@@ -3440,6 +3462,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPPrompt'
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
     MCPPrompt:
       type: object
       required: [name]

@@ -26,8 +26,12 @@ type MCPToolDTO struct {
 }
 
 type MCPToolListResponse struct {
-	Server ResourceDTO  `json:"server"`
-	Tools  []MCPToolDTO `json:"tools"`
+	Server          ResourceDTO  `json:"server"`
+	Tools           []MCPToolDTO `json:"tools"`
+	Limit           int          `json:"limit,omitempty"`
+	Offset          int          `json:"offset,omitempty"`
+	NextOffset      int          `json:"next_offset,omitempty"`
+	ResultTruncated bool         `json:"result_truncated,omitempty"`
 }
 
 // MCPResourceDTO는 MCP resources/list 결과를 외부 API에 노출하는 항목이에요.
@@ -39,8 +43,12 @@ type MCPResourceDTO struct {
 }
 
 type MCPResourceListResponse struct {
-	Server    ResourceDTO      `json:"server"`
-	Resources []MCPResourceDTO `json:"resources"`
+	Server          ResourceDTO      `json:"server"`
+	Resources       []MCPResourceDTO `json:"resources"`
+	Limit           int              `json:"limit,omitempty"`
+	Offset          int              `json:"offset,omitempty"`
+	NextOffset      int              `json:"next_offset,omitempty"`
+	ResultTruncated bool             `json:"result_truncated,omitempty"`
 }
 
 // MCPResourceContentDTO는 MCP resources/read 결과의 content 항목이에요.
@@ -71,8 +79,12 @@ type MCPPromptArgumentDTO struct {
 }
 
 type MCPPromptListResponse struct {
-	Server  ResourceDTO    `json:"server"`
-	Prompts []MCPPromptDTO `json:"prompts"`
+	Server          ResourceDTO    `json:"server"`
+	Prompts         []MCPPromptDTO `json:"prompts"`
+	Limit           int            `json:"limit,omitempty"`
+	Offset          int            `json:"offset,omitempty"`
+	NextOffset      int            `json:"next_offset,omitempty"`
+	ResultTruncated bool           `json:"result_truncated,omitempty"`
 }
 
 type MCPPromptGetRequest struct {
@@ -162,6 +174,8 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 
 func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, serverID string, kind string) {
 	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
+		limit := queryLimit(r, "limit", 100, 500)
+		offset := queryOffset(r, "offset")
 		switch kind {
 		case "tools":
 			tools, err := probeMCPTools(r.Context(), resource)
@@ -169,23 +183,44 @@ func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, 
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
-			writeJSON(w, MCPToolListResponse{Server: publicResourceDTO(resource), Tools: tools})
+			tools, returned, truncated := pageSlice(tools, limit, offset)
+			writeJSON(w, MCPToolListResponse{Server: publicResourceDTO(resource), Tools: tools, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 		case "resources":
 			resources, err := probeMCPResources(r.Context(), resource)
 			if err != nil {
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
-			writeJSON(w, MCPResourceListResponse{Server: publicResourceDTO(resource), Resources: resources})
+			resources, returned, truncated := pageSlice(resources, limit, offset)
+			writeJSON(w, MCPResourceListResponse{Server: publicResourceDTO(resource), Resources: resources, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 		case "prompts":
 			prompts, err := probeMCPPrompts(r.Context(), resource)
 			if err != nil {
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
-			writeJSON(w, MCPPromptListResponse{Server: publicResourceDTO(resource), Prompts: prompts})
+			prompts, returned, truncated := pageSlice(prompts, limit, offset)
+			writeJSON(w, MCPPromptListResponse{Server: publicResourceDTO(resource), Prompts: prompts, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 		}
 	})
+}
+
+func pageSlice[T any](items []T, limit int, offset int) ([]T, int, bool) {
+	if limit < 0 {
+		limit = 0
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(items) {
+		return []T{}, 0, false
+	}
+	end := offset + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	truncated := end < len(items)
+	return items[offset:end], end - offset, truncated
 }
 
 func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serverID string, toolName string) {
