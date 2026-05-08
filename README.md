@@ -222,6 +222,7 @@ erDiagram
   - GitHub Copilot SDK session adapter예요.
   - `SessionConverter`가 표준 request를 SDK session prompt payload로 바꾸고, `Client`가 SDK caller 역할을 해요.
   - session, streaming event 변환도 공통 `AdaptedProvider` 경로로 처리하고, custom tool, MCP/custom agent/skill mapping을 제공해요.
+  - SDK session send에서 누적하는 final response text는 최대 8388608 byte envelope로 제한해요.
 - `providers/codexcli`
   - `codex exec --json` subprocess adapter예요.
   - `ExecConverter`가 표준 request를 CLI prompt 실행 payload로 바꾸고, `Client`가 subprocess caller 역할을 해요.

@@ -97,3 +97,12 @@ func TestCopilotStreamProviderValidatesConvertedRequest(t *testing.T) {
 		t.Fatal("변환된 session stream payload가 없으면 거부해야 해요")
 	}
 }
+
+func TestLimitedTextBufferKeepsBoundedOutput(t *testing.T) {
+	buf := newLimitedTextBuffer(4)
+	buf.WriteString("가나다")
+	got := buf.String()
+	if got != "가\n[output truncated]" {
+		t.Fatalf("Copilot response text should be UTF-8 bounded and marked truncated: %q", got)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	ghcopilot "github.com/github/copilot-sdk/go"
 	"github.com/sleepysoong/kkode/llm"
@@ -29,6 +30,8 @@ type Client struct {
 	client *ghcopilot.Client
 	mu     sync.Mutex
 }
+
+const MaxResponseTextBytes = 8 << 20
 
 func New(cfg Config) *Client { return &Client{cfg: cfg} }
 
@@ -219,7 +222,7 @@ func (s *Session) Send(ctx context.Context, req llm.Request) (*llm.Response, err
 }
 
 func (s *Session) sendPrompt(ctx context.Context, req llm.Request, prompt string) (*llm.Response, error) {
-	var finalText strings.Builder
+	finalText := newLimitedTextBuffer(MaxResponseTextBytes)
 	unsubscribe := s.session.On(func(event ghcopilot.SessionEvent) {
 		if d, ok := event.Data.(*ghcopilot.AssistantMessageData); ok {
 			finalText.WriteString(d.Content)
@@ -236,6 +239,57 @@ func (s *Session) sendPrompt(ctx context.Context, req llm.Request, prompt string
 		}
 	}
 	return llm.TextResponse(s.client.Name(), firstNonEmpty(req.Model, s.model), finalText.String()), nil
+}
+
+type limitedTextBuffer struct {
+	buf       strings.Builder
+	max       int
+	truncated bool
+}
+
+func newLimitedTextBuffer(max int) *limitedTextBuffer {
+	return &limitedTextBuffer{max: max}
+}
+
+func (b *limitedTextBuffer) Len() int {
+	return b.buf.Len()
+}
+
+func (b *limitedTextBuffer) WriteString(text string) {
+	if b.max <= 0 {
+		b.truncated = true
+		return
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return
+	}
+	if len(text) > remaining {
+		b.buf.WriteString(truncateStringUTF8(text, remaining))
+		b.truncated = true
+		return
+	}
+	b.buf.WriteString(text)
+}
+
+func (b *limitedTextBuffer) String() string {
+	text := b.buf.String()
+	if b.truncated {
+		return strings.TrimRight(text, "\n") + "\n[output truncated]"
+	}
+	return text
+}
+
+func truncateStringUTF8(text string, maxBytes int) string {
+	if maxBytes <= 0 || len(text) <= maxBytes {
+		return text
+	}
+	end := maxBytes
+	for end > 0 && !utf8.ValidString(text[:end]) {
+		end--
+	}
+	return text[:end]
 }
 
 func (s *Session) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {
