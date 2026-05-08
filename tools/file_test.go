@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,6 +65,21 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	}
 	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_symbols", Arguments: []byte(`{"query":"Run","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("negative lsp_symbols limit은 거부해야 해요: %v", err)
+	}
+	largePath := filepath.Join(ws.Root, "large.go")
+	large, err := os.Create(largePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := large.Truncate(int64(workspace.MaxFileReadBytes + 1)); err != nil {
+		_ = large.Close()
+		t.Fatal(err)
+	}
+	if err := large.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_document_symbols", Arguments: []byte(`{"path":"large.go"}`)}); err == nil || !strings.Contains(err.Error(), "max_bytes") {
+		t.Fatalf("large lsp_document_symbols input은 거부해야 해요: %v", err)
 	}
 
 	defs, handlers = StandardTools(SurfaceOptions{Workspace: ws, NoWeb: true})

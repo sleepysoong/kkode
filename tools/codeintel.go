@@ -78,6 +78,10 @@ type codeIntelHover struct {
 	Documentation string `json:"documentation,omitempty"`
 }
 
+const maxCodeIntelFileBytes = workspace.MaxFileReadBytes
+
+var errCodeIntelFileTooLarge = errors.New("codeintel Go file is too large")
+
 // CodeIntelTools exposes parser-backed, read-only Go code navigation tools to agent runs.
 func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 	strict := true
@@ -234,7 +238,7 @@ func codeIntelDocumentSymbols(ws *workspace.Workspace, relPath string) ([]codeIn
 		return nil, err
 	}
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	file, err := parseCodeIntelGoFile(fset, path, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +327,10 @@ func codeIntelDiagnostics(ws *workspace.Workspace, relPath string, limit int) ([
 			return nil, err
 		}
 		rel, _ := filepath.Rel(ws.Root, path)
-		_, err = parser.ParseFile(fset, path, nil, parser.AllErrors)
+		_, err = parseCodeIntelGoFile(fset, path, parser.AllErrors)
+		if errors.Is(err, errCodeIntelFileTooLarge) {
+			return nil, err
+		}
 		return out, appendCodeIntelParseDiagnostics(&out, filepath.ToSlash(rel), err, limit)
 	}
 	err := walkCodeIntelGoFiles(ws.Root, fset, parser.AllErrors, func() bool { return limit > 0 && len(out) >= limit }, visit)
@@ -443,9 +450,23 @@ func walkCodeIntelGoFiles(absRoot string, fset *token.FileSet, mode parser.Mode,
 			return nil
 		}
 		rel, _ := filepath.Rel(absRoot, path)
-		file, err := parser.ParseFile(fset, path, nil, mode)
+		file, err := parseCodeIntelGoFile(fset, path, mode)
+		if errors.Is(err, errCodeIntelFileTooLarge) {
+			return nil
+		}
 		return visit(parsedCodeIntelFile{Path: path, Rel: filepath.ToSlash(rel), File: file, Err: err})
 	})
+}
+
+func parseCodeIntelGoFile(fset *token.FileSet, path string, mode parser.Mode) (*ast.File, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > maxCodeIntelFileBytes {
+		return nil, fmt.Errorf("%w: max_bytes=%d", errCodeIntelFileTooLarge, maxCodeIntelFileBytes)
+	}
+	return parser.ParseFile(fset, path, nil, mode)
 }
 
 func shouldSkipCodeIntelDir(name string) bool {

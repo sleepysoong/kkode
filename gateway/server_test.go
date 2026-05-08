@@ -2758,6 +2758,31 @@ func (r *Runner) Run() {}
 			t.Fatalf("잘못된 document symbol limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
+
+	largePath := filepath.Join(root, "large-symbols.go")
+	large, err := os.Create(largePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := large.Truncate(int64(maxLSPFormatInputBytes + 1)); err != nil {
+		_ = large.Close()
+		t.Fatal(err)
+	}
+	if err := large.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/document-symbols?project_root="+root+"&path=large-symbols.go", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("큰 LSP document symbol input은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("large Go files in workspace scan should be skipped: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayLSPDefinitionsAndReferences(t *testing.T) {

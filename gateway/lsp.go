@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -20,6 +21,8 @@ import (
 const defaultLSPFormatPreviewBytes = 1 << 20
 const maxLSPFormatPreviewBytes = 8 << 20
 const maxLSPFormatInputBytes = 8 << 20
+
+var errLSPFileTooLarge = errors.New("LSP Go file is too large")
 
 // LSPSymbolDTO는 외부 패널이 코드 탐색 UI를 만들 때 쓰는 LSP-style symbol 항목이에요.
 type LSPSymbolDTO struct {
@@ -283,7 +286,7 @@ func scanGoIdentifierAt(root string, relPath string, line int, column int) (stri
 		return "", err
 	}
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
+	file, err := parseLSPGoFile(fset, path, 0)
 	if err != nil {
 		return "", err
 	}
@@ -415,7 +418,7 @@ func scanGoDocumentSymbols(root string, relPath string, limit int) ([]LSPSymbolD
 		return nil, err
 	}
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
+	file, err := parseLSPGoFile(fset, path, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -601,26 +604,23 @@ func scanGoDiagnostics(root string, relPath string, limit int) ([]LSPDiagnosticD
 		return nil, err
 	}
 	out := []LSPDiagnosticDTO{}
-	visit := func(path string) error {
-		if len(out) >= limit {
-			return fs.SkipAll
-		}
-		rel, _ := filepath.Rel(absRoot, path)
-		rel = filepath.ToSlash(rel)
-		fset := token.NewFileSet()
-		_, err := parser.ParseFile(fset, path, nil, parser.AllErrors)
-		if err == nil {
-			return nil
-		}
-		appendParseDiagnostics(&out, rel, err, limit)
-		return nil
-	}
 	if strings.TrimSpace(relPath) != "" {
 		path, err := resolveRelativeGoFile(absRoot, relPath)
 		if err != nil {
 			return nil, err
 		}
-		return out, visit(path)
+		rel, _ := filepath.Rel(absRoot, path)
+		rel = filepath.ToSlash(rel)
+		fset := token.NewFileSet()
+		_, err = parseLSPGoFile(fset, path, parser.AllErrors)
+		if err == nil {
+			return out, nil
+		}
+		if errors.Is(err, errLSPFileTooLarge) {
+			return nil, err
+		}
+		appendParseDiagnostics(&out, rel, err, limit)
+		return out, nil
 	}
 	fset := token.NewFileSet()
 	err = walkParsedGoFiles(absRoot, fset, parser.AllErrors, func() bool { return len(out) >= limit }, func(parsed parsedGoFile) error {
@@ -808,9 +808,23 @@ func walkParsedGoFiles(absRoot string, fset *token.FileSet, mode parser.Mode, st
 			return nil
 		}
 		rel, _ := filepath.Rel(absRoot, path)
-		file, err := parser.ParseFile(fset, path, nil, mode)
+		file, err := parseLSPGoFile(fset, path, mode)
+		if errors.Is(err, errLSPFileTooLarge) {
+			return nil
+		}
 		return visit(parsedGoFile{Path: path, Rel: filepath.ToSlash(rel), File: file, Err: err})
 	})
+}
+
+func parseLSPGoFile(fset *token.FileSet, path string, mode parser.Mode) (*ast.File, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > maxLSPFormatInputBytes {
+		return nil, fmt.Errorf("%w: max_bytes=%d", errLSPFileTooLarge, maxLSPFormatInputBytes)
+	}
+	return parser.ParseFile(fset, path, nil, mode)
 }
 
 func shouldSkipLSPDir(name string) bool {
