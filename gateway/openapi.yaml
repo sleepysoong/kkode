@@ -2297,6 +2297,14 @@ components:
           type: integer
         max_mcp_probe_output_bytes:
           type: integer
+        max_file_content_bytes:
+          type: integer
+        max_skill_preview_bytes:
+          type: integer
+        max_lsp_format_input_bytes:
+          type: integer
+        max_lsp_format_preview_bytes:
+          type: integer
         max_run_prompt_bytes:
           type: integer
         max_run_selector_items:

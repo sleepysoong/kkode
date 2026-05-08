@@ -478,6 +478,10 @@ type LimitDTO struct {
 	MaxMCPProbeURIBytes      int   `json:"max_mcp_probe_uri_bytes,omitempty"`
 	MaxMCPProbeArgumentBytes int   `json:"max_mcp_probe_argument_bytes,omitempty"`
 	MaxMCPProbeOutputBytes   int   `json:"max_mcp_probe_output_bytes,omitempty"`
+	MaxFileContentBytes      int   `json:"max_file_content_bytes,omitempty"`
+	MaxSkillPreviewBytes     int   `json:"max_skill_preview_bytes,omitempty"`
+	MaxLSPFormatInputBytes   int   `json:"max_lsp_format_input_bytes,omitempty"`
+	MaxLSPFormatPreviewBytes int   `json:"max_lsp_format_preview_bytes,omitempty"`
 	MaxRunPromptBytes        int   `json:"max_run_prompt_bytes,omitempty"`
 	MaxRunSelectorItems      int   `json:"max_run_selector_items,omitempty"`
 	MaxRunSelectorItemBytes  int   `json:"max_run_selector_item_bytes,omitempty"`
