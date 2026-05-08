@@ -27,7 +27,7 @@ type VersionResponse struct {
 	Providers []string `json:"providers,omitempty"`
 }
 
-// APIIndexResponse는 adapter가 gateway root에서 주요 discovery link를 찾을 때 쓰는 응답이에요.
+// APIIndexResponse는 adapter가 gateway root에서 legacy discovery link와 method-aware operation metadata를 찾을 때 쓰는 응답이에요.
 type APIIndexResponse struct {
 	Version    string                 `json:"version"`
 	Commit     string                 `json:"commit,omitempty"`

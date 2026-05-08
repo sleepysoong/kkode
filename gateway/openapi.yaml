@@ -2203,6 +2203,7 @@ components:
           format: date-time
     APIIndexResponse:
       type: object
+      description: adapter bootstrap용 discovery index예요. links는 하위 호환 URL map이고 operations는 method-aware route catalog예요.
       required: [version, links, operations]
       properties:
         version:
@@ -2211,23 +2212,29 @@ components:
           type: string
         links:
           type: object
+          description: 기존 adapter가 쓰는 endpoint 이름별 URL map이에요.
           additionalProperties:
             type: string
         operations:
           type: array
+          description: OpenAPI 다운로드 전에도 write/action route method를 추론 없이 알 수 있게 하는 endpoint catalog예요.
           items:
             $ref: '#/components/schemas/APIIndexOperation'
     APIIndexOperation:
       type: object
+      description: API index에 노출되는 이름, HTTP method, path 조합이에요.
       required: [name, method, path]
       properties:
         name:
           type: string
+          description: API index links map의 key와 같은 안정적인 operation 이름이에요.
         method:
           type: string
+          description: 이 endpoint를 호출할 때 사용할 HTTP method예요.
           enum: [GET, POST, PUT, DELETE]
         path:
           type: string
+          description: API root 기준 endpoint path예요.
     VersionResponse:
       type: object
       properties:
