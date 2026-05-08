@@ -898,7 +898,8 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	limit := queryLimit(r, "limit", 50, 200)
 	offset := queryOffset(r, "offset")
-	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: r.URL.Query().Get("project_root"), Limit: limit + 1, Offset: offset})
+	projectRoot := strings.TrimSpace(r.URL.Query().Get("project_root"))
+	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: projectRoot, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_sessions_failed", err.Error())
 		return

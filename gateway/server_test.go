@@ -291,6 +291,19 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("session list metadata가 이상해요: %+v", listed)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?project_root="+url.QueryEscape(" /tmp/repo ")+"&limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = SessionListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || listed.Sessions[0].ID != created.ID {
+		t.Fatalf("project_root filter는 canonical 값으로 동작해야 해요: %+v", listed)
+	}
 	extra := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
 	if err := store.CreateSession(context.Background(), extra); err != nil {
 		t.Fatal(err)
