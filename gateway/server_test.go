@@ -3270,6 +3270,26 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 		t.Fatalf("todo upsert 결과가 이상해요: %+v", listed)
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/todos", bytes.NewBufferString(`{"id":"todo_2","content":"배포해요","status":"pending"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/todos?limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Todos) != 1 || listed.TotalTodos != 2 || listed.Limit != 1 || listed.NextOffset != 1 || !listed.ResultTruncated {
+		t.Fatalf("todo list pagination metadata가 이상해요: %+v", listed)
+	}
+
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/sessions/"+sess.ID+"/todos/todo_1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -3280,7 +3300,7 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded.Todos) != 0 {
+	if len(loaded.Todos) != 1 || loaded.Todos[0].ID != "todo_2" {
 		t.Fatalf("todo가 삭제되지 않았어요: %+v", loaded.Todos)
 	}
 }

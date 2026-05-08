@@ -137,7 +137,12 @@ type TodoDTO struct {
 }
 
 type TodoListResponse struct {
-	Todos []TodoDTO `json:"todos"`
+	Todos           []TodoDTO `json:"todos"`
+	TotalTodos      int       `json:"total_todos,omitempty"`
+	Limit           int       `json:"limit,omitempty"`
+	Offset          int       `json:"offset,omitempty"`
+	NextOffset      int       `json:"next_offset,omitempty"`
+	ResultTruncated bool      `json:"result_truncated,omitempty"`
 }
 
 // RunStartRequest는 gateway RunStarter가 실제 agent 실행에 넘기는 요청이에요.

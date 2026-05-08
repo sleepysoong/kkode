@@ -42,7 +42,7 @@ func (s *Server) getSessionTodos(w http.ResponseWriter, r *http.Request, session
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
 	}
-	writeJSON(w, TodoListResponse{Todos: todoDTOs(sess.Todos)})
+	writeJSON(w, todoListResponse(r, sess.Todos))
 }
 
 func (s *Server) replaceSessionTodos(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -60,7 +60,7 @@ func (s *Server) replaceSessionTodos(w http.ResponseWriter, r *http.Request, ses
 		writeError(w, r, http.StatusNotFound, "save_todos_failed", err.Error())
 		return
 	}
-	writeJSON(w, TodoListResponse{Todos: todoDTOs(todos)})
+	writeJSON(w, todoListResponse(r, todos))
 }
 
 func (s *Server) upsertSessionTodo(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -84,7 +84,7 @@ func (s *Server) upsertSessionTodo(w http.ResponseWriter, r *http.Request, sessi
 		writeError(w, r, http.StatusInternalServerError, "save_todos_failed", err.Error())
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated, TodoListResponse{Todos: todoDTOs(sess.Todos)})
+	writeJSONStatus(w, http.StatusCreated, todoListResponse(r, sess.Todos))
 }
 
 func (s *Server) deleteSessionTodo(w http.ResponseWriter, r *http.Request, sessionID string, todoID string) {
@@ -129,6 +129,14 @@ func (s *Server) saveTodos(ctx context.Context, sessionID string, todos []sessio
 	sess.Todos = todos
 	sess.Touch()
 	return s.cfg.Store.SaveSession(ctx, sess)
+}
+
+func todoListResponse(r *http.Request, todos []session.Todo) TodoListResponse {
+	out := todoDTOs(todos)
+	limit := queryLimit(r, "limit", len(out), 5000)
+	offset := queryOffset(r, "offset")
+	page, returned, truncated := pageSlice(out, limit, offset)
+	return TodoListResponse{Todos: page, TotalTodos: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated}
 }
 
 func todosFromDTOs(dtos []TodoDTO, now time.Time) ([]session.Todo, error) {
