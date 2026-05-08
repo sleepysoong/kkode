@@ -594,6 +594,24 @@ paths:
             default: 200
             maximum: 5000
         - in: query
+          name: turn_limit
+          schema:
+            type: integer
+            maximum: 5000
+          description: export response의 turns 배열을 이 개수까지 잘라요. raw_session에는 적용하지 않아요.
+        - in: query
+          name: event_limit
+          schema:
+            type: integer
+            maximum: 5000
+          description: export response의 events 배열을 이 개수까지 잘라요. raw_session에는 적용하지 않아요.
+        - in: query
+          name: include_raw
+          schema:
+            type: boolean
+            default: true
+          description: false면 import용 raw_session snapshot을 응답에서 제외해서 preview payload를 줄여요.
+        - in: query
           name: redact
           schema:
             type: boolean
@@ -2846,6 +2864,9 @@ components:
         raw_session:
           type: object
           description: import/debug를 위한 원본 session JSON snapshot이에요.
+        raw_session_included:
+          type: boolean
+          description: raw_session이 이번 응답에 포함됐는지 알려줘요.
         counts:
           $ref: '#/components/schemas/SessionExportCounts'
         redacted:
@@ -2862,6 +2883,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Todo'
+        turn_limit:
+          type: integer
+        event_limit:
+          type: integer
+        result_truncated:
+          type: boolean
+          description: turn_limit 또는 event_limit 때문에 export DTO 배열이 잘렸는지 알려줘요.
         checkpoints:
           type: array
           items:

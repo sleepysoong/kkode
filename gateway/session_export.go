@@ -15,18 +15,22 @@ const sessionExportFormatVersion = "kkode.session.export.v1"
 
 // SessionExportResponse는 session 복구/이관/debug를 위해 관련 상태를 한 번에 묶은 JSON이에요.
 type SessionExportResponse struct {
-	FormatVersion string                 `json:"format_version"`
-	ExportedAt    time.Time              `json:"exported_at"`
-	Session       SessionDTO             `json:"session"`
-	RawSession    *session.Session       `json:"raw_session,omitempty"`
-	Counts        SessionExportCountsDTO `json:"counts"`
-	Redacted      bool                   `json:"redacted,omitempty"`
-	Turns         []TurnDTO              `json:"turns"`
-	Events        []EventDTO             `json:"events"`
-	Todos         []TodoDTO              `json:"todos"`
-	Checkpoints   []CheckpointDTO        `json:"checkpoints,omitempty"`
-	Runs          []RunDTO               `json:"runs,omitempty"`
-	Resources     []ResourceDTO          `json:"resources,omitempty"`
+	FormatVersion      string                 `json:"format_version"`
+	ExportedAt         time.Time              `json:"exported_at"`
+	Session            SessionDTO             `json:"session"`
+	RawSession         *session.Session       `json:"raw_session,omitempty"`
+	RawSessionIncluded bool                   `json:"raw_session_included"`
+	Counts             SessionExportCountsDTO `json:"counts"`
+	Redacted           bool                   `json:"redacted,omitempty"`
+	Turns              []TurnDTO              `json:"turns"`
+	Events             []EventDTO             `json:"events"`
+	Todos              []TodoDTO              `json:"todos"`
+	TurnLimit          int                    `json:"turn_limit,omitempty"`
+	EventLimit         int                    `json:"event_limit,omitempty"`
+	ResultTruncated    bool                   `json:"result_truncated,omitempty"`
+	Checkpoints        []CheckpointDTO        `json:"checkpoints,omitempty"`
+	Runs               []RunDTO               `json:"runs,omitempty"`
+	Resources          []ResourceDTO          `json:"resources,omitempty"`
 }
 
 // SessionExportCountsDTO는 export bundle이 잘렸는지 adapter가 빠르게 검증할 때 쓰는 카운트예요.
@@ -71,15 +75,26 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		return
 	}
 	redacted := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "true")
-	rawSession := *sess
+	includeRaw := !redacted && !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_raw")), "false")
+	turnLimit := queryLimit(r, "turn_limit", len(sess.Turns), 5000)
+	eventLimit := queryLimit(r, "event_limit", len(sess.Events), 5000)
+	turns, _, turnsTruncated := trimExportSlice(exportTurnDTOs(sess), turnLimit)
+	events, _, eventsTruncated := trimExportSlice(exportEventDTOs(sess), eventLimit)
 	resp := SessionExportResponse{
-		FormatVersion: sessionExportFormatVersion,
-		ExportedAt:    s.cfg.Now(),
-		Session:       toSessionDTO(sess),
-		RawSession:    &rawSession,
-		Turns:         exportTurnDTOs(sess),
-		Events:        exportEventDTOs(sess),
-		Todos:         todoDTOs(sess.Todos),
+		FormatVersion:      sessionExportFormatVersion,
+		ExportedAt:         s.cfg.Now(),
+		Session:            toSessionDTO(sess),
+		RawSessionIncluded: includeRaw,
+		Turns:              turns,
+		Events:             events,
+		Todos:              todoDTOs(sess.Todos),
+		TurnLimit:          turnLimit,
+		EventLimit:         eventLimit,
+		ResultTruncated:    turnsTruncated || eventsTruncated,
+	}
+	if includeRaw {
+		rawSession := *sess
+		resp.RawSession = &rawSession
 	}
 	if store := s.checkpointStore(); store != nil {
 		checkpoints, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: queryLimit(r, "checkpoint_limit", 200, 5000)})
@@ -212,6 +227,17 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 		RequestedOverwrite: req.Overwrite,
 	}
 	writeJSONStatus(w, http.StatusCreated, resp)
+}
+
+func trimExportSlice[T any](items []T, limit int) ([]T, int, bool) {
+	if limit < 0 {
+		limit = 0
+	}
+	truncated := len(items) > limit
+	if truncated {
+		items = items[:limit]
+	}
+	return items, len(items), truncated
 }
 
 func (s *Server) exportReferencedResources(ctx context.Context, runs []RunDTO) ([]ResourceDTO, error) {

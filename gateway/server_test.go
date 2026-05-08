@@ -3479,6 +3479,35 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 	}
 }
 
+func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	for _, prompt := range []string{"first", "second"} {
+		turn := session.NewTurn(prompt, llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText(prompt)}})
+		turn.Response = llm.TextResponse("openai", "gpt-5-mini", "ok "+prompt)
+		sess.AppendTurn(turn)
+		sess.AppendEvent(session.Event{ID: "ev_export_" + prompt, SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed", At: time.Now().UTC()})
+	}
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?include_raw=false&turn_limit=1&event_limit=1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var exported SessionExportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
+		t.Fatal(err)
+	}
+	if exported.RawSession != nil || exported.RawSessionIncluded || len(exported.Turns) != 1 || len(exported.Events) != 1 || exported.TurnLimit != 1 || exported.EventLimit != 1 || !exported.ResultTruncated {
+		t.Fatalf("bounded session export preview가 이상해요: %+v", exported)
+	}
+}
+
 func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	ctx := context.Background()
 	sourceStore := openTestStore(t)
