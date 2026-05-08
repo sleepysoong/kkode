@@ -33,7 +33,7 @@ func TestAPIIndexLinksExistInOpenAPI(t *testing.T) {
 	for name, path := range APIIndexLinks() {
 		method := "get"
 		if explicitMethod := linkMethods[name]; explicitMethod != "" {
-			method = explicitMethod
+			method = strings.ToLower(explicitMethod)
 		}
 		methods := paths[path]
 		if !methods[method] {
@@ -48,7 +48,7 @@ func TestFeatureCatalogEndpointsExistInAPIIndexLinks(t *testing.T) {
 	for name, path := range APIIndexLinks() {
 		method := "GET"
 		if explicitMethod := linkMethods[name]; explicitMethod != "" {
-			method = strings.ToUpper(explicitMethod)
+			method = explicitMethod
 		}
 		indexEndpoints[method+" "+path] = true
 	}
@@ -59,41 +59,6 @@ func TestFeatureCatalogEndpointsExistInAPIIndexLinks(t *testing.T) {
 			}
 		}
 	}
-}
-
-func apiIndexLinkMethods() map[string]string {
-	linkMethods := map[string]string{
-		"provider_test":             "post",
-		"session_create":            "post",
-		"session_import":            "post",
-		"session_compact":           "post",
-		"session_fork":              "post",
-		"session_todos_replace":     "put",
-		"session_todo_upsert":       "post",
-		"session_todo_delete":       "delete",
-		"session_checkpoint_create": "post",
-		"run_start":                 "post",
-		"run_preview":               "post",
-		"run_validate":              "post",
-		"run_retry":                 "post",
-		"run_cancel":                "post",
-		"tool_call":                 "post",
-		"file_write":                "put",
-		"file_patch":                "post",
-		"mcp_server_create":         "post",
-		"mcp_server_update":         "put",
-		"mcp_server_delete":         "delete",
-		"mcp_prompt_get":            "post",
-		"mcp_tool_call":             "post",
-		"skill_create":              "post",
-		"skill_update":              "put",
-		"skill_delete":              "delete",
-		"subagent_create":           "post",
-		"subagent_update":           "put",
-		"subagent_delete":           "delete",
-		"prompt_render":             "post",
-	}
-	return linkMethods
 }
 
 func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
@@ -245,6 +210,7 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "ReadyResponse", dto: ReadyResponse{}},
 		{schema: "VersionResponse", dto: VersionResponse{}},
 		{schema: "APIIndexResponse", dto: APIIndexResponse{}},
+		{schema: "APIIndexOperation", dto: APIIndexOperationDTO{}},
 		{schema: "ErrorEnvelope", dto: ErrorEnvelope{}},
 		{schema: "Error", dto: ErrorDTO{}},
 		{schema: "CapabilityResponse", dto: CapabilityResponse{}},

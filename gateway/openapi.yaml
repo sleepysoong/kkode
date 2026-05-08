@@ -2213,6 +2213,21 @@ components:
           type: object
           additionalProperties:
             type: string
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIIndexOperation'
+    APIIndexOperation:
+      type: object
+      required: [name, method, path]
+      properties:
+        name:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE]
+        path:
+          type: string
     VersionResponse:
       type: object
       properties:

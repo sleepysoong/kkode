@@ -1,5 +1,7 @@
 package gateway
 
+import "sort"
+
 // DefaultFeatureCatalog는 웹 패널/Discord/Slack adapter가 사용할 수 있는 gateway 기능 표면을 알려줘요.
 func DefaultFeatureCatalog() []FeatureDTO {
 	return []FeatureDTO{
@@ -152,5 +154,58 @@ func APIIndexLinks() map[string]string {
 		"prompts":                   "/api/v1/prompts",
 		"prompt_detail":             "/api/v1/prompts/{template_name}",
 		"prompt_render":             "/api/v1/prompts/{template_name}/render",
+	}
+}
+
+func APIIndexOperations() []APIIndexOperationDTO {
+	links := APIIndexLinks()
+	methods := apiIndexLinkMethods()
+	names := make([]string, 0, len(links))
+	for name := range links {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	operations := make([]APIIndexOperationDTO, 0, len(names))
+	for _, name := range names {
+		method := methods[name]
+		if method == "" {
+			method = "GET"
+		}
+		operations = append(operations, APIIndexOperationDTO{Name: name, Method: method, Path: links[name]})
+	}
+	return operations
+}
+
+func apiIndexLinkMethods() map[string]string {
+	return map[string]string{
+		"provider_test":             "POST",
+		"session_create":            "POST",
+		"session_import":            "POST",
+		"session_compact":           "POST",
+		"session_fork":              "POST",
+		"session_todos_replace":     "PUT",
+		"session_todo_upsert":       "POST",
+		"session_todo_delete":       "DELETE",
+		"session_checkpoint_create": "POST",
+		"run_start":                 "POST",
+		"run_preview":               "POST",
+		"run_validate":              "POST",
+		"run_retry":                 "POST",
+		"run_cancel":                "POST",
+		"tool_call":                 "POST",
+		"file_write":                "PUT",
+		"file_patch":                "POST",
+		"mcp_server_create":         "POST",
+		"mcp_server_update":         "PUT",
+		"mcp_server_delete":         "DELETE",
+		"mcp_prompt_get":            "POST",
+		"mcp_tool_call":             "POST",
+		"skill_create":              "POST",
+		"skill_update":              "PUT",
+		"skill_delete":              "DELETE",
+		"subagent_create":           "POST",
+		"subagent_update":           "PUT",
+		"subagent_delete":           "DELETE",
+		"prompt_render":             "POST",
 	}
 }

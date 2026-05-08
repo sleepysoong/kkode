@@ -87,6 +87,20 @@ func TestGatewayAPIIndex(t *testing.T) {
 	if index.Version != "test" || index.Links["health"] != "/healthz" || index.Links["ready"] != "/readyz" || index.Links["openapi"] != "/api/v1/openapi.yaml" || index.Links["sessions"] != "/api/v1/sessions" || index.Links["session_import"] != "/api/v1/sessions/import" || index.Links["session_export"] == "" || index.Links["session_transcript"] == "" || index.Links["run_transcript"] == "" || index.Links["request_transcript"] == "" {
 		t.Fatalf("API index 응답이 이상해요: %+v", index)
 	}
+	operations := map[string]APIIndexOperationDTO{}
+	for _, op := range index.Operations {
+		operations[op.Name] = op
+	}
+	for name, want := range map[string]APIIndexOperationDTO{
+		"session_create": {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
+		"file_write":     {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
+		"run_cancel":     {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
+		"lsp_hover":      {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
+	} {
+		if operations[name] != want {
+			t.Fatalf("API index operation %s = %+v, want %+v", name, operations[name], want)
+		}
+	}
 }
 
 func TestGatewayHealthUsesTypedDTO(t *testing.T) {

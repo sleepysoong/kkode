@@ -518,7 +518,7 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request, parts []
 		writeMethodNotAllowed(w, r, "지원하지 않는 API index 요청이에요", http.MethodGet)
 		return
 	}
-	writeJSON(w, APIIndexResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Links: APIIndexLinks()})
+	writeJSON(w, APIIndexResponse{Version: s.cfg.Version, Commit: s.cfg.Commit, Links: APIIndexLinks(), Operations: APIIndexOperations()})
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request, parts []string) {
