@@ -418,7 +418,7 @@ func TestSyncRunPreviewerExposesDefaultMCPToLocalTools(t *testing.T) {
 }
 
 func TestPreviewContextBlocksRedactsAndTruncatesUTF8(t *testing.T) {
-	if runPreviewBytes(0) != 64<<10 || runPreviewBytes(123) != 123 {
+	if runPreviewBytes(0) != 64<<10 || runPreviewBytes(123) != 123 || runPreviewBytes(gateway.MaxRunPreviewBytes+1) != gateway.MaxRunPreviewBytes {
 		t.Fatal("run preview byte 예산 기본값/override가 이상해요")
 	}
 	requestBlocks := requestContextBlocks([]string{"   ", "token=ghp_123456789012345678901234567890123456\n요청 컨텍스트예요"})
@@ -621,6 +621,14 @@ func TestSyncProviderTesterTruncatesLiveResult(t *testing.T) {
 	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{Live: true, MaxResultBytes: -1})
 	if err == nil || !strings.Contains(err.Error(), "max_result_bytes") {
 		t.Fatalf("negative max_result_bytes는 거부해야 해요: %v", err)
+	}
+	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{MaxPreviewBytes: gateway.MaxProviderTestPreviewBytes + 1})
+	if err == nil || !strings.Contains(err.Error(), "max_preview_bytes") {
+		t.Fatalf("large max_preview_bytes는 거부해야 해요: %v", err)
+	}
+	_, err = syncProviderTester()(context.Background(), "large-provider-test", gateway.ProviderTestRequest{MaxResultBytes: gateway.MaxProviderTestResultBytes + 1})
+	if err == nil || !strings.Contains(err.Error(), "max_result_bytes") {
+		t.Fatalf("large max_result_bytes는 거부해야 해요: %v", err)
 	}
 }
 

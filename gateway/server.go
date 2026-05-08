@@ -605,10 +605,14 @@ func validateProviderTestRequest(req ProviderTestRequest) error {
 	switch {
 	case req.MaxPreviewBytes < 0:
 		return errors.New("max_preview_bytes는 0 이상이어야 해요")
+	case req.MaxPreviewBytes > MaxProviderTestPreviewBytes:
+		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", MaxProviderTestPreviewBytes)
 	case req.MaxOutputTokens < 0:
 		return errors.New("max_output_tokens는 0 이상이어야 해요")
 	case req.MaxResultBytes < 0:
 		return errors.New("max_result_bytes는 0 이상이어야 해요")
+	case req.MaxResultBytes > MaxProviderTestResultBytes:
+		return fmt.Errorf("max_result_bytes는 %d 이하여야 해요", MaxProviderTestResultBytes)
 	case req.TimeoutMS < 0:
 		return errors.New("timeout_ms는 0 이상이어야 해요")
 	default:
@@ -730,38 +734,41 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request, part
 
 func gatewayLimits(cfg Config) LimitDTO {
 	return LimitDTO{
-		MaxRequestBytes:            cfg.MaxRequestBytes,
-		MaxConcurrentRuns:          cfg.MaxConcurrentRuns,
-		RunTimeoutSeconds:          durationSeconds(cfg.RunTimeout),
-		MaxMCPHTTPResponseBytes:    maxMCPHTTPResponseBytes,
-		MaxMCPProbeNameBytes:       maxMCPProbeNameBytes,
-		MaxMCPProbeURIBytes:        maxMCPProbeURIBytes,
-		MaxMCPProbeArgumentBytes:   maxMCPProbeArgumentsBytes,
-		MaxMCPProbeOutputBytes:     maxMCPProbeOutputBytes,
-		MaxFileContentBytes:        maxFileContentBytes,
-		MaxSkillPreviewBytes:       maxSkillPreviewBytes,
-		MaxSubagentPreviewBytes:    maxSubagentPreviewPromptBytes,
-		MaxPromptTextBytes:         maxPromptTextBytes,
-		MaxTranscriptMarkdownBytes: maxTranscriptMarkdownBytes,
-		MaxGitDiffBytes:            maxGitDiffBytes,
-		MaxLSPFormatInputBytes:     maxLSPFormatInputBytes,
-		MaxLSPFormatPreviewBytes:   maxLSPFormatPreviewBytes,
-		MaxRunPromptBytes:          maxRunPromptBytes,
-		MaxRunSelectorItems:        maxRunSelectorItems,
-		MaxRunSelectorItemBytes:    maxRunSelectorItemBytes,
-		MaxRunContextBlocks:        maxRunContextBlocks,
-		MaxRunContextBlockBytes:    maxRunContextBlockBytes,
-		MaxRunMetadataEntries:      maxRunMetadataEntries,
-		MaxRunMetadataKeyBytes:     maxRunMetadataKeyBytes,
-		MaxRunMetadataValueBytes:   maxRunMetadataValueBytes,
-		MaxRequestIDBytes:          maxRequestIDBytes,
-		MaxIdempotencyKeyBytes:     maxIdempotencyKeyBytes,
-		MaxToolCallNameBytes:       maxToolCallNameBytes,
-		MaxToolCallIDBytes:         maxToolCallIDBytes,
-		MaxToolCallArgumentBytes:   maxToolCallArgumentsBytes,
-		MaxToolCallOutputBytes:     maxToolCallOutputBytes,
-		MaxToolCallWebBytes:        maxToolCallWebBytes,
-		MaxRunProviderModelBytes:   maxRunProviderModelBytes,
+		MaxRequestBytes:             cfg.MaxRequestBytes,
+		MaxConcurrentRuns:           cfg.MaxConcurrentRuns,
+		RunTimeoutSeconds:           durationSeconds(cfg.RunTimeout),
+		MaxMCPHTTPResponseBytes:     maxMCPHTTPResponseBytes,
+		MaxMCPProbeNameBytes:        maxMCPProbeNameBytes,
+		MaxMCPProbeURIBytes:         maxMCPProbeURIBytes,
+		MaxMCPProbeArgumentBytes:    maxMCPProbeArgumentsBytes,
+		MaxMCPProbeOutputBytes:      maxMCPProbeOutputBytes,
+		MaxFileContentBytes:         maxFileContentBytes,
+		MaxSkillPreviewBytes:        maxSkillPreviewBytes,
+		MaxSubagentPreviewBytes:     maxSubagentPreviewPromptBytes,
+		MaxPromptTextBytes:          maxPromptTextBytes,
+		MaxTranscriptMarkdownBytes:  maxTranscriptMarkdownBytes,
+		MaxGitDiffBytes:             maxGitDiffBytes,
+		MaxRunPreviewBytes:          MaxRunPreviewBytes,
+		MaxProviderTestPreviewBytes: MaxProviderTestPreviewBytes,
+		MaxProviderTestResultBytes:  MaxProviderTestResultBytes,
+		MaxLSPFormatInputBytes:      maxLSPFormatInputBytes,
+		MaxLSPFormatPreviewBytes:    maxLSPFormatPreviewBytes,
+		MaxRunPromptBytes:           maxRunPromptBytes,
+		MaxRunSelectorItems:         maxRunSelectorItems,
+		MaxRunSelectorItemBytes:     maxRunSelectorItemBytes,
+		MaxRunContextBlocks:         maxRunContextBlocks,
+		MaxRunContextBlockBytes:     maxRunContextBlockBytes,
+		MaxRunMetadataEntries:       maxRunMetadataEntries,
+		MaxRunMetadataKeyBytes:      maxRunMetadataKeyBytes,
+		MaxRunMetadataValueBytes:    maxRunMetadataValueBytes,
+		MaxRequestIDBytes:           maxRequestIDBytes,
+		MaxIdempotencyKeyBytes:      maxIdempotencyKeyBytes,
+		MaxToolCallNameBytes:        maxToolCallNameBytes,
+		MaxToolCallIDBytes:          maxToolCallIDBytes,
+		MaxToolCallArgumentBytes:    maxToolCallArgumentsBytes,
+		MaxToolCallOutputBytes:      maxToolCallOutputBytes,
+		MaxToolCallWebBytes:         maxToolCallWebBytes,
+		MaxRunProviderModelBytes:    maxRunProviderModelBytes,
 	}
 }
 
@@ -1476,6 +1483,9 @@ func validateRunStartRequest(req RunStartRequest) error {
 	}
 	if req.MaxPreviewBytes < 0 {
 		return errors.New("max_preview_bytes는 0 이상이어야 해요")
+	}
+	if req.MaxPreviewBytes > MaxRunPreviewBytes {
+		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", MaxRunPreviewBytes)
 	}
 	if err := validateRunRequestShape(req); err != nil {
 		return err

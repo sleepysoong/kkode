@@ -2309,6 +2309,12 @@ components:
           type: integer
         max_git_diff_bytes:
           type: integer
+        max_run_preview_bytes:
+          type: integer
+        max_provider_test_preview_bytes:
+          type: integer
+        max_provider_test_result_bytes:
+          type: integer
         max_lsp_format_input_bytes:
           type: integer
         max_lsp_format_preview_bytes:

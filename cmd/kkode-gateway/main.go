@@ -483,10 +483,14 @@ func validateProviderTestBudgets(req gateway.ProviderTestRequest) error {
 	switch {
 	case req.MaxPreviewBytes < 0:
 		return fmt.Errorf("max_preview_bytes는 0 이상이어야 해요")
+	case req.MaxPreviewBytes > gateway.MaxProviderTestPreviewBytes:
+		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", gateway.MaxProviderTestPreviewBytes)
 	case req.MaxOutputTokens < 0:
 		return fmt.Errorf("max_output_tokens는 0 이상이어야 해요")
 	case req.MaxResultBytes < 0:
 		return fmt.Errorf("max_result_bytes는 0 이상이어야 해요")
+	case req.MaxResultBytes > gateway.MaxProviderTestResultBytes:
+		return fmt.Errorf("max_result_bytes는 %d 이하여야 해요", gateway.MaxProviderTestResultBytes)
 	case req.TimeoutMS < 0:
 		return fmt.Errorf("timeout_ms는 0 이상이어야 해요")
 	default:
@@ -692,6 +696,9 @@ func cloneStringSlice(in []string) []string {
 func runPreviewBytes(maxBytes int) int {
 	if maxBytes <= 0 {
 		return 64 << 10
+	}
+	if maxBytes > gateway.MaxRunPreviewBytes {
+		return gateway.MaxRunPreviewBytes
 	}
 	return maxBytes
 }

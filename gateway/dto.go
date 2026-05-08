@@ -351,6 +351,12 @@ type ProviderTestRequest struct {
 	TimeoutMS       int               `json:"timeout_ms,omitempty"`
 }
 
+const (
+	MaxRunPreviewBytes          = 8 << 20
+	MaxProviderTestPreviewBytes = 8 << 20
+	MaxProviderTestResultBytes  = 8 << 20
+)
+
 // ProviderTestResultDTO는 provider live smoke 결과를 adapter 친화적으로 요약해요.
 type ProviderTestResultDTO struct {
 	ID            string    `json:"id,omitempty"`
@@ -470,38 +476,41 @@ type RunRuntimeStatsDTO struct {
 
 // LimitDTO는 외부 adapter가 payload와 polling 전략을 맞출 때 보는 gateway 제한값이에요.
 type LimitDTO struct {
-	MaxRequestBytes            int64 `json:"max_request_bytes"`
-	MaxConcurrentRuns          int   `json:"max_concurrent_runs,omitempty"`
-	RunTimeoutSeconds          int   `json:"run_timeout_seconds,omitempty"`
-	MaxMCPHTTPResponseBytes    int   `json:"max_mcp_http_response_bytes,omitempty"`
-	MaxMCPProbeNameBytes       int   `json:"max_mcp_probe_name_bytes,omitempty"`
-	MaxMCPProbeURIBytes        int   `json:"max_mcp_probe_uri_bytes,omitempty"`
-	MaxMCPProbeArgumentBytes   int   `json:"max_mcp_probe_argument_bytes,omitempty"`
-	MaxMCPProbeOutputBytes     int   `json:"max_mcp_probe_output_bytes,omitempty"`
-	MaxFileContentBytes        int   `json:"max_file_content_bytes,omitempty"`
-	MaxSkillPreviewBytes       int   `json:"max_skill_preview_bytes,omitempty"`
-	MaxSubagentPreviewBytes    int   `json:"max_subagent_preview_prompt_bytes,omitempty"`
-	MaxPromptTextBytes         int   `json:"max_prompt_text_bytes,omitempty"`
-	MaxTranscriptMarkdownBytes int   `json:"max_transcript_markdown_bytes,omitempty"`
-	MaxGitDiffBytes            int   `json:"max_git_diff_bytes,omitempty"`
-	MaxLSPFormatInputBytes     int   `json:"max_lsp_format_input_bytes,omitempty"`
-	MaxLSPFormatPreviewBytes   int   `json:"max_lsp_format_preview_bytes,omitempty"`
-	MaxRunPromptBytes          int   `json:"max_run_prompt_bytes,omitempty"`
-	MaxRunSelectorItems        int   `json:"max_run_selector_items,omitempty"`
-	MaxRunSelectorItemBytes    int   `json:"max_run_selector_item_bytes,omitempty"`
-	MaxRunContextBlocks        int   `json:"max_run_context_blocks,omitempty"`
-	MaxRunContextBlockBytes    int   `json:"max_run_context_block_bytes,omitempty"`
-	MaxRunMetadataEntries      int   `json:"max_run_metadata_entries,omitempty"`
-	MaxRunMetadataKeyBytes     int   `json:"max_run_metadata_key_bytes,omitempty"`
-	MaxRunMetadataValueBytes   int   `json:"max_run_metadata_value_bytes,omitempty"`
-	MaxRequestIDBytes          int   `json:"max_request_id_bytes,omitempty"`
-	MaxIdempotencyKeyBytes     int   `json:"max_idempotency_key_bytes,omitempty"`
-	MaxToolCallNameBytes       int   `json:"max_tool_call_name_bytes,omitempty"`
-	MaxToolCallIDBytes         int   `json:"max_tool_call_id_bytes,omitempty"`
-	MaxToolCallArgumentBytes   int   `json:"max_tool_call_argument_bytes,omitempty"`
-	MaxToolCallOutputBytes     int   `json:"max_tool_call_output_bytes,omitempty"`
-	MaxToolCallWebBytes        int64 `json:"max_tool_call_web_bytes,omitempty"`
-	MaxRunProviderModelBytes   int   `json:"max_run_provider_model_bytes,omitempty"`
+	MaxRequestBytes             int64 `json:"max_request_bytes"`
+	MaxConcurrentRuns           int   `json:"max_concurrent_runs,omitempty"`
+	RunTimeoutSeconds           int   `json:"run_timeout_seconds,omitempty"`
+	MaxMCPHTTPResponseBytes     int   `json:"max_mcp_http_response_bytes,omitempty"`
+	MaxMCPProbeNameBytes        int   `json:"max_mcp_probe_name_bytes,omitempty"`
+	MaxMCPProbeURIBytes         int   `json:"max_mcp_probe_uri_bytes,omitempty"`
+	MaxMCPProbeArgumentBytes    int   `json:"max_mcp_probe_argument_bytes,omitempty"`
+	MaxMCPProbeOutputBytes      int   `json:"max_mcp_probe_output_bytes,omitempty"`
+	MaxFileContentBytes         int   `json:"max_file_content_bytes,omitempty"`
+	MaxSkillPreviewBytes        int   `json:"max_skill_preview_bytes,omitempty"`
+	MaxSubagentPreviewBytes     int   `json:"max_subagent_preview_prompt_bytes,omitempty"`
+	MaxPromptTextBytes          int   `json:"max_prompt_text_bytes,omitempty"`
+	MaxTranscriptMarkdownBytes  int   `json:"max_transcript_markdown_bytes,omitempty"`
+	MaxGitDiffBytes             int   `json:"max_git_diff_bytes,omitempty"`
+	MaxRunPreviewBytes          int   `json:"max_run_preview_bytes,omitempty"`
+	MaxProviderTestPreviewBytes int   `json:"max_provider_test_preview_bytes,omitempty"`
+	MaxProviderTestResultBytes  int   `json:"max_provider_test_result_bytes,omitempty"`
+	MaxLSPFormatInputBytes      int   `json:"max_lsp_format_input_bytes,omitempty"`
+	MaxLSPFormatPreviewBytes    int   `json:"max_lsp_format_preview_bytes,omitempty"`
+	MaxRunPromptBytes           int   `json:"max_run_prompt_bytes,omitempty"`
+	MaxRunSelectorItems         int   `json:"max_run_selector_items,omitempty"`
+	MaxRunSelectorItemBytes     int   `json:"max_run_selector_item_bytes,omitempty"`
+	MaxRunContextBlocks         int   `json:"max_run_context_blocks,omitempty"`
+	MaxRunContextBlockBytes     int   `json:"max_run_context_block_bytes,omitempty"`
+	MaxRunMetadataEntries       int   `json:"max_run_metadata_entries,omitempty"`
+	MaxRunMetadataKeyBytes      int   `json:"max_run_metadata_key_bytes,omitempty"`
+	MaxRunMetadataValueBytes    int   `json:"max_run_metadata_value_bytes,omitempty"`
+	MaxRequestIDBytes           int   `json:"max_request_id_bytes,omitempty"`
+	MaxIdempotencyKeyBytes      int   `json:"max_idempotency_key_bytes,omitempty"`
+	MaxToolCallNameBytes        int   `json:"max_tool_call_name_bytes,omitempty"`
+	MaxToolCallIDBytes          int   `json:"max_tool_call_id_bytes,omitempty"`
+	MaxToolCallArgumentBytes    int   `json:"max_tool_call_argument_bytes,omitempty"`
+	MaxToolCallOutputBytes      int   `json:"max_tool_call_output_bytes,omitempty"`
+	MaxToolCallWebBytes         int64 `json:"max_tool_call_web_bytes,omitempty"`
+	MaxRunProviderModelBytes    int   `json:"max_run_provider_model_bytes,omitempty"`
 }
 
 func toSessionDTO(sess *session.Session) SessionDTO {
