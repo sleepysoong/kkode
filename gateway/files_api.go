@@ -1,7 +1,9 @@
 package gateway
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -130,11 +132,6 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_path", err.Error())
 		return
 	}
-	entries, err := os.ReadDir(rooted)
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "list_files_failed", err.Error())
-		return
-	}
 	limit, ok := queryLimitParam(w, r, "limit", 500, workspace.MaxListEntries, "invalid_file_list")
 	if !ok {
 		return
@@ -143,14 +140,19 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	entries, workspaceTruncated, err := readBoundedDirEntries(rooted, workspace.MaxListEntries)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "list_files_failed", err.Error())
+		return
+	}
 	total := len(entries)
 	if offset >= total {
 		entries = nil
 	} else if offset > 0 {
 		entries = entries[offset:]
 	}
-	truncated := len(entries) > limit
-	if truncated {
+	pageTruncated := len(entries) > limit
+	if pageTruncated {
 		entries = entries[:limit]
 	}
 	returned := len(entries)
@@ -167,7 +169,23 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, FileEntryDTO{Name: entry.Name(), Path: childRel, Kind: kind, Size: info.Size(), ModTime: info.ModTime().UTC()})
 	}
-	writeJSON(w, FileListResponse{ProjectRoot: projectRoot, Path: filepath.ToSlash(rel), Entries: out, TotalEntries: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), EntriesTruncated: truncated})
+	writeJSON(w, FileListResponse{ProjectRoot: projectRoot, Path: filepath.ToSlash(rel), Entries: out, TotalEntries: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, pageTruncated), EntriesTruncated: pageTruncated || workspaceTruncated})
+}
+
+func readBoundedDirEntries(path string, maxEntries int) ([]os.DirEntry, bool, error) {
+	dir, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer dir.Close()
+	entries, err := dir.ReadDir(maxEntries + 1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, false, err
+	}
+	if len(entries) <= maxEntries {
+		return entries, false, nil
+	}
+	return entries[:maxEntries], true, nil
 }
 
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
