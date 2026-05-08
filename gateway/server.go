@@ -135,6 +135,12 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 func (s *Server) requestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := requestIDFromRequest(r)
+		if err := validateRequestIDValue(id); err != nil {
+			id = s.cfg.RequestIDGenerator()
+			w.Header().Set(RequestIDHeader, id)
+			writeError(w, withRequestID(r, id), http.StatusBadRequest, "invalid_request_id", err.Error())
+			return
+		}
 		if id == "" {
 			id = s.cfg.RequestIDGenerator()
 		}
@@ -266,6 +272,10 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
 		return
 	}
+	if err := validateRequestIDValue(requestID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
+		return
+	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_request_runs")
 	if !ok {
 		return
@@ -295,6 +305,10 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
+		return
+	}
+	if err := validateRequestIDValue(requestID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
 		return
 	}
 	afterSeq, ok := queryAfterSeq(w, r)
@@ -1267,6 +1281,16 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
 		return
 	}
+	requestID := strings.TrimSpace(r.URL.Query().Get(RequestIDMetadataKey))
+	if err := validateRequestIDValue(requestID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
+		return
+	}
+	idempotencyKey := strings.TrimSpace(r.URL.Query().Get(IdempotencyMetadataKey))
+	if err := validateIdempotencyKeyValue(idempotencyKey); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
+		return
+	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_run_list")
 	if !ok {
 		return
@@ -1275,7 +1299,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit + 1, Offset: offset})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: requestID, IdempotencyKey: idempotencyKey, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return

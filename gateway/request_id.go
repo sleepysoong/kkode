@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -32,6 +33,9 @@ const IdempotencyReusedMetadataKey = "idempotency_reused"
 // DefaultMCPMetadataKey는 gateway가 기본으로 붙인 MCP server 이름 목록이에요.
 const DefaultMCPMetadataKey = "default_mcp_servers"
 
+const maxRequestIDBytes = 128
+const maxIdempotencyKeyBytes = 128
+
 type requestIDContextKey struct{}
 
 func newRequestID() string {
@@ -59,6 +63,28 @@ func requestIDFromRequest(r *http.Request) string {
 		return id
 	}
 	return strings.TrimSpace(r.Header.Get(RequestIDHeader))
+}
+
+func validateRequestIDValue(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if len(value) > maxRequestIDBytes {
+		return fmt.Errorf("request_id는 %d byte 이하여야 해요", maxRequestIDBytes)
+	}
+	return nil
+}
+
+func validateIdempotencyKeyValue(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if len(value) > maxIdempotencyKeyBytes {
+		return fmt.Errorf("idempotency_key는 %d byte 이하여야 해요", maxIdempotencyKeyBytes)
+	}
+	return nil
 }
 
 func withRequestIDMetadata(metadata map[string]string, requestID string) map[string]string {

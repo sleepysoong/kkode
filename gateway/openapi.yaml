@@ -1754,11 +1754,13 @@ paths:
           name: request_id
           schema:
             type: string
+            maxLength: 128
           description: "`X-Request-Id`에서 run metadata로 전파된 request id로 좁혀요."
         - in: query
           name: idempotency_key
           schema:
             type: string
+            maxLength: 128
           description: "`Idempotency-Key` 또는 metadata.idempotency_key로 저장된 key로 좁혀요."
         - in: query
           name: limit
@@ -1791,6 +1793,7 @@ paths:
           name: Idempotency-Key
           schema:
             type: string
+            maxLength: 128
           description: 같은 run 생성 요청의 재시도를 묶는 key예요.
       requestBody:
         required: true
@@ -1868,6 +1871,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
         - in: query
           name: limit
           schema:
@@ -1900,6 +1904,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
         - in: query
           name: limit
           schema:
@@ -1942,6 +1947,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
         - in: query
           name: run_limit
           schema:
@@ -3523,9 +3529,11 @@ components:
           description: ok=false일 때 사람이 읽을 수 있는 오류예요.
         request_id:
           type: string
+          maxLength: 128
           description: X-Request-Id 또는 gateway가 생성한 request id예요.
         idempotency_key:
           type: string
+          maxLength: 128
           description: header/body metadata에서 해석한 idempotency key예요.
         run_id:
           type: string
@@ -4243,6 +4251,7 @@ components:
       properties:
         request_id:
           type: string
+          maxLength: 128
         runs:
           type: array
           items:
@@ -4261,6 +4270,7 @@ components:
       properties:
         request_id:
           type: string
+          maxLength: 128
         events:
           type: array
           items:
@@ -4279,6 +4289,7 @@ components:
       properties:
         request_id:
           type: string
+          maxLength: 128
         transcripts:
           type: array
           items:
@@ -4418,6 +4429,7 @@ components:
           type: string
         request_id:
           type: string
+          maxLength: 128
         details:
           type: object
           additionalProperties: true

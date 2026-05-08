@@ -79,6 +79,10 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
 		return
 	}
+	if err := validateRequestIDValue(requestID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
+		return
+	}
 	maxMarkdownBytes, ok := transcriptMarkdownLimit(w, r)
 	if !ok {
 		return

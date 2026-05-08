@@ -600,6 +600,14 @@ func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
 	if body.Error.RequestID != "client_req" || body.Error.Code != "not_found" {
 		t.Fatalf("오류 envelope request id가 이상해요: %+v", body)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	req.Header.Set(RequestIDHeader, strings.Repeat("x", maxRequestIDBytes+1))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "request_id") || len(rec.Header().Get(RequestIDHeader)) > maxRequestIDBytes {
+		t.Fatalf("긴 request id는 짧은 generated id로 400이어야 해요: status=%d header=%q body=%s", rec.Code, rec.Header().Get(RequestIDHeader), rec.Body.String())
+	}
 }
 
 func TestGatewayRecoverPanicBeforeWriteReturnsErrorEnvelope(t *testing.T) {
@@ -797,6 +805,21 @@ func TestGatewayRejectsInvalidRunMetadata(t *testing.T) {
 	}
 	if started || previewed || validated {
 		t.Fatalf("invalid metadata는 runtime hook 전에 거부돼야 해요: started=%v previewed=%v validated=%v", started, previewed, validated)
+	}
+
+	body = `{"session_id":"sess_1","prompt":"go test","metadata":{"idempotency_key":"` + strings.Repeat("x", maxIdempotencyKeyBytes+1) + `"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/validate", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "idempotency_key") {
+		t.Fatalf("긴 idempotency metadata는 validate에서 invalid_run이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got RunValidateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || got.Code != "invalid_run" {
+		t.Fatalf("긴 idempotency metadata validate 응답이 이상해요: %+v", got)
 	}
 }
 
@@ -1095,6 +1118,20 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 			t.Fatalf("run list offset 오류는 offset을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
 		}
 	}
+	for _, tc := range []struct {
+		queryString string
+		want        string
+	}{
+		{queryString: "request_id=" + strings.Repeat("x", maxRequestIDBytes+1), want: "request_id"},
+		{queryString: "idempotency_key=" + strings.Repeat("x", maxIdempotencyKeyBytes+1), want: "idempotency_key"},
+	} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs?"+tc.queryString, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("긴 run list correlation query는 400이어야 해요: query=%s status=%d body=%s", tc.queryString, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayListsRunsWithNextOffset(t *testing.T) {
@@ -1177,6 +1214,12 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 		if strings.Contains(queryString, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("request run offset 오류는 offset을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
 		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+strings.Repeat("x", maxRequestIDBytes+1)+"/runs", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "request_id") {
+		t.Fatalf("긴 request_id path는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -177,6 +177,16 @@ func validateRunMetadata(metadata map[string]string) error {
 		if len(value) > maxRunMetadataValueBytes {
 			return fmt.Errorf("metadata %q 값은 %d byte 이하여야 해요", key, maxRunMetadataValueBytes)
 		}
+		if key == RequestIDMetadataKey {
+			if err := validateRequestIDValue(value); err != nil {
+				return err
+			}
+		}
+		if key == IdempotencyMetadataKey {
+			if err := validateIdempotencyKeyValue(value); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
