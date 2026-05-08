@@ -2694,6 +2694,13 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	if !got.Redacted || !strings.Contains(body, "[REDACTED]") || strings.Contains(body, secret) {
 		t.Fatalf("run transcript는 기본 redaction을 적용해야 해요: %s", body)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript?max_markdown_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
+		t.Fatalf("음수 run transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
@@ -2734,6 +2741,13 @@ func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
 	body := rec.Body.String()
 	if !got.Redacted || !strings.Contains(body, "[REDACTED]") || strings.Contains(body, secret) {
 		t.Fatalf("request transcript는 기본 redaction을 적용해야 해요: %s", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+requestID+"/transcript?max_markdown_bytes=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
+		t.Fatalf("잘못된 request transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -4528,6 +4542,13 @@ func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	}
 	if strings.Contains(got.Markdown, "abc1234567890secretvalue") || strings.Contains(got.Turns[0].Prompt, "abc1234567890secretvalue") {
 		t.Fatalf("transcript는 기본적으로 secret을 가려야 해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript?max_markdown_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
+		t.Fatalf("음수 session transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript?redact=false", nil)

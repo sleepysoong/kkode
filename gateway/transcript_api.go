@@ -47,6 +47,10 @@ func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, se
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "지원하지 않는 transcript method예요")
 		return
 	}
+	maxMarkdownBytes, ok := transcriptMarkdownLimit(w, r)
+	if !ok {
+		return
+	}
 	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
@@ -54,7 +58,7 @@ func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, se
 	}
 	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
 	resp := toTranscriptResponse(sess, redacted)
-	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(r, resp.Markdown)
+	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(resp.Markdown, maxMarkdownBytes)
 	writeJSON(w, resp)
 }
 
@@ -70,6 +74,10 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
+		return
+	}
+	maxMarkdownBytes, ok := transcriptMarkdownLimit(w, r)
+	if !ok {
 		return
 	}
 	runLimit := queryLimit(r, "run_limit", 50, 200)
@@ -91,7 +99,7 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 			}
 			sessionCache[run.SessionID] = sess
 		}
-		transcripts = append(transcripts, s.toRunTranscriptResponse(r, run, sess, redacted))
+		transcripts = append(transcripts, s.toRunTranscriptResponse(r, run, sess, redacted, maxMarkdownBytes))
 	}
 	resp := RequestCorrelationTranscriptResponse{
 		RequestID:   requestID,
@@ -102,7 +110,7 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 	if redacted {
 		resp.Markdown = llm.RedactSecrets(resp.Markdown)
 	}
-	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(r, resp.Markdown)
+	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(resp.Markdown, maxMarkdownBytes)
 	writeJSON(w, resp)
 }
 
@@ -113,6 +121,10 @@ func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID 
 	}
 	if s.cfg.RunGetter == nil {
 		writeError(w, r, http.StatusNotImplemented, "run_getter_missing", "이 gateway에는 RunGetter가 연결되지 않았어요")
+		return
+	}
+	maxMarkdownBytes, ok := transcriptMarkdownLimit(w, r)
+	if !ok {
 		return
 	}
 	run, err := s.cfg.RunGetter(r.Context(), runID)
@@ -126,11 +138,11 @@ func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID 
 		return
 	}
 	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
-	resp := s.toRunTranscriptResponse(r, *run, sess, redacted)
+	resp := s.toRunTranscriptResponse(r, *run, sess, redacted, maxMarkdownBytes)
 	writeJSON(w, resp)
 }
 
-func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *session.Session, redacted bool) RunTranscriptResponse {
+func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *session.Session, redacted bool, maxMarkdownBytes int) RunTranscriptResponse {
 	turn := s.runTranscriptTurn(r, run)
 	events := s.runTranscriptEvents(r, run)
 	runEvents := s.runEventSnapshot(r, run.ID, run)
@@ -168,15 +180,19 @@ func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *sess
 				runEvents[i].Payload = redactRawJSON(runEvents[i].Payload)
 			}
 		}
-		markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(r, markdown)
+		markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(markdown, maxMarkdownBytes)
 		return RunTranscriptResponse{Run: run, Session: sessionDTO, Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: markdownTruncated, Redacted: redacted}
 	}
-	markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(r, markdown)
+	markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(markdown, maxMarkdownBytes)
 	return RunTranscriptResponse{Run: run, Session: toSessionDTO(sess), Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: markdownTruncated, Redacted: redacted}
 }
 
-func limitTranscriptMarkdown(r *http.Request, markdown string) (string, int, bool) {
-	return truncateToolOutput(markdown, queryLimit(r, "max_markdown_bytes", 1<<20, 8<<20))
+func transcriptMarkdownLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
+	return queryNonNegativeLimitParam(w, r, "max_markdown_bytes", 1<<20, 8<<20, "invalid_transcript")
+}
+
+func limitTranscriptMarkdown(markdown string, maxMarkdownBytes int) (string, int, bool) {
+	return truncateToolOutput(markdown, maxMarkdownBytes)
 }
 
 func (s *Server) runTranscriptTurn(r *http.Request, run RunDTO) *TurnDTO {
