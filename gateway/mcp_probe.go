@@ -195,8 +195,14 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 
 func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, serverID string, kind string) {
 	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
-		limit := queryLimit(r, "limit", 100, 500)
-		offset := queryOffset(r, "offset")
+		limit, ok := queryLimitParam(w, r, "limit", 100, 500, "invalid_mcp_probe")
+		if !ok {
+			return
+		}
+		offset, ok := queryOffsetParam(w, r, "offset", "invalid_mcp_probe")
+		if !ok {
+			return
+		}
 		switch kind {
 		case "tools":
 			tools, err := probeMCPTools(r.Context(), resource)

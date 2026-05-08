@@ -3198,6 +3198,20 @@ while True:
 	if tools.Limit != 1 || tools.NextOffset != 1 || !tools.ResultTruncated {
 		t.Fatalf("MCP tools/list page metadata가 이상해요: %+v", tools)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/tools?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 MCP tools/list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("MCP tools/list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("MCP tools/list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayProbesHTTPMCPServerTools(t *testing.T) {
@@ -3311,6 +3325,20 @@ while True:
 	if resources.Limit != 1 || resources.NextOffset != 1 || !resources.ResultTruncated {
 		t.Fatalf("MCP resources/list page metadata가 이상해요: %+v", resources)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/resources?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 MCP resources/list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("MCP resources/list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("MCP resources/list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/prompts?limit=1&offset=1", nil)
 	rec = httptest.NewRecorder()
@@ -3324,6 +3352,20 @@ while True:
 	}
 	if prompts.Server.ID != resource.ID || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "summarize" || prompts.Limit != 1 || prompts.Offset != 1 || prompts.NextOffset != 0 || prompts.ResultTruncated {
 		t.Fatalf("MCP prompts/list 결과가 이상해요: %+v", prompts)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/prompts?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 MCP prompts/list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("MCP prompts/list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("MCP prompts/list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
 	}
 }
 
