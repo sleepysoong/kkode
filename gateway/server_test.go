@@ -4762,6 +4762,43 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
 	turn := session.NewTurn("go", llm.Request{Model: "gpt-5-mini"})
 	sess.AppendTurn(turn)
+	for _, tc := range []struct {
+		name         string
+		mutate       func(*session.Session)
+		newSessionID string
+		want         string
+	}{
+		{name: "bad session id", mutate: func(s *session.Session) { s.ID = "bad id" }, want: "session id"},
+		{name: "bad new session id", newSessionID: "bad id", want: "session id"},
+		{name: "bad session mode", mutate: func(s *session.Session) { s.Mode = "debug" }, want: "mode"},
+		{name: "bad session metadata", mutate: func(s *session.Session) { s.Metadata = map[string]string{"bad key": "value"} }, want: "metadata key"},
+		{name: "bad session todo", mutate: func(s *session.Session) {
+			s.Todos = []session.Todo{{ID: "bad id", Content: "todo", Status: session.TodoPending}}
+		}, want: "todo id"},
+	} {
+		raw := *sess
+		if tc.mutate != nil {
+			tc.mutate(&raw)
+		}
+		body, err := json.Marshal(SessionImportRequest{
+			FormatVersion: sessionExportFormatVersion,
+			RawSession:    &raw,
+			NewSessionID:  tc.newSessionID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s import는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("%s preflight 실패 후 session이 저장되면 안 돼요: err=%v", tc.name, err)
+		}
+	}
 	body, err := json.Marshal(SessionImportRequest{
 		FormatVersion: sessionExportFormatVersion,
 		RawSession:    sess,

@@ -13,6 +13,7 @@ import (
 )
 
 const sessionExportFormatVersion = "kkode.session.export.v1"
+const maxSessionIDBytes = 128
 const maxRunIDBytes = 128
 
 // SessionExportResponse는 session 복구/이관/debug를 위해 관련 상태를 한 번에 묶은 JSON이에요.
@@ -176,9 +177,14 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	imported := *req.RawSession
+	imported = sanitizeImportedSession(imported, s.cfg.Now())
 	originalID := imported.ID
 	if newID := strings.TrimSpace(req.NewSessionID); newID != "" {
 		rewriteImportedSessionID(&imported, newID)
+	}
+	if err := validateImportedSession(imported); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_import", err.Error())
+		return
 	}
 	if !req.Overwrite {
 		if _, err := s.cfg.Store.LoadSession(r.Context(), imported.ID); err == nil {
@@ -462,12 +468,59 @@ func subagentLinkedMCPServerIDs(resource session.Resource) []string {
 
 func rewriteImportedSessionID(sess *session.Session, newID string) {
 	oldID := sess.ID
-	sess.ID = newID
+	sess.ID = strings.TrimSpace(newID)
 	for i := range sess.Events {
 		if sess.Events[i].SessionID == "" || sess.Events[i].SessionID == oldID {
-			sess.Events[i].SessionID = newID
+			sess.Events[i].SessionID = sess.ID
 		}
 	}
+}
+
+func sanitizeImportedSession(sess session.Session, now time.Time) session.Session {
+	sess.ID = strings.TrimSpace(sess.ID)
+	sess.ProjectRoot = strings.TrimSpace(sess.ProjectRoot)
+	sess.ProviderName = strings.TrimSpace(sess.ProviderName)
+	sess.Model = strings.TrimSpace(sess.Model)
+	sess.AgentName = strings.TrimSpace(sess.AgentName)
+	sess.Mode = session.AgentMode(strings.TrimSpace(string(sess.Mode)))
+	sess.Metadata = sanitizeRunMetadata(sess.Metadata)
+	for i := range sess.Todos {
+		dto := TodoDTO{ID: sess.Todos[i].ID, Content: sess.Todos[i].Content, Status: string(sess.Todos[i].Status), Priority: sess.Todos[i].Priority, UpdatedAt: sess.Todos[i].UpdatedAt}
+		if todo, err := todoFromDTO(dto, now); err == nil {
+			sess.Todos[i] = todo
+		}
+	}
+	return sess
+}
+
+func validateImportedSession(sess session.Session) error {
+	if sess.ID == "" {
+		return fmt.Errorf("raw_session.id가 필요해요")
+	}
+	if len(sess.ID) > maxSessionIDBytes {
+		return fmt.Errorf("session id는 %d byte 이하여야 해요", maxSessionIDBytes)
+	}
+	if !validRunMetadataKey(sess.ID) {
+		return fmt.Errorf("session id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if sess.ProjectRoot == "" || sess.ProviderName == "" || sess.Model == "" {
+		return fmt.Errorf("raw_session project_root, provider_name, model이 필요해요")
+	}
+	if sess.Mode == "" {
+		return fmt.Errorf("raw_session mode가 필요해요")
+	}
+	if !validAgentMode(sess.Mode) {
+		return fmt.Errorf("raw_session mode는 build, plan, ask 중 하나여야 해요")
+	}
+	if err := validateRunMetadata(sess.Metadata); err != nil {
+		return err
+	}
+	for _, todo := range sess.Todos {
+		if _, err := todoFromDTO(TodoDTO{ID: todo.ID, Content: todo.Content, Status: string(todo.Status), Priority: todo.Priority, UpdatedAt: todo.UpdatedAt}, time.Now().UTC()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func exportTurnDTOs(sess *session.Session) []TurnDTO {
