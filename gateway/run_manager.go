@@ -646,7 +646,8 @@ func (m *AsyncRunManager) recordEvent(ctx context.Context, run *RunDTO) error {
 	if m == nil || m.runEventStore == nil || run == nil || run.ID == "" {
 		return nil
 	}
-	_, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{RunID: run.ID, Type: runEventType(run.Status), At: m.timestamp(), Run: sessionRunFromDTO(*run)})
+	eventRun := redactRunEventSnapshot(*run)
+	_, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{RunID: run.ID, Type: runEventType(run.Status), At: m.timestamp(), Run: sessionRunFromDTO(eventRun)})
 	return err
 }
 
@@ -668,7 +669,7 @@ func (m *AsyncRunManager) recordProgressEvent(ctx context.Context, runID string,
 	event.Message = llm.RedactSecrets(event.Message)
 	event.Error = llm.RedactSecrets(event.Error)
 	event.Payload = redactRawJSON(event.Payload)
-	event.Run = run
+	event.Run = redactRunEventSnapshot(run)
 	saved, err := m.runEventStore.AppendRunEvent(ctx, session.RunEvent{
 		RunID:   runID,
 		Type:    event.Type,
@@ -677,7 +678,7 @@ func (m *AsyncRunManager) recordProgressEvent(ctx context.Context, runID string,
 		Message: event.Message,
 		Error:   event.Error,
 		Payload: append([]byte(nil), event.Payload...),
-		Run:     sessionRunFromDTO(run),
+		Run:     sessionRunFromDTO(event.Run),
 	})
 	if err == nil && m.eventBus != nil {
 		event.Seq = saved.Seq
@@ -696,7 +697,7 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 		}
 		out := make([]RunEventDTO, 0, len(events))
 		for _, event := range events {
-			out = append(out, RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Tool: event.Tool, Message: event.Message, Error: event.Error, Payload: append([]byte(nil), event.Payload...), Run: *runDTOFromSession(event.Run)})
+			out = append(out, RunEventDTO{Seq: event.Seq, At: event.At, Type: event.Type, Tool: event.Tool, Message: event.Message, Error: event.Error, Payload: append([]byte(nil), event.Payload...), Run: redactRunEventSnapshot(*runDTOFromSession(event.Run))})
 		}
 		return out, nil
 	}
@@ -707,7 +708,17 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 	if afterSeq >= 1 {
 		return []RunEventDTO{}, nil
 	}
-	return []RunEventDTO{{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: *run}}, nil
+	return []RunEventDTO{{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: redactRunEventSnapshot(*run)}}, nil
+}
+
+func redactRunEventSnapshot(run RunDTO) RunDTO {
+	run.Prompt = llm.RedactSecrets(run.Prompt)
+	run.Error = llm.RedactSecrets(run.Error)
+	run.Metadata = redactStringMap(run.Metadata)
+	for i := range run.ContextBlocks {
+		run.ContextBlocks[i] = llm.RedactSecrets(run.ContextBlocks[i])
+	}
+	return run
 }
 
 func sessionRunFromDTO(run RunDTO) session.Run {

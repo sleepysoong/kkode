@@ -620,7 +620,8 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed"}, nil
 	}, store)
-	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go", Metadata: map[string]string{RequestIDMetadataKey: "req_async"}})
+	secret := "token=abc1234567890secretvalue"
+	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go " + secret, Metadata: map[string]string{RequestIDMetadataKey: "req_async", "token": secret}, ContextBlocks: []string{"context " + secret}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -632,6 +633,9 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 	for _, event := range replay {
 		if event.Run.Metadata[RequestIDMetadataKey] != "req_async" {
 			t.Fatalf("run event에 request id metadata가 유지돼야 해요: %+v", event)
+		}
+		if strings.Contains(event.Run.Prompt, "abc1234567890secretvalue") || strings.Contains(event.Run.Metadata["token"], "abc1234567890secretvalue") || len(event.Run.ContextBlocks) != 1 || strings.Contains(event.Run.ContextBlocks[0], "abc1234567890secretvalue") {
+			t.Fatalf("run event snapshot은 secret을 숨겨야 해요: %+v", event.Run)
 		}
 	}
 	restarted := NewAsyncRunManagerWithStore(nil, store)
