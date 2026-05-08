@@ -93,6 +93,25 @@ func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 	}
 }
 
+func TestWorkspaceCommandOutputUsesBoundedEnvelope(t *testing.T) {
+	buf := &boundedCommandBuffer{max: 5}
+	n, err := buf.Write([]byte("abcdef"))
+	if err != nil || n != 6 {
+		t.Fatalf("write should accept full producer payload: n=%d err=%v", n, err)
+	}
+	if got := buf.String(); got != "abcde" || !buf.truncated {
+		t.Fatalf("buffer should retain only the configured envelope: got=%q truncated=%v", got, buf.truncated)
+	}
+
+	utf8Buf := &boundedCommandBuffer{max: 4}
+	if _, err := utf8Buf.Write([]byte("가나")); err != nil {
+		t.Fatal(err)
+	}
+	if got := utf8Buf.String(); got != "가" || !utf8.ValidString(got) || !utf8Buf.truncated {
+		t.Fatalf("truncated command output should stay UTF-8 safe: got=%q truncated=%v", got, utf8Buf.truncated)
+	}
+}
+
 func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)

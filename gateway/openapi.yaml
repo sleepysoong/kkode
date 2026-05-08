@@ -2377,6 +2377,10 @@ components:
         max_shell_timeout_ms:
           type: integer
           format: int64
+        max_shell_output_bytes:
+          type: integer
+        max_shell_stderr_bytes:
+          type: integer
         max_run_provider_model_bytes:
           type: integer
     DiagnosticsResponse:

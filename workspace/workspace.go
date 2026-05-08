@@ -36,14 +36,16 @@ type CommandOptions struct {
 }
 
 type CommandResult struct {
-	Command   []string  `json:"command"`
-	CWD       string    `json:"cwd"`
-	ExitCode  int       `json:"exit_code"`
-	Stdout    string    `json:"stdout"`
-	Stderr    string    `json:"stderr"`
-	StartedAt time.Time `json:"started_at"`
-	EndedAt   time.Time `json:"ended_at"`
-	TimedOut  bool      `json:"timed_out"`
+	Command         []string  `json:"command"`
+	CWD             string    `json:"cwd"`
+	ExitCode        int       `json:"exit_code"`
+	Stdout          string    `json:"stdout"`
+	Stderr          string    `json:"stderr"`
+	StdoutTruncated bool      `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool      `json:"stderr_truncated,omitempty"`
+	StartedAt       time.Time `json:"started_at"`
+	EndedAt         time.Time `json:"ended_at"`
+	TimedOut        bool      `json:"timed_out"`
 }
 
 type GrepOptions struct {
@@ -77,6 +79,8 @@ const MaxGlobMatches = 5000
 const MaxGrepMatches = 1000
 const MaxPatchBytes = 1 << 20
 const MaxCommandTimeout = 5 * time.Minute
+const MaxCommandOutputBytes = 8 << 20
+const MaxCommandStderrBytes = 1 << 20
 
 func New(root string) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
@@ -411,13 +415,16 @@ func (w *Workspace) RunDetailed(ctx context.Context, command string, args []stri
 	for k, v := range opts.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := &boundedCommandBuffer{max: MaxCommandOutputBytes}
+	stderr := &boundedCommandBuffer{max: MaxCommandStderrBytes}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	err := cmd.Run()
 	result.EndedAt = time.Now().UTC()
 	result.Stdout = stdout.String()
 	result.Stderr = stderr.String()
+	result.StdoutTruncated = stdout.truncated
+	result.StderrTruncated = stderr.truncated
 	if ctx.Err() == context.DeadlineExceeded {
 		result.TimedOut = true
 	}
@@ -430,6 +437,43 @@ func (w *Workspace) RunDetailed(ctx context.Context, command string, args []stri
 		return result, fmt.Errorf("%w: %s", err, result.Stderr)
 	}
 	return result, nil
+}
+
+type boundedCommandBuffer struct {
+	buf       bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func (b *boundedCommandBuffer) Write(p []byte) (int, error) {
+	if b.max <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		_, _ = b.buf.Write(p[:remaining])
+		b.truncated = true
+		return len(p), nil
+	}
+	_, _ = b.buf.Write(p)
+	return len(p), nil
+}
+
+func (b *boundedCommandBuffer) String() string {
+	data := b.buf.Bytes()
+	if utf8.Valid(data) {
+		return string(data)
+	}
+	end := len(data)
+	for end > 0 && !utf8.Valid(data[:end]) {
+		end--
+	}
+	return string(data[:end])
 }
 
 func (w *Workspace) ApplyPatch(patchText string) error {

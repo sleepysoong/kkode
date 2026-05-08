@@ -524,6 +524,8 @@ type LimitDTO struct {
 	MaxToolCallOutputBytes      int   `json:"max_tool_call_output_bytes,omitempty"`
 	MaxToolCallWebBytes         int64 `json:"max_tool_call_web_bytes,omitempty"`
 	MaxShellTimeoutMS           int64 `json:"max_shell_timeout_ms,omitempty"`
+	MaxShellOutputBytes         int   `json:"max_shell_output_bytes,omitempty"`
+	MaxShellStderrBytes         int   `json:"max_shell_stderr_bytes,omitempty"`
 	MaxRunProviderModelBytes    int   `json:"max_run_provider_model_bytes,omitempty"`
 }
 

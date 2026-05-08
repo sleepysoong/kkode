@@ -788,6 +788,8 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxToolCallOutputBytes:      maxToolCallOutputBytes,
 		MaxToolCallWebBytes:         maxToolCallWebBytes,
 		MaxShellTimeoutMS:           workspace.MaxCommandTimeout.Milliseconds(),
+		MaxShellOutputBytes:         workspace.MaxCommandOutputBytes,
+		MaxShellStderrBytes:         workspace.MaxCommandStderrBytes,
 		MaxRunProviderModelBytes:    maxRunProviderModelBytes,
 	}
 }
