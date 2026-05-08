@@ -14,6 +14,8 @@ import (
 
 const sessionExportFormatVersion = "kkode.session.export.v1"
 const maxSessionIDBytes = 128
+const maxSessionTurnPromptBytes = 32 << 10
+const maxSessionTurnSnapshotBytes = 1 << 20
 const maxSessionEventIDBytes = 128
 const maxSessionEventPayloadBytes = 1 << 20
 const maxRunIDBytes = 128
@@ -529,14 +531,11 @@ func validateImportedSession(sess session.Session) error {
 	}
 	turnIDs := map[string]bool{}
 	for _, turn := range sess.Turns {
-		if turn.ID == "" {
-			continue
+		if err := validateImportedSessionTurn(turn); err != nil {
+			return err
 		}
-		if len(turn.ID) > maxSessionEventIDBytes {
-			return fmt.Errorf("turn id는 %d byte 이하여야 해요", maxSessionEventIDBytes)
-		}
-		if !validRunMetadataKey(turn.ID) {
-			return fmt.Errorf("turn id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		if turnIDs[turn.ID] {
+			return fmt.Errorf("turn id가 중복됐어요: %s", turn.ID)
 		}
 		turnIDs[turn.ID] = true
 	}
@@ -548,6 +547,41 @@ func validateImportedSession(sess session.Session) error {
 	for _, todo := range sess.Todos {
 		if _, err := todoFromDTO(TodoDTO{ID: todo.ID, Content: todo.Content, Status: string(todo.Status), Priority: todo.Priority, UpdatedAt: todo.UpdatedAt}, time.Now().UTC()); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateImportedSessionTurn(turn session.Turn) error {
+	if turn.ID == "" {
+		return fmt.Errorf("turn id가 필요해요")
+	}
+	if len(turn.ID) > maxSessionEventIDBytes {
+		return fmt.Errorf("turn id는 %d byte 이하여야 해요", maxSessionEventIDBytes)
+	}
+	if !validRunMetadataKey(turn.ID) {
+		return fmt.Errorf("turn id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if strings.TrimSpace(turn.Prompt) == "" {
+		return fmt.Errorf("turn prompt가 필요해요")
+	}
+	if len(turn.Prompt) > maxSessionTurnPromptBytes {
+		return fmt.Errorf("turn prompt는 %d byte 이하여야 해요", maxSessionTurnPromptBytes)
+	}
+	requestBytes, err := json.Marshal(turn.Request)
+	if err != nil {
+		return fmt.Errorf("turn request를 JSON으로 저장할 수 없어요: %w", err)
+	}
+	if len(requestBytes) > maxSessionTurnSnapshotBytes {
+		return fmt.Errorf("turn request는 %d byte 이하여야 해요", maxSessionTurnSnapshotBytes)
+	}
+	if turn.Response != nil {
+		responseBytes, err := json.Marshal(turn.Response)
+		if err != nil {
+			return fmt.Errorf("turn response를 JSON으로 저장할 수 없어요: %w", err)
+		}
+		if len(responseBytes) > maxSessionTurnSnapshotBytes {
+			return fmt.Errorf("turn response는 %d byte 이하여야 해요", maxSessionTurnSnapshotBytes)
 		}
 	}
 	return nil

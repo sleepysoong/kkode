@@ -4775,7 +4775,21 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 		{name: "bad session todo", mutate: func(s *session.Session) {
 			s.Todos = []session.Todo{{ID: "bad id", Content: "todo", Status: session.TodoPending}}
 		}, want: "todo id"},
+		{name: "missing turn id", mutate: func(s *session.Session) { s.Turns[0].ID = "" }, want: "turn id"},
 		{name: "bad turn id", mutate: func(s *session.Session) { s.Turns[0].ID = "bad id" }, want: "turn id"},
+		{name: "duplicate turn id", mutate: func(s *session.Session) {
+			s.Turns = append(s.Turns, s.Turns[0])
+		}, want: "turn id"},
+		{name: "missing turn prompt", mutate: func(s *session.Session) { s.Turns[0].Prompt = " " }, want: "turn prompt"},
+		{name: "oversized turn prompt", mutate: func(s *session.Session) {
+			s.Turns[0].Prompt = strings.Repeat("x", maxSessionTurnPromptBytes+1)
+		}, want: "turn prompt"},
+		{name: "oversized turn request", mutate: func(s *session.Session) {
+			s.Turns[0].Request.Messages = []llm.Message{llm.UserText(strings.Repeat("x", maxSessionTurnSnapshotBytes+1))}
+		}, want: "turn request"},
+		{name: "oversized turn response", mutate: func(s *session.Session) {
+			s.Turns[0].Response = &llm.Response{Text: strings.Repeat("x", maxSessionTurnSnapshotBytes+1)}
+		}, want: "turn response"},
 		{name: "bad event id", mutate: func(s *session.Session) {
 			s.Events = []session.Event{{ID: "bad id", SessionID: s.ID, Type: "turn.completed"}}
 		}, want: "event id"},

@@ -3190,6 +3190,8 @@ components:
           type: string
         prompt:
           type: string
+          maxLength: 32768
+          description: import 요청에서는 최대 32768 byte까지 허용돼요.
         model:
           type: string
         messages:
