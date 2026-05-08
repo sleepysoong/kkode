@@ -768,6 +768,13 @@ func TestDefaultMCPDTOsAreStableAndRedacted(t *testing.T) {
 	}
 }
 
+func TestDefaultMCPDTOsRespectDisableFlag(t *testing.T) {
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	if resources := defaultMCPDTOs(); len(resources) != 0 {
+		t.Fatalf("KKODE_DEFAULT_MCP=off should hide default MCP discovery resources: %+v", resources)
+	}
+}
+
 func TestDefaultMCPDiagnosticChecksExplainMissingSerena(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("KKODE_SERENA_COMMAND", "")

@@ -896,7 +896,7 @@ func routeDTOs(routes []app.ProviderRouteSpec) []gateway.RouteDTO {
 }
 
 func defaultMCPDTOs() []gateway.ResourceDTO {
-	servers := app.DefaultMCPServers("")
+	servers := app.DefaultProviderOptions("").MCPServers
 	names := make([]string, 0, len(servers))
 	for name := range servers {
 		names = append(names, name)
