@@ -263,13 +263,14 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 	limit := queryLimit(r, "limit", 50, 200)
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit + 1})
+	offset := queryOffset(r, "offset")
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
-	runs, truncated := trimRuns(runs, limit)
-	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs, Limit: limit, ResultTruncated: truncated})
+	runs, returned, truncated := trimRuns(runs, limit)
+	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -1129,13 +1130,14 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 50, 200)
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit + 1})
+	offset := queryOffset(r, "offset")
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
-	runs, truncated := trimRuns(runs, limit)
-	writeJSON(w, RunListResponse{Runs: runs, Limit: limit, ResultTruncated: truncated})
+	runs, returned, truncated := trimRuns(runs, limit)
+	writeJSON(w, RunListResponse{Runs: runs, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
@@ -1400,7 +1402,7 @@ func (s *Server) runEventSnapshotWithLimit(r *http.Request, runID string, fallba
 	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}}
 }
 
-func trimRuns(runs []RunDTO, limit int) ([]RunDTO, bool) {
+func trimRuns(runs []RunDTO, limit int) ([]RunDTO, int, bool) {
 	if limit < 0 {
 		limit = 0
 	}
@@ -1408,7 +1410,7 @@ func trimRuns(runs []RunDTO, limit int) ([]RunDTO, bool) {
 	if truncated {
 		runs = runs[:limit]
 	}
-	return runs, truncated
+	return runs, len(runs), truncated
 }
 
 func trimSessionSummaries(sessions []session.SessionSummary, limit int) ([]session.SessionSummary, bool) {
@@ -1675,6 +1677,17 @@ func queryLimit(r *http.Request, key string, fallback int, maxValue int) int {
 		return maxValue
 	}
 	return limit
+}
+
+func queryOffset(r *http.Request, key string) int {
+	return queryInt(r, key, 0)
+}
+
+func nextOffset(offset int, returned int, truncated bool) int {
+	if !truncated {
+		return 0
+	}
+	return offset + returned
 }
 
 func queryBool(r *http.Request, key string, fallback bool) bool {

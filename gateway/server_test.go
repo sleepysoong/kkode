@@ -758,13 +758,13 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&limit=5", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&limit=5&offset=10", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Limit != 6 {
+	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Limit != 6 || query.Offset != 10 {
 		t.Fatalf("run query가 이상해요: %+v", query)
 	}
 	var body RunListResponse
@@ -774,8 +774,43 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if len(body.Runs) != 1 || body.Runs[0].Metadata[RequestIDMetadataKey] != "req_filter" {
 		t.Fatalf("run list 응답이 이상해요: %+v", body)
 	}
-	if body.Limit != 5 || body.ResultTruncated {
+	if body.Limit != 5 || body.Offset != 10 || body.NextOffset != 0 || body.ResultTruncated {
 		t.Fatalf("run list metadata가 이상해요: %+v", body)
+	}
+}
+
+func TestGatewayListsRunsWithNextOffset(t *testing.T) {
+	store := openTestStore(t)
+	var query RunQuery
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			query = q
+			return []RunDTO{
+				{ID: "run_1", SessionID: "sess_1", Status: "completed"},
+				{ID: "run_2", SessionID: "sess_1", Status: "completed"},
+				{ID: "run_3", SessionID: "sess_1", Status: "completed"},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?session_id=sess_1&limit=2&offset=4", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if query.SessionID != "sess_1" || query.Limit != 3 || query.Offset != 4 {
+		t.Fatalf("run page query가 이상해요: %+v", query)
+	}
+	var body RunListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Runs) != 2 || body.Runs[0].ID != "run_1" || !body.ResultTruncated || body.NextOffset != 6 {
+		t.Fatalf("run list page metadata가 이상해요: %+v", body)
 	}
 }
 
@@ -792,20 +827,20 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?limit=7", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?limit=7&offset=3", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.Limit != 8 {
+	if query.RequestID != "req_filter" || query.Limit != 8 || query.Offset != 3 {
 		t.Fatalf("request correlation query가 이상해요: %+v", query)
 	}
 	var body RequestCorrelationResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.RequestID != "req_filter" || len(body.Runs) != 1 || body.Runs[0].ID != "run_req" {
+	if body.RequestID != "req_filter" || body.Offset != 3 || len(body.Runs) != 1 || body.Runs[0].ID != "run_req" {
 		t.Fatalf("request correlation 응답이 이상해요: %+v", body)
 	}
 	if body.Limit != 7 || body.ResultTruncated {

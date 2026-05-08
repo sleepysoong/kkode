@@ -285,6 +285,20 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != "run_1" {
 		t.Fatalf("run list가 이상해요: %+v", listed)
 	}
+	if _, err := store.SaveRun(ctx, Run{ID: "run_0", SessionID: sess.ID, Status: "queued", Prompt: "older"}); err != nil {
+		t.Fatal(err)
+	}
+	firstPage, err := store.ListRuns(ctx, RunQuery{SessionID: sess.ID, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paged, err := store.ListRuns(ctx, RunQuery{SessionID: sess.ID, Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage) != 1 || len(paged) != 1 || paged[0].ID == firstPage[0].ID {
+		t.Fatalf("run list offset page가 이상해요: %+v", paged)
+	}
 	if _, err := store.SaveRun(ctx, Run{ID: "run_2", SessionID: sess.ID, Status: "completed", Prompt: "other", Metadata: map[string]string{"request_id": "req_other"}}); err != nil {
 		t.Fatal(err)
 	}

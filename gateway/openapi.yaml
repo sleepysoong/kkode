@@ -1671,6 +1671,13 @@ paths:
             type: integer
             default: 50
             maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: 다음 page를 가져올 0-based run offset이에요. 응답의 next_offset을 그대로 넣으면 돼요.
       responses:
         '200':
           description: run 목록이에요.
@@ -1772,6 +1779,13 @@ paths:
             type: integer
             default: 50
             maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: 다음 page를 가져올 0-based run offset이에요. 응답의 next_offset을 그대로 넣으면 돼요.
       responses:
         '200':
           description: request id와 연결된 run 목록이에요.
@@ -3769,6 +3783,10 @@ components:
             $ref: '#/components/schemas/Run'
         limit:
           type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
         result_truncated:
           type: boolean
     RequestCorrelationResponse:
@@ -3782,6 +3800,10 @@ components:
           items:
             $ref: '#/components/schemas/Run'
         limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
           type: integer
         result_truncated:
           type: boolean

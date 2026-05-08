@@ -18,6 +18,7 @@ type RunQuery struct {
 	RequestID      string
 	IdempotencyKey string
 	Limit          int
+	Offset         int
 }
 
 // RunGetter는 run 상세 조회 경계예요.
@@ -329,7 +330,7 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 		limit = 50
 	}
 	if m.runStore != nil {
-		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey, Limit: limit})
+		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey, Limit: limit, Offset: q.Offset})
 		if err != nil {
 			return nil, err
 		}
@@ -352,6 +353,12 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
+	if q.Offset > 0 {
+		if q.Offset >= len(out) {
+			return nil, nil
+		}
+		out = out[q.Offset:]
+	}
 	if len(out) > limit {
 		out = out[:limit]
 	}

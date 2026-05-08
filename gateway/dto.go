@@ -245,6 +245,8 @@ type ProviderRoutePreviewDTO struct {
 type RunListResponse struct {
 	Runs            []RunDTO `json:"runs"`
 	Limit           int      `json:"limit,omitempty"`
+	Offset          int      `json:"offset,omitempty"`
+	NextOffset      int      `json:"next_offset,omitempty"`
 	ResultTruncated bool     `json:"result_truncated,omitempty"`
 }
 
@@ -253,6 +255,8 @@ type RequestCorrelationResponse struct {
 	RequestID       string   `json:"request_id"`
 	Runs            []RunDTO `json:"runs"`
 	Limit           int      `json:"limit,omitempty"`
+	Offset          int      `json:"offset,omitempty"`
+	NextOffset      int      `json:"next_offset,omitempty"`
 	ResultTruncated bool     `json:"result_truncated,omitempty"`
 }
 
