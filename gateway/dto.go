@@ -474,6 +474,10 @@ type LimitDTO struct {
 	MaxConcurrentRuns        int   `json:"max_concurrent_runs,omitempty"`
 	RunTimeoutSeconds        int   `json:"run_timeout_seconds,omitempty"`
 	MaxMCPHTTPResponseBytes  int   `json:"max_mcp_http_response_bytes,omitempty"`
+	MaxMCPProbeNameBytes     int   `json:"max_mcp_probe_name_bytes,omitempty"`
+	MaxMCPProbeURIBytes      int   `json:"max_mcp_probe_uri_bytes,omitempty"`
+	MaxMCPProbeArgumentBytes int   `json:"max_mcp_probe_argument_bytes,omitempty"`
+	MaxMCPProbeOutputBytes   int   `json:"max_mcp_probe_output_bytes,omitempty"`
 	MaxRunPromptBytes        int   `json:"max_run_prompt_bytes,omitempty"`
 	MaxRunSelectorItems      int   `json:"max_run_selector_items,omitempty"`
 	MaxRunSelectorItemBytes  int   `json:"max_run_selector_item_bytes,omitempty"`
