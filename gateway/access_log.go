@@ -62,7 +62,7 @@ func (s *Server) accessLogMiddleware(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		s.cfg.AccessLogger(AccessLogEntry{
+		safeAccessLog(s.cfg.AccessLogger, AccessLogEntry{
 			RequestID: requestIDFromRequest(r),
 			Method:    r.Method,
 			Path:      r.URL.RequestURI(),
@@ -73,4 +73,14 @@ func (s *Server) accessLogMiddleware(next http.Handler) http.Handler {
 			UserAgent: r.UserAgent(),
 		})
 	})
+}
+
+func safeAccessLog(logger AccessLogger, entry AccessLogEntry) {
+	if logger == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	logger(entry)
 }

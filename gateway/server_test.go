@@ -566,6 +566,31 @@ func TestGatewayAccessLoggerUsesRequestID(t *testing.T) {
 	}
 }
 
+func TestGatewayAccessLoggerPanicDoesNotBreakRequest(t *testing.T) {
+	store := openTestStore(t)
+	called := false
+	srv, err := New(Config{
+		Store:   store,
+		Version: "test",
+		AccessLogger: func(entry AccessLogEntry) {
+			called = true
+			panic("access logger failed")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/version", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("access logger panic should not change response: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !called {
+		t.Fatal("access logger should still be called")
+	}
+}
+
 func TestGatewayRunStarterBoundary(t *testing.T) {
 	store := openTestStore(t)
 	var started RunStartRequest
