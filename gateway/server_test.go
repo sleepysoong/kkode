@@ -3814,6 +3814,33 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	}
 }
 
+func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	sess := session.NewSession("/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("go", llm.Request{Model: "gpt-5-mini"})
+	sess.AppendTurn(turn)
+	body, err := json.Marshal(SessionImportRequest{
+		FormatVersion: sessionExportFormatVersion,
+		RawSession:    sess,
+		Checkpoints:   []CheckpointDTO{{ID: "cp_bad", TurnID: "turn_missing", Payload: json.RawMessage(`{"summary":"bad"}`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_import") {
+		t.Fatalf("invalid artifact import는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("artifact preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
+	}
+}
+
 func hasResourceDTO(resources []ResourceDTO, id string) bool {
 	for _, resource := range resources {
 		if resource.ID == id {

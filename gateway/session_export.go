@@ -168,43 +168,34 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	checkpointStore, checkpoints, ok := s.prepareImportCheckpoints(w, r, imported, req.Checkpoints)
+	if !ok {
+		return
+	}
+	resourceStore, resources, ok := s.prepareImportResources(w, r, req.Resources)
+	if !ok {
+		return
+	}
+	runStore, runs, ok := s.prepareImportRuns(w, r, imported.ID, req.Runs)
+	if !ok {
+		return
+	}
 	if err := s.cfg.Store.SaveSession(r.Context(), &imported); err != nil {
 		writeError(w, r, http.StatusInternalServerError, "save_imported_session_failed", err.Error())
 		return
 	}
 	counts := SessionExportCountsDTO{Turns: len(imported.Turns), Events: len(imported.Events), Todos: len(imported.Todos)}
-	if len(req.Checkpoints) > 0 {
-		store := s.checkpointStore()
-		if store == nil {
-			writeError(w, r, http.StatusNotImplemented, "checkpoint_store_missing", "이 gateway에는 checkpoint store가 연결되지 않았어요")
-			return
-		}
-		for _, item := range req.Checkpoints {
-			cp := checkpointFromDTO(item, imported.ID)
-			if err := store.SaveCheckpoint(r.Context(), cp); err != nil {
+	if len(checkpoints) > 0 {
+		for _, cp := range checkpoints {
+			if err := checkpointStore.SaveCheckpoint(r.Context(), cp); err != nil {
 				writeError(w, r, http.StatusInternalServerError, "import_checkpoint_failed", err.Error())
 				return
 			}
 			counts.Checkpoints++
 		}
 	}
-	if len(req.Resources) > 0 {
-		resourceStore := s.resourceStore()
-		if resourceStore == nil {
-			writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
-			return
-		}
-		for _, item := range req.Resources {
-			kind := session.ResourceKind(strings.TrimSpace(item.Kind))
-			if kind == "" {
-				writeError(w, r, http.StatusBadRequest, "invalid_resource", "import resource kind가 필요해요")
-				return
-			}
-			resource, err := resourceFromDTO(kind, strings.TrimSpace(item.ID), item)
-			if err != nil {
-				writeError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
-				return
-			}
+	if len(resources) > 0 {
+		for _, resource := range resources {
 			if _, err := resourceStore.SaveResource(r.Context(), resource); err != nil {
 				writeError(w, r, http.StatusInternalServerError, "import_resource_failed", err.Error())
 				return
@@ -212,16 +203,8 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 			counts.Resources++
 		}
 	}
-	if len(req.Runs) > 0 {
-		runStore, ok := s.cfg.Store.(session.RunStore)
-		if !ok {
-			writeError(w, r, http.StatusNotImplemented, "run_store_missing", "이 gateway에는 RunStore가 연결되지 않았어요")
-			return
-		}
-		for _, item := range req.Runs {
-			run := sessionRunFromDTO(item)
-			run.SessionID = imported.ID
-			run.EventsURL = runEventsURL(run.ID)
+	if len(runs) > 0 {
+		for _, run := range runs {
 			if _, err := runStore.SaveRun(r.Context(), run); err != nil {
 				writeError(w, r, http.StatusInternalServerError, "import_run_failed", err.Error())
 				return
@@ -238,6 +221,81 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 		RequestedOverwrite: req.Overwrite,
 	}
 	writeJSONStatus(w, http.StatusCreated, resp)
+}
+
+func (s *Server) prepareImportCheckpoints(w http.ResponseWriter, r *http.Request, imported session.Session, items []CheckpointDTO) (session.CheckpointStore, []session.Checkpoint, bool) {
+	if len(items) == 0 {
+		return nil, nil, true
+	}
+	store := s.checkpointStore()
+	if store == nil {
+		writeError(w, r, http.StatusNotImplemented, "checkpoint_store_missing", "이 gateway에는 checkpoint store가 연결되지 않았어요")
+		return nil, nil, false
+	}
+	checkpoints := make([]session.Checkpoint, 0, len(items))
+	for _, item := range items {
+		cp := checkpointFromDTO(item, imported.ID)
+		if cp.TurnID != "" && !sessionHasTurn(imported, cp.TurnID) {
+			writeError(w, r, http.StatusBadRequest, "invalid_import", "checkpoint turn_id가 raw_session에 없어요")
+			return nil, nil, false
+		}
+		checkpoints = append(checkpoints, cp)
+	}
+	return store, checkpoints, true
+}
+
+func (s *Server) prepareImportResources(w http.ResponseWriter, r *http.Request, items []ResourceDTO) (session.ResourceStore, []session.Resource, bool) {
+	if len(items) == 0 {
+		return nil, nil, true
+	}
+	store := s.resourceStore()
+	if store == nil {
+		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
+		return nil, nil, false
+	}
+	resources := make([]session.Resource, 0, len(items))
+	for _, item := range items {
+		kind := session.ResourceKind(strings.TrimSpace(item.Kind))
+		if kind == "" {
+			writeError(w, r, http.StatusBadRequest, "invalid_resource", "import resource kind가 필요해요")
+			return nil, nil, false
+		}
+		resource, err := resourceFromDTO(kind, strings.TrimSpace(item.ID), item)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
+			return nil, nil, false
+		}
+		resources = append(resources, resource)
+	}
+	return store, resources, true
+}
+
+func (s *Server) prepareImportRuns(w http.ResponseWriter, r *http.Request, sessionID string, items []RunDTO) (session.RunStore, []session.Run, bool) {
+	if len(items) == 0 {
+		return nil, nil, true
+	}
+	store, ok := s.cfg.Store.(session.RunStore)
+	if !ok {
+		writeError(w, r, http.StatusNotImplemented, "run_store_missing", "이 gateway에는 RunStore가 연결되지 않았어요")
+		return nil, nil, false
+	}
+	runs := make([]session.Run, 0, len(items))
+	for _, item := range items {
+		run := sessionRunFromDTO(item)
+		run.SessionID = sessionID
+		run.EventsURL = runEventsURL(run.ID)
+		runs = append(runs, run)
+	}
+	return store, runs, true
+}
+
+func sessionHasTurn(sess session.Session, turnID string) bool {
+	for _, turn := range sess.Turns {
+		if turn.ID == turnID {
+			return true
+		}
+	}
+	return false
 }
 
 func trimExportSlice[T any](items []T, limit int) ([]T, int, bool) {
