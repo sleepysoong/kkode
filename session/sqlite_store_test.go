@@ -197,6 +197,9 @@ func TestForkSession(t *testing.T) {
 	if len(forked.Events) != 1 || forked.Events[0].SessionID != forked.ID {
 		t.Fatalf("events=%#v", forked.Events)
 	}
+	if _, err := ForkSession(sess, "turn_missing"); err == nil {
+		t.Fatal("없는 turn 기준 fork는 오류를 내야 해요")
+	}
 }
 
 func TestTodoToolsPersist(t *testing.T) {

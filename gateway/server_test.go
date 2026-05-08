@@ -323,6 +323,31 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	}
 }
 
+func TestGatewayForkSessionRejectsMissingTurn(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("첫 요청", llm.Request{Model: "gpt-5-mini"})
+	sess.AppendTurn(turn)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/fork", bytes.NewBufferString(`{"at_turn_id":"turn_missing"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var errBody ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
+		t.Fatal(err)
+	}
+	if errBody.Error.Code != "fork_session_failed" {
+		t.Fatalf("fork error envelope가 이상해요: %+v", errBody)
+	}
+}
+
 func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 	store := openTestStore(t)
 	sess := session.NewSession("/tmp/repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)

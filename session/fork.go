@@ -40,7 +40,11 @@ func ForkSession(source *Session, atTurnID string) (*Session, error) {
 	if atTurnID != "" {
 		forked.Metadata["forked_at_turn"] = atTurnID
 	}
-	forked.Turns = retainedTurns(source.Turns, atTurnID)
+	var found bool
+	forked.Turns, found = retainedTurns(source.Turns, atTurnID)
+	if atTurnID != "" && !found {
+		return nil, fmt.Errorf("turn %q not found in session %s", atTurnID, source.ID)
+	}
 	forked.Events = retainedEvents(source.Events, forked.ID, retainedTurnIDs(forked.Turns))
 	forked.Todos = cloneTodos(source.Todos)
 	forked.LastResponseID = ""
@@ -55,19 +59,19 @@ func ForkSession(source *Session, atTurnID string) (*Session, error) {
 	return &forked, nil
 }
 
-func retainedTurns(turns []Turn, atTurnID string) []Turn {
+func retainedTurns(turns []Turn, atTurnID string) ([]Turn, bool) {
 	if atTurnID == "" {
 		out := append([]Turn{}, turns...)
-		return out
+		return out, true
 	}
 	out := []Turn{}
 	for _, turn := range turns {
 		out = append(out, turn)
 		if turn.ID == atTurnID {
-			break
+			return out, true
 		}
 	}
-	return out
+	return out, false
 }
 
 func retainedEvents(events []Event, newSessionID string, retained map[string]bool) []Event {
