@@ -1122,6 +1122,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 4096
         - in: query
           name: max_content_bytes
           schema:
@@ -1171,6 +1172,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
       requestBody:
         required: false
         content:
@@ -1199,6 +1201,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
       requestBody:
         required: false
         content:
@@ -3791,6 +3794,7 @@ components:
         arguments:
           type: object
           additionalProperties: true
+          description: JSON 직렬화 기준 최대 1048576 byte까지 허용돼요.
         max_message_bytes:
           type: integer
           default: 1048576
@@ -3830,6 +3834,7 @@ components:
         arguments:
           type: object
           additionalProperties: true
+          description: JSON 직렬화 기준 최대 1048576 byte까지 허용돼요.
         max_output_bytes:
           type: integer
           minimum: 0

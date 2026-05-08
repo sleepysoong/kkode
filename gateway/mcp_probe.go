@@ -14,6 +14,9 @@ import (
 )
 
 const maxMCPHTTPResponseBytes = 8 << 20
+const maxMCPProbeNameBytes = 128
+const maxMCPProbeURIBytes = 4096
+const maxMCPProbeArgumentsBytes = 1 << 20
 
 // MCPToolDTO는 MCP tools/list 결과를 외부 API에 노출하는 항목이에요.
 type MCPToolDTO struct {
@@ -151,6 +154,10 @@ func (s *Server) readMCPServerResource(w http.ResponseWriter, r *http.Request, s
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_resource", "resource uri가 필요해요")
 			return
 		}
+		if len(uri) > maxMCPProbeURIBytes {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_resource", fmt.Sprintf("resource uri는 %d byte 이하여야 해요", maxMCPProbeURIBytes))
+			return
+		}
 		contents, err := readMCPResource(r.Context(), resource, uri)
 		if err != nil {
 			writeError(w, r, http.StatusBadGateway, "mcp_resource_read_failed", err.Error())
@@ -171,6 +178,10 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 		writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", "MCP prompt 이름이 필요해요")
 		return
 	}
+	if len(promptName) > maxMCPProbeNameBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", fmt.Sprintf("MCP prompt 이름은 %d byte 이하여야 해요", maxMCPProbeNameBytes))
+		return
+	}
 	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
 		var req MCPPromptGetRequest
 		if r.Body != nil && r.ContentLength != 0 {
@@ -181,6 +192,10 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 		}
 		if req.MaxMessageBytes < 0 {
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", "max_message_bytes는 0 이상이어야 해요")
+			return
+		}
+		if err := validateMCPProbeArguments("arguments", req.Arguments); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", err.Error())
 			return
 		}
 		messages, err := getMCPPrompt(r.Context(), resource, promptName, req.Arguments)
@@ -256,6 +271,10 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 		writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", "MCP tool 이름이 필요해요")
 		return
 	}
+	if len(toolName) > maxMCPProbeNameBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", fmt.Sprintf("MCP tool 이름은 %d byte 이하여야 해요", maxMCPProbeNameBytes))
+		return
+	}
 	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
 		var req MCPToolCallRequest
 		if r.Body != nil && r.ContentLength != 0 {
@@ -268,6 +287,10 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", "max_output_bytes는 0 이상이어야 해요")
 			return
 		}
+		if err := validateMCPProbeArguments("arguments", req.Arguments); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", err.Error())
+			return
+		}
 		result, err := callMCPTool(r.Context(), resource, toolName, req.Arguments)
 		if err != nil {
 			writeError(w, r, http.StatusBadGateway, "mcp_tool_call_failed", err.Error())
@@ -276,6 +299,17 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 		result, resultBytes, truncated := truncateMCPToolResult(result, req.MaxOutputBytes)
 		writeJSON(w, MCPToolCallResponse{Server: publicResourceDTO(resource), Tool: toolName, Result: result, ResultBytes: resultBytes, ResultTruncated: truncated})
 	})
+}
+
+func validateMCPProbeArguments(label string, arguments map[string]any) error {
+	data, err := json.Marshal(arguments)
+	if err != nil {
+		return err
+	}
+	if len(data) > maxMCPProbeArgumentsBytes {
+		return fmt.Errorf("%s는 %d byte 이하여야 해요", label, maxMCPProbeArgumentsBytes)
+	}
+	return nil
 }
 
 func (s *Server) withMCPServer(w http.ResponseWriter, r *http.Request, serverID string, fn func(session.Resource)) {
