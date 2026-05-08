@@ -1075,6 +1075,13 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: max_content_bytes
+          schema:
+            type: integer
+            default: 1048576
+            maximum: 8388608
+          description: MCP resource text/blob preview를 이 byte 수까지 UTF-8 안전하게 잘라요.
       responses:
         '200':
           description: MCP resource content예요.
@@ -3441,6 +3448,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPResourceContent'
+        content_bytes:
+          type: integer
+          description: 제한 전 MCP resource contents JSON byte 수예요.
+        content_truncated:
+          type: boolean
+          description: max_content_bytes 때문에 contents text/blob가 잘렸는지 알려줘요.
     MCPResourceContent:
       type: object
       properties:
@@ -3498,6 +3511,11 @@ components:
         arguments:
           type: object
           additionalProperties: true
+        max_message_bytes:
+          type: integer
+          default: 1048576
+          maximum: 8388608
+          description: MCP prompt message content의 text/blob/output 문자열 payload를 이 byte 수까지 잘라요.
     MCPPromptGetResponse:
       type: object
       required: [server, prompt, messages]
@@ -3510,6 +3528,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPPromptMessage'
+        message_bytes:
+          type: integer
+          description: 제한 전 MCP prompt messages JSON byte 수예요.
+        message_truncated:
+          type: boolean
+          description: max_message_bytes 때문에 message content가 잘렸는지 알려줘요.
     MCPPromptMessage:
       type: object
       required: [role]

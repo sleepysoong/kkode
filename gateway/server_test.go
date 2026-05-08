@@ -2758,7 +2758,7 @@ while True:
 	}
 	srv := newTestServer(t, store, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/resources/read?uri="+url.QueryEscape("file:///README.md"), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/resources/read?uri="+url.QueryEscape("file:///README.md")+"&max_content_bytes=7", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -2768,11 +2768,11 @@ while True:
 	if err := json.Unmarshal(rec.Body.Bytes(), &resourceRead); err != nil {
 		t.Fatal(err)
 	}
-	if resourceRead.URI != "file:///README.md" || len(resourceRead.Contents) != 1 || resourceRead.Contents[0].Text != "hello resource" {
+	if resourceRead.URI != "file:///README.md" || len(resourceRead.Contents) != 1 || resourceRead.Contents[0].Text != "hello r" || resourceRead.ContentBytes <= 7 || !resourceRead.ContentTruncated {
 		t.Fatalf("MCP resources/read 결과가 이상해요: %+v", resourceRead)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"arguments":{"path":"main.go"}}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"arguments":{"path":"main.go"},"max_message_bytes":12}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -2783,7 +2783,7 @@ while True:
 	if err := json.Unmarshal(rec.Body.Bytes(), &promptGet); err != nil {
 		t.Fatal(err)
 	}
-	if promptGet.Prompt != "review" || len(promptGet.Messages) != 1 || promptGet.Messages[0].Content["text"] != "review review main.go" {
+	if promptGet.Prompt != "review" || len(promptGet.Messages) != 1 || promptGet.Messages[0].Content["text"] != "review revie" || promptGet.MessageBytes <= 12 || !promptGet.MessageTruncated {
 		t.Fatalf("MCP prompts/get 결과가 이상해요: %+v", promptGet)
 	}
 }

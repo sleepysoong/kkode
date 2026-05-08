@@ -60,9 +60,11 @@ type MCPResourceContentDTO struct {
 }
 
 type MCPResourceReadResponse struct {
-	Server   ResourceDTO             `json:"server"`
-	URI      string                  `json:"uri"`
-	Contents []MCPResourceContentDTO `json:"contents"`
+	Server           ResourceDTO             `json:"server"`
+	URI              string                  `json:"uri"`
+	Contents         []MCPResourceContentDTO `json:"contents"`
+	ContentBytes     int                     `json:"content_bytes,omitempty"`
+	ContentTruncated bool                    `json:"content_truncated,omitempty"`
 }
 
 // MCPPromptDTO는 MCP prompts/list 결과를 외부 API에 노출하는 항목이에요.
@@ -88,7 +90,8 @@ type MCPPromptListResponse struct {
 }
 
 type MCPPromptGetRequest struct {
-	Arguments map[string]any `json:"arguments,omitempty"`
+	Arguments       map[string]any `json:"arguments,omitempty"`
+	MaxMessageBytes int            `json:"max_message_bytes,omitempty"`
 }
 
 type MCPPromptMessageDTO struct {
@@ -97,9 +100,11 @@ type MCPPromptMessageDTO struct {
 }
 
 type MCPPromptGetResponse struct {
-	Server   ResourceDTO           `json:"server"`
-	Prompt   string                `json:"prompt"`
-	Messages []MCPPromptMessageDTO `json:"messages"`
+	Server           ResourceDTO           `json:"server"`
+	Prompt           string                `json:"prompt"`
+	Messages         []MCPPromptMessageDTO `json:"messages"`
+	MessageBytes     int                   `json:"message_bytes,omitempty"`
+	MessageTruncated bool                  `json:"message_truncated,omitempty"`
 }
 
 type MCPToolCallRequest struct {
@@ -150,7 +155,8 @@ func (s *Server) readMCPServerResource(w http.ResponseWriter, r *http.Request, s
 			writeError(w, r, http.StatusBadGateway, "mcp_resource_read_failed", err.Error())
 			return
 		}
-		writeJSON(w, MCPResourceReadResponse{Server: publicResourceDTO(resource), URI: uri, Contents: contents})
+		contents, contentBytes, truncated := truncateMCPResourceContents(contents, queryLimit(r, "max_content_bytes", 1<<20, maxMCPHTTPResponseBytes))
+		writeJSON(w, MCPResourceReadResponse{Server: publicResourceDTO(resource), URI: uri, Contents: contents, ContentBytes: contentBytes, ContentTruncated: truncated})
 	})
 }
 
@@ -168,7 +174,8 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 			writeError(w, r, http.StatusBadGateway, "mcp_prompt_get_failed", err.Error())
 			return
 		}
-		writeJSON(w, MCPPromptGetResponse{Server: publicResourceDTO(resource), Prompt: promptName, Messages: messages})
+		messages, messageBytes, truncated := truncateMCPPromptMessages(messages, mcpPromptMessageLimit(req.MaxMessageBytes))
+		writeJSON(w, MCPPromptGetResponse{Server: publicResourceDTO(resource), Prompt: promptName, Messages: messages, MessageBytes: messageBytes, MessageTruncated: truncated})
 	})
 }
 
@@ -345,6 +352,73 @@ func truncateMCPToolResult(result map[string]any, maxBytes int) (map[string]any,
 		truncated = true
 	}
 	return out, resultBytes, truncated
+}
+
+func truncateMCPResourceContents(contents []MCPResourceContentDTO, maxBytes int) ([]MCPResourceContentDTO, int, bool) {
+	data, err := json.Marshal(contents)
+	if err != nil {
+		return contents, 0, false
+	}
+	contentBytes := len(data)
+	if maxBytes <= 0 || contentBytes <= maxBytes {
+		return contents, contentBytes, false
+	}
+	out := make([]MCPResourceContentDTO, len(contents))
+	copy(out, contents)
+	budget := maxBytes
+	truncated := false
+	for i := range out {
+		out[i].Text, truncated = truncateMCPStringField(out[i].Text, &budget, truncated)
+		out[i].Blob, truncated = truncateMCPStringField(out[i].Blob, &budget, truncated)
+	}
+	return out, contentBytes, truncated
+}
+
+func truncateMCPPromptMessages(messages []MCPPromptMessageDTO, maxBytes int) ([]MCPPromptMessageDTO, int, bool) {
+	data, err := json.Marshal(messages)
+	if err != nil {
+		return messages, 0, false
+	}
+	messageBytes := len(data)
+	if maxBytes <= 0 || messageBytes <= maxBytes {
+		return messages, messageBytes, false
+	}
+	out := make([]MCPPromptMessageDTO, 0, len(messages))
+	budget := maxBytes
+	truncated := false
+	for _, message := range messages {
+		copied, childTruncated := truncateMCPValue(message.Content, "", &budget)
+		content, _ := copied.(map[string]any)
+		out = append(out, MCPPromptMessageDTO{Role: message.Role, Content: content})
+		truncated = truncated || childTruncated
+	}
+	return out, messageBytes, truncated
+}
+
+func truncateMCPStringField(value string, budget *int, alreadyTruncated bool) (string, bool) {
+	if value == "" {
+		return value, alreadyTruncated
+	}
+	if *budget <= 0 {
+		return "", true
+	}
+	out, bytes, truncated := truncateToolOutput(value, *budget)
+	if truncated {
+		*budget = 0
+		return out, true
+	}
+	*budget -= bytes
+	return out, alreadyTruncated
+}
+
+func mcpPromptMessageLimit(value int) int {
+	if value <= 0 {
+		return 1 << 20
+	}
+	if value > maxMCPHTTPResponseBytes {
+		return maxMCPHTTPResponseBytes
+	}
+	return value
 }
 
 func truncateMCPValue(value any, key string, budget *int) (any, bool) {
