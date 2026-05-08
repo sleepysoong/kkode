@@ -3711,6 +3711,13 @@ while True:
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_prompt") {
 		t.Fatalf("음수 max_message_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"max_message_bytes":`+strconv.Itoa(maxMCPProbeOutputBytes+1)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_message_bytes") {
+		t.Fatalf("큰 max_message_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/"+strings.Repeat("x", maxMCPProbeNameBytes+1)+"/get", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -3824,6 +3831,13 @@ while True:
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_tool_call") {
 		t.Fatalf("음수 MCP max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/echo/call", bytes.NewBufferString(`{"max_output_bytes":`+strconv.Itoa(maxMCPProbeOutputBytes+1)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_output_bytes") {
+		t.Fatalf("큰 MCP max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/"+strings.Repeat("x", maxMCPProbeNameBytes+1)+"/call", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")

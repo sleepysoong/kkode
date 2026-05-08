@@ -3847,7 +3847,9 @@ components:
         max_output_bytes:
           type: integer
           minimum: 0
-          description: MCP tools/call result의 text/blob/output 문자열 payload를 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
+          default: 1048576
+          maximum: 8388608
+          description: MCP tools/call result의 text/blob/output 문자열 payload를 이 byte 수까지 잘라서 반환해요. 0이면 gateway 기본값 1048576 byte를 사용해요.
     MCPToolCallResponse:
       type: object
       required: [server, tool, result]

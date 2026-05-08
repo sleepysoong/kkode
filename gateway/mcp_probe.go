@@ -17,6 +17,8 @@ const maxMCPHTTPResponseBytes = 8 << 20
 const maxMCPProbeNameBytes = 128
 const maxMCPProbeURIBytes = 4096
 const maxMCPProbeArgumentsBytes = 1 << 20
+const defaultMCPProbeOutputBytes = 1 << 20
+const maxMCPProbeOutputBytes = maxMCPHTTPResponseBytes
 
 // MCPToolDTO는 MCP tools/list 결과를 외부 API에 노출하는 항목이에요.
 type MCPToolDTO struct {
@@ -194,6 +196,10 @@ func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serv
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", "max_message_bytes는 0 이상이어야 해요")
 			return
 		}
+		if req.MaxMessageBytes > maxMCPProbeOutputBytes {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", fmt.Sprintf("max_message_bytes는 %d 이하여야 해요", maxMCPProbeOutputBytes))
+			return
+		}
 		if err := validateMCPProbeArguments("arguments", req.Arguments); err != nil {
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", err.Error())
 			return
@@ -287,6 +293,10 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", "max_output_bytes는 0 이상이어야 해요")
 			return
 		}
+		if req.MaxOutputBytes > maxMCPProbeOutputBytes {
+			writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", fmt.Sprintf("max_output_bytes는 %d 이하여야 해요", maxMCPProbeOutputBytes))
+			return
+		}
 		if err := validateMCPProbeArguments("arguments", req.Arguments); err != nil {
 			writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", err.Error())
 			return
@@ -296,7 +306,7 @@ func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serve
 			writeError(w, r, http.StatusBadGateway, "mcp_tool_call_failed", err.Error())
 			return
 		}
-		result, resultBytes, truncated := truncateMCPToolResult(result, req.MaxOutputBytes)
+		result, resultBytes, truncated := truncateMCPToolResult(result, mcpProbeOutputLimit(req.MaxOutputBytes))
 		writeJSON(w, MCPToolCallResponse{Server: publicResourceDTO(resource), Tool: toolName, Result: result, ResultBytes: resultBytes, ResultTruncated: truncated})
 	})
 }
@@ -476,10 +486,14 @@ func truncateMCPStringField(value string, budget *int, alreadyTruncated bool) (s
 
 func mcpPromptMessageLimit(value int) int {
 	if value <= 0 {
-		return 1 << 20
+		return defaultMCPProbeOutputBytes
 	}
-	if value > maxMCPHTTPResponseBytes {
-		return maxMCPHTTPResponseBytes
+	return value
+}
+
+func mcpProbeOutputLimit(value int) int {
+	if value <= 0 {
+		return defaultMCPProbeOutputBytes
 	}
 	return value
 }
