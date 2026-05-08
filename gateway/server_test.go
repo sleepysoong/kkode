@@ -715,7 +715,7 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":" sess_1 ","prompt":"go test","provider":" openai ","model":" gpt-5-mini ","metadata":{"source":"panel"},"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":" sess_1 ","prompt":"go test","provider":" openai ","model":" gpt-5-mini ","metadata":{"source":"panel"," trace-id ":" abc ","empty":" "},"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"]}`))
 	req.Header.Set(RequestIDHeader, "req_run")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -726,7 +726,7 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
 		t.Fatal(err)
 	}
-	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || run.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata["source"] != "panel" {
+	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || run.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata["source"] != "panel" || started.Metadata["trace-id"] != "abc" || started.Metadata[" trace-id "] != "" || started.Metadata["empty"] != "" {
 		t.Fatalf("unexpected run: %+v", run)
 	}
 	if started.SessionID != "sess_1" || started.Provider != "openai" || started.Model != "gpt-5-mini" || len(started.MCPServers) != 1 || started.MCPServers[0] != "mcp_1" || len(started.Skills) != 1 || started.Skills[0] != "skill_1" || len(started.Subagents) != 1 || started.Subagents[0] != "agent_1" {
@@ -734,6 +734,61 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	}
 	if validated.SessionID != "sess_1" || validated.Metadata[RequestIDMetadataKey] != "req_run" || validated.Metadata[DefaultMCPMetadataKey] != "context7,serena" || len(validated.MCPServers) != 1 || validated.MCPServers[0] != "mcp_1" {
 		t.Fatalf("run validator는 enqueue 전에 같은 request metadata를 받아야 해요: %+v", validated)
+	}
+}
+
+func TestGatewayRejectsInvalidRunMetadata(t *testing.T) {
+	store := openTestStore(t)
+	started := false
+	previewed := false
+	validated := false
+	srv, err := New(Config{
+		Store: store,
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			validated = true
+			return nil
+		},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			started = true
+			return &RunDTO{ID: "run_bad_metadata", SessionID: req.SessionID, Status: "queued"}, nil
+		},
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			previewed = true
+			return &RunPreviewResponse{SessionID: req.SessionID, Provider: "openai", Model: "gpt-5-mini"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"session_id":"sess_1","prompt":"go test","metadata":{"bad key":"value"}}`
+	for _, tc := range []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{name: "start", method: http.MethodPost, path: "/api/v1/runs", wantStatus: http.StatusBadRequest},
+		{name: "preview", method: http.MethodPost, path: "/api/v1/runs/preview", wantStatus: http.StatusBadRequest},
+		{name: "validate", method: http.MethodPost, path: "/api/v1/runs/validate", wantStatus: http.StatusOK},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != tc.wantStatus || !strings.Contains(rec.Body.String(), "metadata") {
+			t.Fatalf("%s invalid metadata 응답이 이상해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		if tc.name == "validate" {
+			var got RunValidateResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.OK || got.Code != "invalid_run" {
+				t.Fatalf("validate invalid metadata 응답이 이상해요: %+v", got)
+			}
+		}
+	}
+	if started || previewed || validated {
+		t.Fatalf("invalid metadata는 runtime hook 전에 거부돼야 해요: started=%v previewed=%v validated=%v", started, previewed, validated)
 	}
 }
 

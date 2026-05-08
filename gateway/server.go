@@ -1271,13 +1271,13 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req = sanitizeRunStartRequest(req)
+	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
+	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKeyFromRequest(r, req.Metadata))
+	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	if err := validateRunStartRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
 		return
 	}
-	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
-	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKeyFromRequest(r, req.Metadata))
-	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
 		w.Header().Set(IdempotencyReplayHeader, "true")
 		writeJSON(w, existing)
@@ -1348,18 +1348,18 @@ func (s *Server) validateRun(w http.ResponseWriter, r *http.Request) {
 	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKey)
 	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	resp := RunValidateResponse{OK: true, RequestID: requestID, IdempotencyKey: strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]), Metadata: cloneMap(req.Metadata)}
-	if key := strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]); key != "" {
-		resp.RunID = idempotentRunID(req.SessionID, key)
-	}
-	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
-		resp.ExistingRun = existing
-	}
 	if err := validateRunStartRequest(req); err != nil {
 		resp.OK = false
 		resp.Code = "invalid_run"
 		resp.Message = err.Error()
 		writeJSON(w, resp)
 		return
+	}
+	if key := strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]); key != "" {
+		resp.RunID = idempotentRunID(req.SessionID, key)
+	}
+	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
+		resp.ExistingRun = existing
 	}
 	if s.cfg.RunValidator == nil {
 		resp.OK = false
@@ -1389,12 +1389,12 @@ func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req = sanitizeRunStartRequest(req)
+	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
+	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	if err := validateRunStartRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
 		return
 	}
-	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
-	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	preview, err := s.cfg.RunPreviewer(r.Context(), req)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "preview_run_failed", err.Error())
@@ -1409,6 +1409,9 @@ func validateRunStartRequest(req RunStartRequest) error {
 	}
 	if req.MaxPreviewBytes < 0 {
 		return errors.New("max_preview_bytes는 0 이상이어야 해요")
+	}
+	if err := validateRunMetadata(req.Metadata); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1449,7 +1452,7 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 		writeError(w, r, http.StatusNotFound, "run_not_found", err.Error())
 		return
 	}
-	metadata := cloneMap(original.Metadata)
+	metadata := sanitizeRunMetadata(original.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
 	}

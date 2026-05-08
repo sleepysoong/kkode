@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -8,6 +10,9 @@ import (
 )
 
 const maxRunContextBlockBytes = 32 << 10
+const maxRunMetadataEntries = 64
+const maxRunMetadataKeyBytes = 128
+const maxRunMetadataValueBytes = 1024
 
 // SanitizeContextBlocks는 adapter가 보낸 임시 prompt context를 실행/저장 전에 안전한 형태로 정규화해요.
 // secret은 제거하고, 너무 긴 block은 UTF-8을 깨지 않는 byte 경계에서 잘라요.
@@ -44,6 +49,7 @@ func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
 	req.SessionID = strings.TrimSpace(req.SessionID)
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.Model = strings.TrimSpace(req.Model)
+	req.Metadata = sanitizeRunMetadata(req.Metadata)
 	req.MCPServers = sanitizeResourceIDs(req.MCPServers)
 	req.Skills = sanitizeResourceIDs(req.Skills)
 	req.Subagents = sanitizeResourceIDs(req.Subagents)
@@ -79,6 +85,65 @@ func sanitizeUniqueStrings(names []string) []string {
 		return nil
 	}
 	return out
+}
+
+func sanitizeRunMetadata(metadata map[string]string) map[string]string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make(map[string]string, len(metadata))
+	for _, key := range keys {
+		cleanKey := strings.TrimSpace(key)
+		cleanValue := strings.TrimSpace(metadata[key])
+		if cleanKey == "" || cleanValue == "" {
+			continue
+		}
+		out[cleanKey] = cleanValue
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func validateRunMetadata(metadata map[string]string) error {
+	if len(metadata) > maxRunMetadataEntries {
+		return fmt.Errorf("metadata는 최대 %d개까지 허용돼요", maxRunMetadataEntries)
+	}
+	for key, value := range metadata {
+		if len(key) > maxRunMetadataKeyBytes {
+			return fmt.Errorf("metadata key %q는 %d byte 이하여야 해요", key, maxRunMetadataKeyBytes)
+		}
+		if !validRunMetadataKey(key) {
+			return fmt.Errorf("metadata key %q는 영문/숫자/._- 문자만 쓸 수 있어요", key)
+		}
+		if len(value) > maxRunMetadataValueBytes {
+			return fmt.Errorf("metadata %q 값은 %d byte 이하여야 해요", key, maxRunMetadataValueBytes)
+		}
+	}
+	return nil
+}
+
+func validRunMetadataKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-' || r == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func truncateContextBlock(text string, maxBytes int) string {
