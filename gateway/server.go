@@ -145,12 +145,16 @@ func (s *Server) requestIDMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) recoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stats := &responseStatsWriter{ResponseWriter: w}
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				writeError(w, r, http.StatusInternalServerError, "panic", fmt.Sprint(recovered))
+				if stats.status != 0 {
+					return
+				}
+				writeError(stats, r, http.StatusInternalServerError, "panic", fmt.Sprint(recovered))
 			}
 		}()
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(stats, r)
 	})
 }
 

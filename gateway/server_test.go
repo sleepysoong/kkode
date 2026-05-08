@@ -533,6 +533,50 @@ func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestGatewayRecoverPanicBeforeWriteReturnsErrorEnvelope(t *testing.T) {
+	srv, err := New(Config{Store: openTestStore(t), Version: "test", RequestIDGenerator: func() string { return "req_panic" }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := srv.requestIDMiddleware(srv.recoverMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("handler failed")
+	})))
+	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("panic before write should return 500: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body ErrorEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error.Code != "panic" || body.Error.Message != "handler failed" || body.Error.RequestID != "req_panic" {
+		t.Fatalf("panic envelope is wrong: %+v", body)
+	}
+}
+
+func TestGatewayRecoverPanicAfterWriteDoesNotAppendErrorEnvelope(t *testing.T) {
+	srv, err := New(Config{Store: openTestStore(t), Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := srv.recoverMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte("partial response"))
+		panic("handler failed after write")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/panic-after-write", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("panic after write should preserve started status: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "partial response" {
+		t.Fatalf("panic after write should not append error envelope: %q", rec.Body.String())
+	}
+}
+
 func TestGatewayAccessLoggerUsesRequestID(t *testing.T) {
 	store := openTestStore(t)
 	var entries []AccessLogEntry
