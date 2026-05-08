@@ -341,6 +341,20 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("session offset metadata가 이상해요: %+v", listed)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 session list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("session list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("session list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayForkSessionRejectsMissingTurn(t *testing.T) {
@@ -936,6 +950,20 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if body.Limit != 5 || body.Offset != 10 || body.NextOffset != 0 || body.ResultTruncated {
 		t.Fatalf("run list metadata가 이상해요: %+v", body)
 	}
+	for _, queryString := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs?"+queryString, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 run list query는 400이어야 해요: query=%s status=%d body=%s", queryString, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(queryString, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("run list limit 오류는 limit을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
+		}
+		if strings.Contains(queryString, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("run list offset 오류는 offset을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayListsRunsWithNextOffset(t *testing.T) {
@@ -1005,6 +1033,20 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	if body.Limit != 7 || body.ResultTruncated {
 		t.Fatalf("request correlation metadata가 이상해요: %+v", body)
 	}
+	for _, queryString := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?"+queryString, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 request run query는 400이어야 해요: query=%s status=%d body=%s", queryString, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(queryString, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("request run limit 오류는 limit을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
+		}
+		if strings.Contains(queryString, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("request run offset 오류는 offset을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
@@ -1073,12 +1115,18 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}{
 		{name: "negative", query: "after_seq=-1"},
 		{name: "malformed", query: "after_seq=abc"},
+		{name: "negative limit", query: "limit=-1"},
+		{name: "malformed limit", query: "limit=abc"},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?"+tc.query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
-			t.Fatalf("%s request after_seq는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		want := "after_seq"
+		if strings.Contains(tc.query, "limit") {
+			want = "limit"
+		}
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("%s request event query는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
 		}
 	}
 }
@@ -4179,6 +4227,20 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	}
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("checkpoint offset metadata가 이상해요: %+v", listed)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 checkpoint list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("checkpoint list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("checkpoint list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints/"+created.ID, nil)

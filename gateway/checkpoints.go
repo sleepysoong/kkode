@@ -50,8 +50,14 @@ func (s *Server) handleSessionCheckpoints(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string) {
-	limit := queryLimit(r, "limit", 50, 200)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_checkpoint_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_checkpoint_list")
+	if !ok {
+		return
+	}
 	items, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_checkpoints_failed", err.Error())

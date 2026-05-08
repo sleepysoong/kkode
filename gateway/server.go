@@ -266,8 +266,14 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
 		return
 	}
-	limit := queryLimit(r, "limit", 50, 200)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_request_runs")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_request_runs")
+	if !ok {
+		return
+	}
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
@@ -295,7 +301,10 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	limit := queryLimit(r, "limit", 200, 1000)
+	limit, ok := queryLimitParam(w, r, "limit", 200, 1000, "invalid_request_events")
+	if !ok {
+		return
+	}
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: 200})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
@@ -904,8 +913,14 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
-	limit := queryLimit(r, "limit", 50, 200)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_session_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_session_list")
+	if !ok {
+		return
+	}
 	projectRoot := strings.TrimSpace(r.URL.Query().Get("project_root"))
 	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: projectRoot, Limit: limit + 1, Offset: offset})
 	if err != nil {
@@ -1191,8 +1206,14 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
 		return
 	}
-	limit := queryLimit(r, "limit", 50, 200)
-	offset := queryOffset(r, "offset")
+	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_run_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_run_list")
+	if !ok {
+		return
+	}
 	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: r.URL.Query().Get(RequestIDMetadataKey), IdempotencyKey: r.URL.Query().Get(IdempotencyMetadataKey), Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
