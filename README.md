@@ -226,6 +226,7 @@ erDiagram
   - `codex exec --json` subprocess adapter예요.
   - `ExecConverter`가 표준 request를 CLI prompt 실행 payload로 바꾸고, `Client`가 subprocess caller 역할을 해요.
   - 단발 응답과 JSONL stream 모두 `ExecConverter`를 먼저 거친 뒤 `llm.StreamEvent`로 바꿔요.
+  - 단발 output 파일과 streaming 누적 response text는 각각 최대 8388608 byte envelope로 제한해요.
 - `providers/omniroute`
   - OmniRoute gateway adapter예요.
   - `/v1/responses` 또는 OpenAPI 기준 `/api/v1/responses`를 사용할 수 있어요.

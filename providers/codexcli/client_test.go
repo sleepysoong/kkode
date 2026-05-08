@@ -148,3 +148,12 @@ func TestLimitedBufferKeepsBoundedStderr(t *testing.T) {
 		t.Fatalf("stderr buffer should be bounded and marked truncated: %q", got)
 	}
 }
+
+func TestLimitedTextBufferKeepsBoundedOutput(t *testing.T) {
+	buf := newLimitedTextBuffer(4)
+	buf.WriteString("가나다")
+	got := buf.String()
+	if got != "가\n[output truncated]" {
+		t.Fatalf("stream text should be UTF-8 bounded and marked truncated: %q", got)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
 )
@@ -180,7 +181,7 @@ func (p *processCloser) Close() error {
 
 func readJSONL(ctx context.Context, stdout io.Reader, provider string, model string, out chan<- llm.StreamEvent, cmd *exec.Cmd, stderr *limitedBuffer, stderrDone <-chan struct{}) {
 	defer close(out)
-	var text strings.Builder
+	text := newLimitedTextBuffer(MaxExecOutputBytes)
 	s := bufio.NewScanner(stdout)
 	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for s.Scan() {
@@ -205,7 +206,8 @@ func readJSONL(ctx context.Context, stdout io.Reader, provider string, model str
 		return
 	}
 	<-stderrDone
-	out <- llm.StreamEvent{Type: llm.StreamEventCompleted, Provider: provider, Response: &llm.Response{Provider: provider, Model: model, Status: "completed", Text: text.String(), Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: text.String()}}}}
+	finalText := text.String()
+	out <- llm.StreamEvent{Type: llm.StreamEventCompleted, Provider: provider, Response: &llm.Response{Provider: provider, Model: model, Status: "completed", Text: finalText, Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: finalText}}}}
 }
 
 type limitedBuffer struct {
@@ -243,6 +245,53 @@ func (b *limitedBuffer) String() string {
 		return text + "\n[stderr truncated]"
 	}
 	return text
+}
+
+type limitedTextBuffer struct {
+	buf       strings.Builder
+	max       int
+	truncated bool
+}
+
+func newLimitedTextBuffer(max int) *limitedTextBuffer {
+	return &limitedTextBuffer{max: max}
+}
+
+func (b *limitedTextBuffer) WriteString(text string) {
+	if b.max <= 0 {
+		b.truncated = true
+		return
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return
+	}
+	if len(text) > remaining {
+		b.buf.WriteString(truncateStringUTF8(text, remaining))
+		b.truncated = true
+		return
+	}
+	b.buf.WriteString(text)
+}
+
+func (b *limitedTextBuffer) String() string {
+	text := b.buf.String()
+	if b.truncated {
+		return strings.TrimRight(text, "\n") + "\n[output truncated]"
+	}
+	return text
+}
+
+func truncateStringUTF8(text string, maxBytes int) string {
+	if maxBytes <= 0 || len(text) <= maxBytes {
+		return text
+	}
+	end := maxBytes
+	for end > 0 && !utf8.ValidString(text[:end]) {
+		end--
+	}
+	return text[:end]
 }
 
 func readLimitedFile(path string, maxBytes int64) ([]byte, error) {

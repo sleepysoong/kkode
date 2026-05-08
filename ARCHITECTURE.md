@@ -970,7 +970,7 @@ func (ExecConverter) ConvertRequest(ctx context.Context, req llm.Request, opts l
 func (ExecConverter) ConvertResponse(ctx context.Context, result llm.ProviderResult) (*llm.Response, error)
 ```
 
-`Generate`는 `llm.AdaptedProvider`를 통해 `ExecConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter와 `ProviderStreamCaller`를 통해 표준 request를 Codex CLI prompt 실행 payload로 먼저 바꾼 뒤 JSONL subprocess에 전달해요. converter는 표준 request를 Codex CLI prompt 실행 payload로 만들고, caller는 `codex exec --json -a never --sandbox danger-full-access` 흐름을 유지해요. streaming은 stdout JSONL lifetime을 직접 관리해서 event를 `llm.StreamEvent`로 바꿔요.
+`Generate`는 `llm.AdaptedProvider`를 통해 `ExecConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter와 `ProviderStreamCaller`를 통해 표준 request를 Codex CLI prompt 실행 payload로 먼저 바꾼 뒤 JSONL subprocess에 전달해요. converter는 표준 request를 Codex CLI prompt 실행 payload로 만들고, caller는 `codex exec --json -a never --sandbox danger-full-access` 흐름을 유지해요. streaming은 stdout JSONL lifetime을 직접 관리해서 event를 `llm.StreamEvent`로 바꾸고, 누적 final response text는 8388608 byte envelope로 제한해요.
 
 예제는 이렇게 써요.
 
