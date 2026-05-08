@@ -760,10 +760,10 @@ func truncateUTF8Bytes(text string, maxBytes int) string {
 }
 
 func firstNonEmpty(value, fallback string) string {
-	if strings.TrimSpace(value) != "" {
-		return value
+	if trimmed := strings.TrimSpace(value); trimmed != "" {
+		return trimmed
 	}
-	return fallback
+	return strings.TrimSpace(fallback)
 }
 
 func providerDTOs() []gateway.ProviderDTO {

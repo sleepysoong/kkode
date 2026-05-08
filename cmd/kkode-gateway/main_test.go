@@ -513,7 +513,7 @@ func (p captureMetadataProvider) Generate(ctx context.Context, req llm.Request) 
 
 func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {
 	tester := syncProviderTester()
-	resp, err := tester(context.Background(), "openai-compatible", gateway.ProviderTestRequest{Model: "gpt-5-mini", Prompt: "provider preview", Metadata: map[string]string{"trace_id": "trace_provider"}})
+	resp, err := tester(context.Background(), "openai-compatible", gateway.ProviderTestRequest{Model: " gpt-5-mini ", Prompt: "provider preview", Metadata: map[string]string{"trace_id": "trace_provider"}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -539,6 +539,7 @@ func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerNa
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	req.Model = strings.TrimSpace(req.Model)
 	if err := validateProviderTestRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_provider_test", err.Error())
 		return

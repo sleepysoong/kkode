@@ -1866,7 +1866,7 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":"gpt-5-mini","prompt":"ping"}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":" gpt-5-mini ","prompt":"ping"}`))
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -1876,7 +1876,7 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &testResp); err != nil {
 		t.Fatal(err)
 	}
-	if testedProvider != "openai-compatible" || !testResp.OK || testResp.ProviderRequest == nil || testResp.ProviderRequest.Operation != "responses.create" {
+	if testedProvider != "openai-compatible" || !testResp.OK || testResp.Model != "gpt-5-mini" || testResp.ProviderRequest == nil || testResp.ProviderRequest.Operation != "responses.create" {
 		t.Fatalf("provider test 응답이 이상해요: provider=%s resp=%+v", testedProvider, testResp)
 	}
 
