@@ -2092,6 +2092,28 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		t.Fatalf("저장소에는 실행용 원본 config가 남아 있어야 해요: %s", loadedResource.Config)
 	}
 
+	invalidResources := []struct {
+		name string
+		path string
+		body string
+		want string
+	}{
+		{name: "mcp missing transport", path: "/api/v1/mcp/servers", body: `{"name":"broken","config":{"kind":"stdio"}}`, want: "command"},
+		{name: "mcp negative timeout", path: "/api/v1/mcp/servers", body: `{"name":"slow","config":{"kind":"http","url":"https://mcp.example.test","timeout":-1}}`, want: "timeout"},
+		{name: "mcp bad url", path: "/api/v1/mcp/servers", body: `{"name":"bad-url","config":{"kind":"http","url":"file:///tmp/mcp.sock"}}`, want: "http/https"},
+		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
+		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
+	}
+	for _, tc := range invalidResources {
+		req = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s invalid resource는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+created.ID, nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

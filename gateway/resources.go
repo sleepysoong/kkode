@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -202,6 +203,9 @@ func resourceFromDTO(kind session.ResourceKind, id string, dto ResourceDTO) (ses
 	if config == nil {
 		config = map[string]any{}
 	}
+	if err := validateResourceConfig(kind, config); err != nil {
+		return session.Resource{}, err
+	}
 	encoded, err := json.Marshal(config)
 	if err != nil {
 		return session.Resource{}, err
@@ -210,6 +214,141 @@ func resourceFromDTO(kind session.ResourceKind, id string, dto ResourceDTO) (ses
 		id = strings.TrimSpace(dto.ID)
 	}
 	return session.Resource{ID: id, Kind: kind, Name: name, Description: strings.TrimSpace(dto.Description), Enabled: enabled, Config: encoded}, nil
+}
+
+func validateResourceConfig(kind session.ResourceKind, config map[string]any) error {
+	switch kind {
+	case session.ResourceMCPServer:
+		return validateMCPResourceConfig(config, "config")
+	case session.ResourceSkill:
+		if strings.TrimSpace(configString(config, "path")) == "" && strings.TrimSpace(configString(config, "directory")) == "" {
+			return fmt.Errorf("skill config에는 path 또는 directory가 필요해요")
+		}
+	case session.ResourceSubagent:
+		return validateSubagentResourceConfig(config)
+	}
+	return nil
+}
+
+func validateSubagentResourceConfig(config map[string]any) error {
+	if err := validateStringArrayConfig(config, "tools"); err != nil {
+		return err
+	}
+	if err := validateStringArrayConfig(config, "skills"); err != nil {
+		return err
+	}
+	if err := validateStringArrayConfig(config, "mcp_server_ids"); err != nil {
+		return err
+	}
+	rawServers, ok := config["mcp_servers"]
+	if !ok || rawServers == nil {
+		return nil
+	}
+	servers, ok := rawServers.(map[string]any)
+	if !ok {
+		return fmt.Errorf("subagent config mcp_servers는 object여야 해요")
+	}
+	for name, raw := range servers {
+		label := "subagent config mcp_servers." + strings.TrimSpace(name)
+		switch value := raw.(type) {
+		case string:
+			if strings.TrimSpace(value) == "" {
+				return fmt.Errorf("%s command가 필요해요", label)
+			}
+		case map[string]any:
+			if err := validateMCPResourceConfig(value, label); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("%s는 command string 또는 MCP config object여야 해요", label)
+		}
+	}
+	return nil
+}
+
+func validateMCPResourceConfig(config map[string]any, label string) error {
+	kind := strings.TrimSpace(configString(config, "kind"))
+	command := strings.TrimSpace(configString(config, "command"))
+	rawURL := strings.TrimSpace(configString(config, "url"))
+	if err := validateStringArrayConfig(config, "args"); err != nil {
+		return err
+	}
+	if _, err := nonNegativeIntConfig(config, "timeout"); err != nil {
+		return err
+	}
+	switch kind {
+	case "":
+		if rawURL == "" && command == "" {
+			return fmt.Errorf("%s에는 command 또는 url이 필요해요", label)
+		}
+	case string(llm.MCPStdio):
+		if command == "" {
+			return fmt.Errorf("%s stdio MCP에는 command가 필요해요", label)
+		}
+	case string(llm.MCPHTTP):
+		if rawURL == "" {
+			return fmt.Errorf("%s http MCP에는 url이 필요해요", label)
+		}
+	default:
+		return fmt.Errorf("%s kind는 stdio 또는 http여야 해요", label)
+	}
+	if rawURL != "" && !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return fmt.Errorf("%s url은 http/https여야 해요", label)
+	}
+	return nil
+}
+
+func configString(config map[string]any, key string) string {
+	value, _ := config[key].(string)
+	return value
+}
+
+func nonNegativeIntConfig(config map[string]any, key string) (int, error) {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return 0, nil
+	}
+	switch value := raw.(type) {
+	case float64:
+		if value < 0 {
+			return 0, fmt.Errorf("%s는 0 이상이어야 해요", key)
+		}
+		return int(value), nil
+	case int:
+		if value < 0 {
+			return 0, fmt.Errorf("%s는 0 이상이어야 해요", key)
+		}
+		return value, nil
+	case json.Number:
+		n, err := value.Int64()
+		if err != nil {
+			return 0, err
+		}
+		if n < 0 {
+			return 0, fmt.Errorf("%s는 0 이상이어야 해요", key)
+		}
+		return int(n), nil
+	default:
+		return 0, fmt.Errorf("%s는 number여야 해요", key)
+	}
+}
+
+func validateStringArrayConfig(config map[string]any, key string) error {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	values, ok := raw.([]any)
+	if !ok {
+		return fmt.Errorf("%s는 string array여야 해요", key)
+	}
+	for i, value := range values {
+		text, ok := value.(string)
+		if !ok || strings.TrimSpace(text) == "" {
+			return fmt.Errorf("%s[%d]는 비어 있지 않은 string이어야 해요", key, i)
+		}
+	}
+	return nil
 }
 
 type errResourceNameRequired struct{}
