@@ -3039,7 +3039,7 @@ components:
           type: string
         raw_session:
           type: object
-          description: export bundle의 raw_session을 그대로 전달해요.
+          description: export bundle의 raw_session을 그대로 전달해요. import preflight는 last_response_id를 256 byte로, last_input_items JSON 직렬화를 1048576 byte로 제한해요.
         checkpoints:
           type: array
           items:
@@ -3107,6 +3107,7 @@ components:
           type: integer
         last_response_id:
           type: string
+          maxLength: 256
         created_at:
           type: string
           format: date-time

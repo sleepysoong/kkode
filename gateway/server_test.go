@@ -4772,6 +4772,12 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 		{name: "bad new session id", newSessionID: "bad id", want: "session id"},
 		{name: "bad session mode", mutate: func(s *session.Session) { s.Mode = "debug" }, want: "mode"},
 		{name: "bad session metadata", mutate: func(s *session.Session) { s.Metadata = map[string]string{"bad key": "value"} }, want: "metadata key"},
+		{name: "oversized last response id", mutate: func(s *session.Session) {
+			s.LastResponseID = strings.Repeat("r", maxSessionLastResponseIDBytes+1)
+		}, want: "last_response_id"},
+		{name: "oversized last input items", mutate: func(s *session.Session) {
+			s.LastInputItems = []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: strings.Repeat("x", maxSessionLastInputItemsBytes+1)}}
+		}, want: "last_input_items"},
 		{name: "bad session todo", mutate: func(s *session.Session) {
 			s.Todos = []session.Todo{{ID: "bad id", Content: "todo", Status: session.TodoPending}}
 		}, want: "todo id"},

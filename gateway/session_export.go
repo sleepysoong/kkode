@@ -14,6 +14,8 @@ import (
 
 const sessionExportFormatVersion = "kkode.session.export.v1"
 const maxSessionIDBytes = 128
+const maxSessionLastResponseIDBytes = 256
+const maxSessionLastInputItemsBytes = 1 << 20
 const maxSessionTurnPromptBytes = 32 << 10
 const maxSessionTurnSnapshotBytes = 1 << 20
 const maxSessionEventIDBytes = 128
@@ -487,6 +489,7 @@ func sanitizeImportedSession(sess session.Session, now time.Time) session.Sessio
 	sess.Model = strings.TrimSpace(sess.Model)
 	sess.AgentName = strings.TrimSpace(sess.AgentName)
 	sess.Mode = session.AgentMode(strings.TrimSpace(string(sess.Mode)))
+	sess.LastResponseID = strings.TrimSpace(sess.LastResponseID)
 	sess.Metadata = sanitizeRunMetadata(sess.Metadata)
 	for i := range sess.Turns {
 		sess.Turns[i].ID = strings.TrimSpace(sess.Turns[i].ID)
@@ -529,6 +532,9 @@ func validateImportedSession(sess session.Session) error {
 	if err := validateRunMetadata(sess.Metadata); err != nil {
 		return err
 	}
+	if err := validateImportedSessionContinuation(sess); err != nil {
+		return err
+	}
 	turnIDs := map[string]bool{}
 	for _, turn := range sess.Turns {
 		if err := validateImportedSessionTurn(turn); err != nil {
@@ -548,6 +554,20 @@ func validateImportedSession(sess session.Session) error {
 		if _, err := todoFromDTO(TodoDTO{ID: todo.ID, Content: todo.Content, Status: string(todo.Status), Priority: todo.Priority, UpdatedAt: todo.UpdatedAt}, time.Now().UTC()); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateImportedSessionContinuation(sess session.Session) error {
+	if len(sess.LastResponseID) > maxSessionLastResponseIDBytes {
+		return fmt.Errorf("last_response_id는 %d byte 이하여야 해요", maxSessionLastResponseIDBytes)
+	}
+	items, err := json.Marshal(sess.LastInputItems)
+	if err != nil {
+		return fmt.Errorf("last_input_items를 JSON으로 저장할 수 없어요: %w", err)
+	}
+	if len(items) > maxSessionLastInputItemsBytes {
+		return fmt.Errorf("last_input_items는 %d byte 이하여야 해요", maxSessionLastInputItemsBytes)
 	}
 	return nil
 }
