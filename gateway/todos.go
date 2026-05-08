@@ -15,6 +15,10 @@ type todoPersistStore interface {
 	SaveTodos(ctx context.Context, sessionID string, todos []session.Todo) error
 }
 
+const maxTodoIDBytes = 128
+const maxTodoContentBytes = 4096
+const maxTodoPriorityBytes = 64
+
 func (s *Server) handleSessionTodos(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
 	if len(rest) == 0 {
 		switch r.Method {
@@ -174,6 +178,9 @@ func todoFromDTO(dto TodoDTO, now time.Time) (session.Todo, error) {
 	if content == "" {
 		return session.Todo{}, fmt.Errorf("todo content가 필요해요")
 	}
+	if len(content) > maxTodoContentBytes {
+		return session.Todo{}, fmt.Errorf("todo content는 %d byte 이하여야 해요", maxTodoContentBytes)
+	}
 	status := session.TodoStatus(strings.TrimSpace(dto.Status))
 	if status == "" {
 		status = session.TodoPending
@@ -192,7 +199,17 @@ func todoFromDTO(dto TodoDTO, now time.Time) (session.Todo, error) {
 	if id == "" {
 		id = session.NewID("todo")
 	}
-	return session.Todo{ID: id, Content: content, Status: status, Priority: strings.TrimSpace(dto.Priority), UpdatedAt: updatedAt.UTC()}, nil
+	if len(id) > maxTodoIDBytes {
+		return session.Todo{}, fmt.Errorf("todo id는 %d byte 이하여야 해요", maxTodoIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return session.Todo{}, fmt.Errorf("todo id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	priority := strings.TrimSpace(dto.Priority)
+	if len(priority) > maxTodoPriorityBytes {
+		return session.Todo{}, fmt.Errorf("todo priority는 %d byte 이하여야 해요", maxTodoPriorityBytes)
+	}
+	return session.Todo{ID: id, Content: content, Status: status, Priority: priority, UpdatedAt: updatedAt.UTC()}, nil
 }
 
 func validTodoStatus(status session.TodoStatus) bool {

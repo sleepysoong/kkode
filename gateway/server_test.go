@@ -4317,6 +4317,24 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 	if len(loaded.Todos) != 1 || loaded.Todos[0].ID != "todo_2" {
 		t.Fatalf("todo가 삭제되지 않았어요: %+v", loaded.Todos)
 	}
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "bad id", body: `{"id":"bad id","content":"검증해요"}`, want: "todo id"},
+		{name: "long content", body: `{"content":"` + strings.Repeat("x", maxTodoContentBytes+1) + `"}`, want: "todo content"},
+		{name: "long priority", body: `{"content":"검증해요","priority":"` + strings.Repeat("x", maxTodoPriorityBytes+1) + `"}`, want: "todo priority"},
+	} {
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/todos", bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("%s todo는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestGatewayPreviewsSkillMarkdown(t *testing.T) {
