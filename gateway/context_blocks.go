@@ -41,13 +41,24 @@ func SanitizeContextBlocks(blocks []string) []string {
 }
 
 func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
+	req.MCPServers = sanitizeResourceIDs(req.MCPServers)
+	req.Skills = sanitizeResourceIDs(req.Skills)
+	req.Subagents = sanitizeResourceIDs(req.Subagents)
 	req.ContextBlocks = SanitizeContextBlocks(req.ContextBlocks)
 	req.EnabledTools = sanitizeToolNames(req.EnabledTools)
 	req.DisabledTools = sanitizeToolNames(req.DisabledTools)
 	return req
 }
 
+func sanitizeResourceIDs(ids []string) []string {
+	return sanitizeUniqueStrings(ids)
+}
+
 func sanitizeToolNames(names []string) []string {
+	return sanitizeUniqueStrings(names)
+}
+
+func sanitizeUniqueStrings(names []string) []string {
 	if len(names) == 0 {
 		return nil
 	}
