@@ -574,6 +574,7 @@ func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerNa
 		return
 	}
 	req.Model = strings.TrimSpace(req.Model)
+	req.Metadata = sanitizeRunMetadata(req.Metadata)
 	if err := validateProviderTestRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_provider_test", err.Error())
 		return
@@ -597,7 +598,7 @@ func validateProviderTestRequest(req ProviderTestRequest) error {
 	case req.TimeoutMS < 0:
 		return errors.New("timeout_ms는 0 이상이어야 해요")
 	default:
-		return nil
+		return validateRunMetadata(req.Metadata)
 	}
 }
 

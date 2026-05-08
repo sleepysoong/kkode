@@ -2397,8 +2397,15 @@ components:
           type: boolean
         metadata:
           type: object
+          maxProperties: 64
+          propertyNames:
+            type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
           additionalProperties:
             type: string
+            maxLength: 1024
+          description: provider conversion/live smoke metadata예요. key/value는 trim되고 빈 항목은 제거되며, key는 영문/숫자/._-만 허용해요.
         max_preview_bytes:
           type: integer
           minimum: 0

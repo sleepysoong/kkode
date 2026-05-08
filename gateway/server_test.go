@@ -2087,18 +2087,20 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	}
 
 	var testedProvider string
+	var testedProviderReq ProviderTestRequest
 	srv, err = New(Config{
 		Store:     store,
 		Providers: []ProviderDTO{{Name: "openai", Aliases: []string{"openai-compatible"}}},
 		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
 			testedProvider = provider
+			testedProviderReq = req
 			return &ProviderTestResponse{OK: true, Provider: "openai", Model: req.Model, Message: "ok", ProviderRequest: &ProviderRequestPreviewDTO{Provider: "openai", Operation: "responses.create"}}, nil
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":" gpt-5-mini ","prompt":"ping"}`))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":" gpt-5-mini ","prompt":"ping","metadata":{" trace-id ":" abc ","empty":" "}}`))
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -2110,6 +2112,9 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	}
 	if testedProvider != "openai-compatible" || !testResp.OK || testResp.Model != "gpt-5-mini" || testResp.ProviderRequest == nil || testResp.ProviderRequest.Operation != "responses.create" {
 		t.Fatalf("provider test 응답이 이상해요: provider=%s resp=%+v", testedProvider, testResp)
+	}
+	if testedProviderReq.Metadata["trace-id"] != "abc" || testedProviderReq.Metadata[" trace-id "] != "" || testedProviderReq.Metadata["empty"] != "" {
+		t.Fatalf("provider test metadata 정규화가 필요해요: %+v", testedProviderReq.Metadata)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":"gpt-5-mini","unknown":true}`))
@@ -2135,6 +2140,7 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 		{name: "max output tokens", body: `{"max_output_tokens":-1}`, field: "max_output_tokens"},
 		{name: "max result bytes", body: `{"max_result_bytes":-1}`, field: "max_result_bytes"},
 		{name: "timeout", body: `{"timeout_ms":-1}`, field: "timeout_ms"},
+		{name: "metadata", body: `{"metadata":{"bad key":"value"}}`, field: "metadata"},
 	}
 	for _, tc := range invalidProviderTests {
 		req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(tc.body))
