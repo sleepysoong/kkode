@@ -340,11 +340,11 @@ KKODE_ACCESS_LOG=1 \
 
 별도 웹 패널 origin이 있으면 `KKODE_CORS_ORIGINS` 또는 `-cors-origins`에 쉼표로 나열해요. gateway는 `X-Request-Id`와 `Idempotency-Key` 요청 header를 CORS preflight에서 허용하고 `X-Request-Id`와 `X-Idempotent-Replay`를 CORS exposed header로 열어 브라우저 패널이 요청 추적과 idempotency replay 여부를 읽게 해요. 실제 API 호출은 여전히 bearer token을 써야 해요. 외부 adapter가 `X-Request-Id`를 보내면 gateway가 그대로 응답 header와 오류 body에 보존하고, 없으면 `req_...` 형식으로 생성해요. Background run을 시작하거나 retry할 때도 같은 값이 run metadata의 `request_id`에 들어가서 run event replay에서 추적할 수 있어요. `KKODE_ACCESS_LOG=1` 또는 `-access-log`를 켜면 request id, method, path, status, byte 수, duration을 JSONL로 stderr에 남겨요. `KKODE_MAX_BODY_BYTES` 또는 `-max-body-bytes`는 JSON API 요청 body 최대 크기를 조절해요. `KKODE_READ_HEADER_TIMEOUT`, `KKODE_READ_TIMEOUT`, `KKODE_WRITE_TIMEOUT`, `KKODE_IDLE_TIMEOUT`, `KKODE_SHUTDOWN_TIMEOUT` 또는 대응 flag로 HTTP timeout을 배포 환경에 맞게 조절해요. `cmd/kkode-gateway`는 SIGINT/SIGTERM을 받으면 진행 중 HTTP 요청을 위해 graceful shutdown을 시도하고, 소유 중인 background run도 취소 상태로 저장해요.
 
-배포마다 OpenAI-compatible proxy나 사내 gateway가 다르면 `KKODE_HTTPJSON_PROVIDERS`에 JSON을 넣어 재컴파일 없이 provider를 추가할 수 있어요. 등록된 provider는 `/api/v1/providers`, `/api/v1/models`, session 생성, run preview/test에서 기본 provider와 같은 방식으로 보여요.
+배포마다 OpenAI-compatible proxy나 사내 gateway가 다르면 `KKODE_HTTPJSON_PROVIDERS`에 JSON을 넣어 재컴파일 없이 provider를 추가할 수 있어요. 등록된 provider는 `/api/v1/providers`, `/api/v1/models`, session 생성, run preview/test에서 기본 provider와 같은 방식으로 보여요. `max_response_bytes`를 넣으면 해당 HTTP JSON source의 success/error response body 상한을 조절할 수 있고, 생략하면 기본 32MiB를 써요.
 
 ```bash
 export MY_GATEWAY_API_KEY=sk-live-...
-export KKODE_HTTPJSON_PROVIDERS='[{"name":"my-gateway","aliases":["my-openai-compatible"],"profile":"openai-compatible","default_model":"gpt-5-mini","auth_env":["MY_GATEWAY_API_KEY"],"base_url":"https://api.example.com/v1","api_key_env":["MY_GATEWAY_API_KEY"],"source":"my-http-json-gateway"}]'
+export KKODE_HTTPJSON_PROVIDERS='[{"name":"my-gateway","aliases":["my-openai-compatible"],"profile":"openai-compatible","default_model":"gpt-5-mini","auth_env":["MY_GATEWAY_API_KEY"],"base_url":"https://api.example.com/v1","api_key_env":["MY_GATEWAY_API_KEY"],"max_response_bytes":33554432,"source":"my-http-json-gateway"}]'
 
 go run ./cmd/kkode-gateway -addr 127.0.0.1:41234
 ```
@@ -490,6 +490,7 @@ caller := httpjson.New(httpjson.Config{
     ProviderName:     "my-openai-compatible",
     BaseURL:          "https://api.example.com/v1",
     APIKey:           os.Getenv("MY_API_KEY"),
+    MaxResponseBytes: 32 << 20,
     DefaultOperation: "responses.create",
     Routes: map[string]httpjson.Route{
         "responses.create": {Method: http.MethodPost, Path: "/responses"},
@@ -503,7 +504,7 @@ if err != nil {
 resp, err := pipeline.Generate(ctx, req)
 ```
 
-SSE source도 같은 caller를 `Streamer`로 넘기면 raw SSE frame을 `llm.StreamEvent`로 받을 수 있어요. provider별 text delta/tool call 의미 해석이 필요하면 전용 `ProviderStreamCaller`를 추가하면 돼요.
+SSE source도 같은 caller를 `Streamer`로 넘기면 raw SSE frame을 `llm.StreamEvent`로 받을 수 있어요. provider별 text delta/tool call 의미 해석이 필요하면 전용 `ProviderStreamCaller`를 추가하면 돼요. `MaxResponseBytes`는 JSON success/error body를 제한하고, 0이면 기본 32MiB 제한을 써요. error body는 제한 크기에서 잘려 `HTTPError.Body`에 남고, success body가 제한을 넘으면 partial JSON을 파싱하지 않고 실패해요.
 
 고정 `/responses`가 아닌 API도 route template로 처리해요. `Path`와 `Query` 값에는 `{model}`, `{operation}`, `{metadata.key}` 또는 `{key}`를 쓸 수 있고, 값은 `llm.ProviderRequest.Metadata`에서 가져와요. path 값은 자동으로 escape되므로 provider/model 이름에 `/`가 있어도 route가 깨지지 않아요. run/provider preview는 매칭된 route와 resolved path/query를 같이 반환해서 live 호출 전에 source endpoint 조립 문제를 잡게 해요.
 
@@ -544,9 +545,10 @@ OpenAI-compatible HTTP JSON source는 더 짧게 붙일 수도 있어요. regist
 
 ```go
 provider, err := app.BuildHTTPJSONProviderAdapter("openai-compatible", app.HTTPJSONProviderOptions{
-    ProviderName: "my-openai-compatible",
-    BaseURL:      "https://api.example.com/v1",
-    APIKey:       os.Getenv("MY_API_KEY"),
+    ProviderName:     "my-openai-compatible",
+    BaseURL:          "https://api.example.com/v1",
+    APIKey:           os.Getenv("MY_API_KEY"),
+    MaxResponseBytes: 32 << 20,
 })
 if err != nil {
     return err
