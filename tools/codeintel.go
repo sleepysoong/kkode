@@ -81,14 +81,14 @@ type codeIntelHover struct {
 // CodeIntelTools exposes parser-backed, read-only Go code navigation tools to agent runs.
 func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 	strict := true
-	cursorOrSymbol := map[string]any{"symbol": StringSchema(), "path": StringSchema(), "line": IntegerSchema(), "column": IntegerSchema(), "limit": IntegerSchema()}
+	cursorOrSymbol := map[string]any{"symbol": StringSchema(), "path": StringSchema(), "line": NonNegativeIntegerSchema(), "column": NonNegativeIntegerSchema(), "limit": NonNegativeIntegerSchema()}
 	defs := []llm.Tool{
-		{Kind: llm.ToolFunction, Name: "lsp_symbols", Description: "Go workspace symbol 목록을 검색해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"query": StringSchema(), "limit": IntegerSchema()}, nil)},
+		{Kind: llm.ToolFunction, Name: "lsp_symbols", Description: "Go workspace symbol 목록을 검색해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"query": StringSchema(), "limit": NonNegativeIntegerSchema()}, nil)},
 		{Kind: llm.ToolFunction, Name: "lsp_document_symbols", Description: "Go 파일 하나의 symbol outline을 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"path": StringSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "lsp_definitions", Description: "Go symbol 또는 cursor 위치의 definition을 찾아요", Strict: &strict, Parameters: ObjectSchemaRequired(cursorOrSymbol, nil)},
 		{Kind: llm.ToolFunction, Name: "lsp_references", Description: "Go symbol 또는 cursor 위치의 reference를 찾아요", Strict: &strict, Parameters: ObjectSchemaRequired(cursorOrSymbol, nil)},
 		{Kind: llm.ToolFunction, Name: "lsp_hover", Description: "Go symbol 또는 cursor 위치의 signature와 doc comment를 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(cursorOrSymbol, nil)},
-		{Kind: llm.ToolFunction, Name: "lsp_diagnostics", Description: "Go parser diagnostics를 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"path": StringSchema(), "limit": IntegerSchema()}, nil)},
+		{Kind: llm.ToolFunction, Name: "lsp_diagnostics", Description: "Go parser diagnostics를 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"path": StringSchema(), "limit": NonNegativeIntegerSchema()}, nil)},
 	}
 	handlers := llm.ToolRegistry{
 		"lsp_symbols": llm.JSONToolHandler(func(ctx context.Context, in struct {
@@ -98,7 +98,10 @@ func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			if ws == nil {
 				return "", fmt.Errorf("workspace is nil")
 			}
-			limit := positiveOr(in.Limit, 200)
+			limit, err := codeIntelLimit(in.Limit, 200)
+			if err != nil {
+				return "", err
+			}
 			symbols, err := codeIntelSymbols(ws.Root, in.Query, limit+1)
 			if err != nil {
 				return "", err
@@ -126,7 +129,10 @@ func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			if err != nil {
 				return "", err
 			}
-			limit := positiveOr(in.Limit, 50)
+			limit, err := codeIntelLimit(in.Limit, 50)
+			if err != nil {
+				return "", err
+			}
 			locations, err := codeIntelDefinitions(ws.Root, symbol, limit+1)
 			if err != nil {
 				return "", err
@@ -142,7 +148,10 @@ func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			if err != nil {
 				return "", err
 			}
-			limit := positiveOr(in.Limit, 100)
+			limit, err := codeIntelLimit(in.Limit, 100)
+			if err != nil {
+				return "", err
+			}
 			references, err := codeIntelReferences(ws.Root, symbol, limit+1)
 			if err != nil {
 				return "", err
@@ -171,7 +180,10 @@ func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			if ws == nil {
 				return "", fmt.Errorf("workspace is nil")
 			}
-			limit := positiveOr(in.Limit, 200)
+			limit, err := codeIntelLimit(in.Limit, 200)
+			if err != nil {
+				return "", err
+			}
 			diagnostics, err := codeIntelDiagnostics(ws, in.Path, limit+1)
 			if err != nil {
 				return "", err
@@ -609,11 +621,14 @@ func isCodeIntelIdentRune(r rune) bool {
 	return r == '_' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z'
 }
 
-func positiveOr(value int, fallback int) int {
-	if value > 0 {
-		return value
+func codeIntelLimit(value int, fallback int) (int, error) {
+	if value < 0 {
+		return 0, fmt.Errorf("limit must be >= 0")
 	}
-	return fallback
+	if value == 0 {
+		return fallback, nil
+	}
+	return value, nil
 }
 
 func marshalCodeIntel(value any) (string, error) {

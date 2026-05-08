@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -199,7 +200,10 @@ func executeLSPTool(root string, name string, args map[string]any) (string, erro
 	var err error
 	switch name {
 	case "lsp_symbols":
-		limit := intArg(args, "limit", 200)
+		limit, err := positiveIntArg(args, "limit", 200)
+		if err != nil {
+			return "", err
+		}
 		symbols, scanErr := scanGoSymbols(root, stringArg(args, "query"), limit+1)
 		if scanErr != nil {
 			return "", scanErr
@@ -207,7 +211,10 @@ func executeLSPTool(root string, name string, args map[string]any) (string, erro
 		symbols, truncated := limitLSPSymbols(symbols, limit)
 		value = LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated}
 	case "lsp_document_symbols":
-		limit := intArg(args, "limit", 200)
+		limit, err := positiveIntArg(args, "limit", 200)
+		if err != nil {
+			return "", err
+		}
 		symbols, scanErr := scanGoDocumentSymbols(root, stringArg(args, "path"), limit+1)
 		if scanErr != nil {
 			return "", scanErr
@@ -219,7 +226,10 @@ func executeLSPTool(root string, name string, args map[string]any) (string, erro
 		if scanErr != nil {
 			return "", scanErr
 		}
-		limit := intArg(args, "limit", 50)
+		limit, err := positiveIntArg(args, "limit", 50)
+		if err != nil {
+			return "", err
+		}
 		locations, scanErr := scanGoDefinitions(root, symbol, limit+1)
 		if scanErr != nil {
 			return "", scanErr
@@ -231,7 +241,10 @@ func executeLSPTool(root string, name string, args map[string]any) (string, erro
 		if scanErr != nil {
 			return "", scanErr
 		}
-		limit := intArg(args, "limit", 100)
+		limit, err := positiveIntArg(args, "limit", 100)
+		if err != nil {
+			return "", err
+		}
 		references, scanErr := scanGoReferences(root, symbol, limit+1)
 		if scanErr != nil {
 			return "", scanErr
@@ -245,7 +258,10 @@ func executeLSPTool(root string, name string, args map[string]any) (string, erro
 		}
 		value, err = scanGoHover(root, symbol)
 	case "lsp_diagnostics":
-		limit := intArg(args, "limit", 200)
+		limit, err := positiveIntArg(args, "limit", 200)
+		if err != nil {
+			return "", err
+		}
 		diagnostics, scanErr := scanGoDiagnostics(root, stringArg(args, "path"), limit+1)
 		if scanErr != nil {
 			return "", scanErr
@@ -305,6 +321,37 @@ func intArg(args map[string]any, name string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func positiveIntArg(args map[string]any, name string, fallback int) (int, error) {
+	switch value := args[name].(type) {
+	case int:
+		return positiveIntValue(name, int64(value), fallback)
+	case float64:
+		if value < 0 {
+			return 0, fmt.Errorf("%s는 0 이상이어야 해요", name)
+		}
+		if value > 0 {
+			return int(value), nil
+		}
+	case json.Number:
+		n, err := value.Int64()
+		if err != nil {
+			return 0, err
+		}
+		return positiveIntValue(name, n, fallback)
+	}
+	return fallback, nil
+}
+
+func positiveIntValue(name string, value int64, fallback int) (int, error) {
+	if value < 0 {
+		return 0, fmt.Errorf("%s는 0 이상이어야 해요", name)
+	}
+	if value == 0 {
+		return fallback, nil
+	}
+	return int(value), nil
 }
 
 func toolCallContext(parent context.Context, timeoutMS int) (context.Context, context.CancelFunc, error) {

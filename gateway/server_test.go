@@ -3507,6 +3507,15 @@ func TestGatewayListsAndCallsLSPTools(t *testing.T) {
 		t.Fatalf("LSP symbols tool 결과가 이상해요: %+v", symbols)
 	}
 
+	body = `{"project_root":"` + root + `","tool":"lsp_symbols","arguments":{"query":"Runner","limit":-1}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
+		t.Fatalf("음수 LSP tool limit은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	body = `{"project_root":"` + root + `","tool":"lsp_hover","arguments":{"symbol":"Runner"}}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

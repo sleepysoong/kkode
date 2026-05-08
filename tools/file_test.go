@@ -61,6 +61,9 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	if err != nil || !strings.Contains(result.Output, `"Run"`) {
 		t.Fatalf("lsp_symbols가 agent surface에서 실행돼야 해요: result=%+v err=%v", result, err)
 	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_symbols", Arguments: []byte(`{"query":"Run","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative lsp_symbols limit은 거부해야 해요: %v", err)
+	}
 
 	defs, handlers = StandardTools(SurfaceOptions{Workspace: ws, NoWeb: true})
 	if _, ok := handlers["web_fetch"]; ok {
