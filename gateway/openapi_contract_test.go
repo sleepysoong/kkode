@@ -61,6 +61,49 @@ func TestFeatureCatalogEndpointsExistInAPIIndexLinks(t *testing.T) {
 	}
 }
 
+func TestAPIIndexOperationsMatchLinks(t *testing.T) {
+	links := APIIndexLinks()
+	operations := APIIndexOperations()
+	if len(operations) != len(links) {
+		t.Fatalf("API index operations count = %d, links count = %d", len(operations), len(links))
+	}
+	seen := map[string]bool{}
+	for i, op := range operations {
+		if i > 0 && operations[i-1].Name > op.Name {
+			t.Fatalf("API index operations must be name-sorted: previous=%s current=%s", operations[i-1].Name, op.Name)
+		}
+		if seen[op.Name] {
+			t.Fatalf("API index operation name duplicated: %s", op.Name)
+		}
+		seen[op.Name] = true
+		if links[op.Name] != op.Path {
+			t.Fatalf("API index operation %s path = %q, link path = %q", op.Name, op.Path, links[op.Name])
+		}
+		if op.Method != strings.ToUpper(op.Method) {
+			t.Fatalf("API index operation %s method must be uppercase: %q", op.Name, op.Method)
+		}
+		switch op.Method {
+		case "GET", "POST", "PUT", "DELETE":
+		default:
+			t.Fatalf("API index operation %s has unsupported method %q", op.Name, op.Method)
+		}
+	}
+	for name := range links {
+		if !seen[name] {
+			t.Fatalf("API index link has no operation metadata: %s", name)
+		}
+	}
+}
+
+func TestOpenAPIRequiresAPIIndexOperations(t *testing.T) {
+	required := readOpenAPISchemaRequired(t, "APIIndexResponse")
+	for _, field := range []string{"version", "links", "operations"} {
+		if !required[field] {
+			t.Fatalf("APIIndexResponse OpenAPI required에 %s 필드가 필요해요: %+v", field, sortedKeys(required))
+		}
+	}
+}
+
 func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
 	ops := readOpenAPIOperationErrorResponses(t)
 	for op, hasError := range ops {

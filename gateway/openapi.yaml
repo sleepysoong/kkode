@@ -2203,7 +2203,7 @@ components:
           format: date-time
     APIIndexResponse:
       type: object
-      required: [version, links]
+      required: [version, links, operations]
       properties:
         version:
           type: string
