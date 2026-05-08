@@ -124,6 +124,13 @@ func TestGatewayMethodNotAllowedIncludesAllowHeader(t *testing.T) {
 		{name: "prompt render", method: http.MethodGet, path: "/api/v1/prompts/default/render", allow: "POST"},
 		{name: "todo item", method: http.MethodPatch, path: "/api/v1/sessions/sess_1/todos/todo_1", allow: "DELETE"},
 		{name: "checkpoint item", method: http.MethodPatch, path: "/api/v1/sessions/sess_1/checkpoints/cp_1", allow: "GET"},
+		{name: "session detail", method: http.MethodPost, path: "/api/v1/sessions/sess_1", allow: "GET"},
+		{name: "session fork", method: http.MethodGet, path: "/api/v1/sessions/sess_1/fork", allow: "POST"},
+		{name: "run preview", method: http.MethodGet, path: "/api/v1/runs/preview", allow: "POST"},
+		{name: "run cancel", method: http.MethodGet, path: "/api/v1/runs/run_1/cancel", allow: "POST"},
+		{name: "mcp tool call", method: http.MethodGet, path: "/api/v1/mcp/servers/default/tools/hello/call", allow: "POST"},
+		{name: "skill preview", method: http.MethodPost, path: "/api/v1/skills/default/preview", allow: "GET"},
+		{name: "subagent preview", method: http.MethodPost, path: "/api/v1/subagents/default/preview", allow: "GET"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

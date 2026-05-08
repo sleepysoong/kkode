@@ -52,24 +52,48 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request, parts []strin
 		s.listMCPServerTools(w, r, parts[2])
 		return
 	}
+	if len(parts) == 4 && parts[3] == "tools" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 mcp tools method예요", http.MethodGet)
+		return
+	}
 	if len(parts) == 4 && parts[3] == "resources" && r.Method == http.MethodGet {
 		s.listMCPServerResources(w, r, parts[2])
+		return
+	}
+	if len(parts) == 4 && parts[3] == "resources" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 mcp resources method예요", http.MethodGet)
 		return
 	}
 	if len(parts) == 5 && parts[3] == "resources" && parts[4] == "read" && r.Method == http.MethodGet {
 		s.readMCPServerResource(w, r, parts[2])
 		return
 	}
+	if len(parts) == 5 && parts[3] == "resources" && parts[4] == "read" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 mcp resource read method예요", http.MethodGet)
+		return
+	}
 	if len(parts) == 4 && parts[3] == "prompts" && r.Method == http.MethodGet {
 		s.listMCPServerPrompts(w, r, parts[2])
+		return
+	}
+	if len(parts) == 4 && parts[3] == "prompts" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 mcp prompts method예요", http.MethodGet)
 		return
 	}
 	if len(parts) == 6 && parts[3] == "prompts" && parts[5] == "get" && r.Method == http.MethodPost {
 		s.getMCPServerPrompt(w, r, parts[2], parts[4])
 		return
 	}
+	if len(parts) == 6 && parts[3] == "prompts" && parts[5] == "get" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 mcp prompt get method예요", http.MethodPost)
+		return
+	}
 	if len(parts) == 6 && parts[3] == "tools" && parts[5] == "call" && r.Method == http.MethodPost {
 		s.callMCPServerTool(w, r, parts[2], parts[4])
+		return
+	}
+	if len(parts) == 6 && parts[3] == "tools" && parts[5] == "call" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 mcp tool call method예요", http.MethodPost)
 		return
 	}
 	s.handleResources(w, r, parts[2:], resourceRoute{Kind: session.ResourceMCPServer, Name: "mcp server"})
@@ -80,12 +104,20 @@ func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request, parts []st
 		s.previewSkill(w, r, parts[1])
 		return
 	}
+	if len(parts) == 3 && parts[2] == "preview" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 skill preview method예요", http.MethodGet)
+		return
+	}
 	s.handleResources(w, r, parts[1:], resourceRoute{Kind: session.ResourceSkill, Name: "skill"})
 }
 
 func (s *Server) handleSubagents(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 3 && parts[2] == "preview" && r.Method == http.MethodGet {
 		s.previewSubagent(w, r, parts[1])
+		return
+	}
+	if len(parts) == 3 && parts[2] == "preview" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 subagent preview method예요", http.MethodGet)
 		return
 	}
 	s.handleResources(w, r, parts[1:], resourceRoute{Kind: session.ResourceSubagent, Name: "subagent"})

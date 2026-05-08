@@ -982,8 +982,16 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		s.getSession(w, r, sessionID)
 		return
 	}
+	if len(parts) == 2 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodGet)
+		return
+	}
 	if len(parts) == 3 && parts[2] == "events" && r.Method == http.MethodGet {
 		s.getSessionEvents(w, r, sessionID)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "events" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodGet)
 		return
 	}
 	if len(parts) == 3 && parts[2] == "transcript" {
@@ -1012,6 +1020,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 	}
 	if len(parts) == 3 && parts[2] == "fork" && r.Method == http.MethodPost {
 		s.forkSession(w, r, sessionID)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "fork" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodPost)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "session endpoint를 찾을 수 없어요")
@@ -1296,8 +1308,16 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		s.previewRun(w, r)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "preview" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodPost)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "validate" && r.Method == http.MethodPost {
 		s.validateRun(w, r)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "validate" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodPost)
 		return
 	}
 	runID := parts[1]
@@ -1305,20 +1325,36 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		s.getRun(w, r, runID)
 		return
 	}
+	if len(parts) == 2 {
+		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodGet)
+		return
+	}
 	if len(parts) == 3 && parts[2] == "cancel" && r.Method == http.MethodPost {
 		s.cancelRun(w, r, runID)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "cancel" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodPost)
 		return
 	}
 	if len(parts) == 3 && parts[2] == "events" && r.Method == http.MethodGet {
 		s.getRunEvents(w, r, runID)
 		return
 	}
-	if len(parts) == 3 && parts[2] == "transcript" && r.Method == http.MethodGet {
+	if len(parts) == 3 && parts[2] == "events" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodGet)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "transcript" {
 		s.getRunTranscript(w, r, runID)
 		return
 	}
 	if len(parts) == 3 && parts[2] == "retry" && r.Method == http.MethodPost {
 		s.retryRun(w, r, runID)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "retry" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodPost)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
