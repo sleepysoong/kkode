@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/sleepysoong/kkode/llm"
@@ -155,7 +156,11 @@ func (s *Server) readMCPServerResource(w http.ResponseWriter, r *http.Request, s
 			writeError(w, r, http.StatusBadGateway, "mcp_resource_read_failed", err.Error())
 			return
 		}
-		contents, contentBytes, truncated := truncateMCPResourceContents(contents, queryLimit(r, "max_content_bytes", 1<<20, maxMCPHTTPResponseBytes))
+		maxContentBytes, ok := mcpQueryByteLimit(w, r, "max_content_bytes", "invalid_mcp_resource")
+		if !ok {
+			return
+		}
+		contents, contentBytes, truncated := truncateMCPResourceContents(contents, maxContentBytes)
 		writeJSON(w, MCPResourceReadResponse{Server: publicResourceDTO(resource), URI: uri, Contents: contents, ContentBytes: contentBytes, ContentTruncated: truncated})
 	})
 }
@@ -427,6 +432,22 @@ func mcpPromptMessageLimit(value int) int {
 		return maxMCPHTTPResponseBytes
 	}
 	return value
+}
+
+func mcpQueryByteLimit(w http.ResponseWriter, r *http.Request, key string, code string) (int, bool) {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return 1 << 20, true
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		writeError(w, r, http.StatusBadRequest, code, key+"는 0 이상이어야 해요")
+		return 0, false
+	}
+	if parsed > maxMCPHTTPResponseBytes {
+		return maxMCPHTTPResponseBytes, true
+	}
+	return parsed, true
 }
 
 func truncateMCPValue(value any, key string, budget *int) (any, bool) {

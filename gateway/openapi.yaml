@@ -1125,6 +1125,7 @@ paths:
           schema:
             type: integer
             default: 1048576
+            minimum: 0
             maximum: 8388608
           description: MCP resource text/blob preview를 이 byte 수까지 UTF-8 안전하게 잘라요.
       responses:
@@ -3685,6 +3686,7 @@ components:
         max_message_bytes:
           type: integer
           default: 1048576
+          minimum: 0
           maximum: 8388608
           description: MCP prompt message content의 text/blob/output 문자열 payload를 이 byte 수까지 잘라요.
     MCPPromptGetResponse:
@@ -3722,6 +3724,7 @@ components:
           additionalProperties: true
         max_output_bytes:
           type: integer
+          minimum: 0
           description: MCP tools/call result의 text/blob/output 문자열 payload를 이 byte 수까지 잘라서 반환해요. 0이면 제한하지 않아요.
     MCPToolCallResponse:
       type: object

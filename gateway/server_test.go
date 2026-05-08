@@ -2954,6 +2954,12 @@ while True:
 	if resourceRead.URI != "file:///README.md" || len(resourceRead.Contents) != 1 || resourceRead.Contents[0].Text != "hello r" || resourceRead.ContentBytes <= 7 || !resourceRead.ContentTruncated {
 		t.Fatalf("MCP resources/read 결과가 이상해요: %+v", resourceRead)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/"+resource.ID+"/resources/read?uri="+url.QueryEscape("file:///README.md")+"&max_content_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_content_bytes") {
+		t.Fatalf("음수 max_content_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"arguments":{"path":"main.go"},"max_message_bytes":12}`))
 	req.Header.Set("Content-Type", "application/json")
