@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -64,7 +65,7 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionI
 	if summary != "" {
 		sess.Summary = summary
 		sess.Touch()
-		if err := s.cfg.Store.SaveSession(r.Context(), sess); err != nil {
+		if err := s.saveCompactedSession(r.Context(), sess); err != nil {
 			writeError(w, r, http.StatusInternalServerError, "compact_session_failed", err.Error())
 			return
 		}
@@ -88,6 +89,13 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request, sessionI
 		resp.Checkpoint = checkpoint
 	}
 	writeJSON(w, resp)
+}
+
+func (s *Server) saveCompactedSession(ctx context.Context, sess *session.Session) error {
+	if store, ok := s.cfg.Store.(session.IncrementalStore); ok {
+		return store.SaveSessionState(ctx, sess)
+	}
+	return s.cfg.Store.SaveSession(ctx, sess)
 }
 
 func compactedTurnCount(total int, preserveFirst int, preserveLast int) int {
