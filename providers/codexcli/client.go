@@ -78,16 +78,33 @@ func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 	_ = out.Close()
 	defer os.Remove(outPath)
 	cmd := c.commandPrompt(ctx, payload.Request, payload.Prompt, "-o", outPath)
+	stdout := newLimitedBuffer(MaxExecStderrBytes)
 	stderr := newLimitedBuffer(MaxExecStderrBytes)
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return llm.ProviderResult{}, fmt.Errorf("codex exec failed: %w: %s", err, stderr.String())
+		return llm.ProviderResult{}, fmt.Errorf("codex exec failed: %w%s", err, codexFailureDiagnostics(stdout.String(), stderr.String()))
 	}
 	data, err := readLimitedFile(outPath, MaxExecOutputBytes)
 	if err != nil {
 		return llm.ProviderResult{}, err
 	}
 	return llm.ProviderResult{Provider: c.Name(), Model: req.Model, Body: data}, nil
+}
+
+func codexFailureDiagnostics(stdout, stderr string) string {
+	stdout = strings.TrimSpace(stdout)
+	stderr = strings.TrimSpace(stderr)
+	switch {
+	case stdout == "" && stderr == "":
+		return ""
+	case stdout == "":
+		return ": stderr=" + stderr
+	case stderr == "":
+		return ": stdout=" + stdout
+	default:
+		return ": stdout=" + stdout + " stderr=" + stderr
+	}
 }
 
 func (c *Client) Stream(ctx context.Context, req llm.Request) (llm.EventStream, error) {

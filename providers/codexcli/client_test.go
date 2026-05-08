@@ -77,6 +77,24 @@ printf ' converted\n' > "$out"
 	}
 }
 
+func TestClientGenerateIncludesBoundedStdoutDiagnosticsOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "fake-codex")
+	script := `#!/bin/sh
+printf '%s\n' '{"type":"error","message":"usage limit"}'
+printf '%s\n' 'stderr detail' >&2
+exit 1
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	client := New(Config{Binary: bin, WorkingDirectory: dir})
+	_, err := client.Generate(context.Background(), llm.Request{Model: "gpt-5.3-codex", Messages: []llm.Message{llm.UserText("hi")}})
+	if err == nil || !strings.Contains(err.Error(), "stdout=") || !strings.Contains(err.Error(), "usage limit") || !strings.Contains(err.Error(), "stderr=stderr detail") {
+		t.Fatalf("failed codex exec should include bounded stdout/stderr diagnostics: %v", err)
+	}
+}
+
 func TestClientStreamUsesConverterAndYoloCommand(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "fake-codex")

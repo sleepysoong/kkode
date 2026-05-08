@@ -438,7 +438,7 @@ go vet ./...
 ./scripts/verify-go-examples.sh
 ./scripts/copilot-smoke.sh gpt-5-mini       # Copilot auth가 없으면 SKIP 처리해요
 ./scripts/copilot-tool-smoke.sh gpt-5-mini  # Copilot auth가 없으면 SKIP 처리해요
-./scripts/codexcli-smoke.sh gpt-5.3-codex
+./scripts/codexcli-smoke.sh gpt-5.3-codex   # Codex CLI auth/cache가 준비되지 않으면 SKIP 처리해요
 ./scripts/omniroute-smoke.sh   # OmniRoute가 안 떠 있으면 SKIP 처리해요
 ```
 

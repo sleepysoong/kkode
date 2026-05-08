@@ -948,9 +948,13 @@ func ToCopilotAgent(agent llm.Agent) copilot.CustomAgentConfig
 예제는 이렇게 써요.
 
 ```go
+wd, err := os.Getwd()
+if err != nil {
+    panic(err)
+}
 client := copilot.New(copilot.Config{
     ClientName:       "kkode-app",
-    WorkingDirectory: ".",
+    WorkingDirectory: wd,
 })
 defer client.Close()
 
@@ -979,8 +983,12 @@ func (ExecConverter) ConvertResponse(ctx context.Context, result llm.ProviderRes
 예제는 이렇게 써요.
 
 ```go
+wd, err := os.Getwd()
+if err != nil {
+    panic(err)
+}
 client := codexcli.New(codexcli.Config{
-    WorkingDirectory: ".",
+    WorkingDirectory: wd,
     Ephemeral:        true,
 })
 
