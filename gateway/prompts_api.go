@@ -82,7 +82,11 @@ func (s *Server) getPromptTemplate(w http.ResponseWriter, r *http.Request, name 
 		writeError(w, r, http.StatusNotFound, "prompt_not_found", err.Error())
 		return
 	}
-	text, textBytes, truncated := truncateToolOutput(text, queryLimit(r, "max_text_bytes", 65536, 1<<20))
+	maxTextBytes, ok := queryNonNegativeLimitParam(w, r, "max_text_bytes", 65536, 1<<20, "invalid_prompt")
+	if !ok {
+		return
+	}
+	text, textBytes, truncated := truncateToolOutput(text, maxTextBytes)
 	writeJSON(w, PromptTemplateResponse{Name: name, Text: text, TextBytes: textBytes, TextTruncated: truncated})
 }
 
@@ -90,6 +94,10 @@ func (s *Server) renderPromptTemplate(w http.ResponseWriter, r *http.Request, na
 	var req PromptRenderRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeJSONDecodeError(w, r, err)
+		return
+	}
+	if req.MaxTextBytes < 0 {
+		writeError(w, r, http.StatusBadRequest, "invalid_prompt_render", "max_text_bytes는 0 이상이어야 해요")
 		return
 	}
 	text, err := prompts.Render(name, req.Data)

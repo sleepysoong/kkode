@@ -2069,6 +2069,20 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 		t.Fatalf("prompt 원문이 이상해요: %+v", got)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md?max_text_bytes=-1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_text_bytes") {
+		t.Fatalf("음수 prompt max_text_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md?max_text_bytes=abc", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_text_bytes") {
+		t.Fatalf("잘못된 prompt max_text_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	body := bytes.NewBufferString(`{"data":{"AgentName":"kkode","ToolNames":["file_read","shell_run"]},"max_text_bytes":24}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/prompts/agent-system.md/render", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -2083,6 +2097,15 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 	}
 	if !strings.Contains(rendered.Text, "kkode") || rendered.TextBytes <= len(rendered.Text) || !rendered.TextTruncated || !utf8.ValidString(rendered.Text) || strings.Contains(rendered.Text, "\uFFFD") {
 		t.Fatalf("prompt 렌더링이 이상해요: %+v", rendered)
+	}
+
+	body = bytes.NewBufferString(`{"data":{"AgentName":"kkode"},"max_text_bytes":-1}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/prompts/agent-system.md/render", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_text_bytes") {
+		t.Fatalf("음수 prompt render max_text_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
