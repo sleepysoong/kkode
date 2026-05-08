@@ -464,6 +464,10 @@ func TestBuildHTTPJSONProviderAdapterAppliesResponseLimit(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "max_response_bytes") {
 		t.Fatalf("negative HTTP JSON adapter response limit은 거부해야 해요: %v", err)
 	}
+	_, err = BuildHTTPJSONProviderAdapter("openai-compatible", HTTPJSONProviderOptions{MaxResponseBytes: httpjson.MaxResponseBytes + 1})
+	if err == nil || !strings.Contains(err.Error(), "max_response_bytes") {
+		t.Fatalf("large HTTP JSON adapter response limit은 거부해야 해요: %v", err)
+	}
 }
 
 func TestPreviewProviderRequestShowsResolvedHTTPRoute(t *testing.T) {
@@ -626,6 +630,10 @@ func TestRegisterHTTPJSONProvidersFromJSONAndEnv(t *testing.T) {
 	_, err = RegisterHTTPJSONProvidersFromJSON(`{"name":"negative-http","base_url":"https://negative.example.test/v1","max_response_bytes":-1}`)
 	if err == nil || !strings.Contains(err.Error(), "max_response_bytes") {
 		t.Fatalf("negative HTTP JSON provider response limit은 등록에서 거부해야 해요: %v", err)
+	}
+	_, err = RegisterHTTPJSONProvidersFromJSON(`{"name":"large-http","base_url":"https://large.example.test/v1","max_response_bytes":33554433}`)
+	if err == nil || !strings.Contains(err.Error(), "max_response_bytes") {
+		t.Fatalf("large HTTP JSON provider response limit은 등록에서 거부해야 해요: %v", err)
 	}
 }
 

@@ -499,6 +499,7 @@ type LimitDTO struct {
 	MaxProviderTestResultBytes  int   `json:"max_provider_test_result_bytes,omitempty"`
 	MaxProviderTestOutputTokens int   `json:"max_provider_test_output_tokens,omitempty"`
 	MaxProviderTestTimeoutMS    int   `json:"max_provider_test_timeout_ms,omitempty"`
+	MaxHTTPJSONResponseBytes    int64 `json:"max_http_json_response_bytes,omitempty"`
 	MaxLSPFormatInputBytes      int   `json:"max_lsp_format_input_bytes,omitempty"`
 	MaxLSPFormatPreviewBytes    int   `json:"max_lsp_format_preview_bytes,omitempty"`
 	MaxRunPromptBytes           int   `json:"max_run_prompt_bytes,omitempty"`

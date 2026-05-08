@@ -16,6 +16,8 @@ import (
 // RetryConfig는 provider HTTP 호출 retry/backoff 정책이에요.
 type RetryConfig = httptransport.RetryConfig
 
+const MaxResponseBytes = httptransport.DefaultMaxResponseBodyBytes
+
 // Route는 provider operation을 실제 HTTP endpoint로 바꾸는 설정이에요.
 // Path와 Query 값에는 {model}, {operation}, {metadata.key}, {key} template를 쓸 수 있어요.
 type Route struct {

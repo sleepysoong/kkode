@@ -2324,6 +2324,9 @@ components:
           type: integer
         max_provider_test_timeout_ms:
           type: integer
+        max_http_json_response_bytes:
+          type: integer
+          format: int64
         max_lsp_format_input_bytes:
           type: integer
         max_lsp_format_preview_bytes:

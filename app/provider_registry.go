@@ -213,6 +213,9 @@ func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) 
 	if opts.MaxResponseBytes < 0 {
 		return nil, fmt.Errorf("max_response_bytes는 0 이상이어야 해요")
 	}
+	if opts.MaxResponseBytes > httpjson.MaxResponseBytes {
+		return nil, fmt.Errorf("max_response_bytes는 %d 이하여야 해요", httpjson.MaxResponseBytes)
+	}
 	providerName := strings.TrimSpace(opts.ProviderName)
 	if providerName == "" {
 		providerName = spec.Name
@@ -269,6 +272,9 @@ func RegisterHTTPJSONProvider(reg HTTPJSONProviderRegistration) (func(), error) 
 	reg = cloneHTTPJSONProviderRegistration(reg)
 	if reg.MaxResponseBytes < 0 {
 		return nil, fmt.Errorf("max_response_bytes는 0 이상이어야 해요")
+	}
+	if reg.MaxResponseBytes > httpjson.MaxResponseBytes {
+		return nil, fmt.Errorf("max_response_bytes는 %d 이하여야 해요", httpjson.MaxResponseBytes)
 	}
 	profile := strings.TrimSpace(reg.Profile)
 	if profile == "" {

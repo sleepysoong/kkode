@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sleepysoong/kkode/providers/httpjson"
 	"github.com/sleepysoong/kkode/session"
 	"github.com/sleepysoong/kkode/workspace"
 )
@@ -762,6 +763,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxProviderTestResultBytes:  MaxProviderTestResultBytes,
 		MaxProviderTestOutputTokens: MaxProviderTestOutputTokens,
 		MaxProviderTestTimeoutMS:    MaxProviderTestTimeoutMS,
+		MaxHTTPJSONResponseBytes:    httpjson.MaxResponseBytes,
 		MaxLSPFormatInputBytes:      maxLSPFormatInputBytes,
 		MaxLSPFormatPreviewBytes:    maxLSPFormatPreviewBytes,
 		MaxRunPromptBytes:           maxRunPromptBytes,
