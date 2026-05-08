@@ -166,6 +166,11 @@ func (s *Server) readMCPServerResource(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Server) getMCPServerPrompt(w http.ResponseWriter, r *http.Request, serverID string, promptName string) {
+	promptName = strings.TrimSpace(promptName)
+	if promptName == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_mcp_prompt", "MCP prompt 이름이 필요해요")
+		return
+	}
 	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
 		var req MCPPromptGetRequest
 		if r.Body != nil && r.ContentLength != 0 {
@@ -240,6 +245,11 @@ func pageSlice[T any](items []T, limit int, offset int) ([]T, int, bool) {
 }
 
 func (s *Server) callMCPServerTool(w http.ResponseWriter, r *http.Request, serverID string, toolName string) {
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_mcp_tool_call", "MCP tool 이름이 필요해요")
+		return
+	}
 	s.withMCPServer(w, r, serverID, func(resource session.Resource) {
 		var req MCPToolCallRequest
 		if r.Body != nil && r.ContentLength != 0 {

@@ -3085,12 +3085,32 @@ while True:
 	if promptGet.Prompt != "review" || len(promptGet.Messages) != 1 || promptGet.Messages[0].Content["text"] != "review revie" || promptGet.MessageBytes <= 12 || !promptGet.MessageTruncated {
 		t.Fatalf("MCP prompts/get 결과가 이상해요: %+v", promptGet)
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/%20review%20/get", bytes.NewBufferString(`{"arguments":{"path":"main.go"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("space-padded prompt get status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &promptGet); err != nil {
+		t.Fatal(err)
+	}
+	if promptGet.Prompt != "review" {
+		t.Fatalf("MCP prompt response는 canonical prompt name을 반환해야 해요: %+v", promptGet)
+	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/review/get", bytes.NewBufferString(`{"max_message_bytes":-1}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_prompt") {
 		t.Fatalf("음수 max_message_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/prompts/%20%20/get", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_prompt") {
+		t.Fatalf("빈 MCP prompt 이름은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -3148,6 +3168,20 @@ while True:
 		t.Fatalf("MCP tools/call 결과가 이상해요: %+v", got)
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/%20echo%20/call", bytes.NewBufferString(`{"arguments":{"name":"kkode"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("space-padded MCP tool name status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Tool != "echo" {
+		t.Fatalf("MCP tool response는 canonical tool name을 반환해야 해요: %+v", got)
+	}
+
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/echo/call", bytes.NewBufferString(`{"arguments":{"name":"kkode"},"max_output_bytes":7}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -3170,6 +3204,14 @@ while True:
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_tool_call") {
 		t.Fatalf("음수 MCP max_output_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers/"+resource.ID+"/tools/%20%20/call", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_mcp_tool_call") {
+		t.Fatalf("빈 MCP tool 이름은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
