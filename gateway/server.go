@@ -1826,10 +1826,6 @@ func queryAfterSeq(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return queryNonNegativeIntParam(w, r, "after_seq", 0, "invalid_after_seq")
 }
 
-func queryOffset(r *http.Request, key string) int {
-	return queryInt(r, key, 0)
-}
-
 func queryOffsetParam(w http.ResponseWriter, r *http.Request, key string, code string) (int, bool) {
 	return queryNonNegativeIntParam(w, r, key, 0, code)
 }

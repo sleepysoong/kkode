@@ -4147,6 +4147,20 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 	if len(listed.Todos) != 1 || listed.TotalTodos != 2 || listed.Limit != 1 || listed.NextOffset != 1 || !listed.ResultTruncated {
 		t.Fatalf("todo list pagination metadata가 이상해요: %+v", listed)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/todos?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("잘못된 todo list query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(query, "limit") && !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("todo list limit 오류는 limit을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
+			t.Fatalf("todo list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/sessions/"+sess.ID+"/todos/todo_1", nil)
 	rec = httptest.NewRecorder()
