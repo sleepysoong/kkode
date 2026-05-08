@@ -236,6 +236,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if err != nil {
 			return nil, err
 		}
+		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
 		providerHandle, err := app.BuildProviderWithOptions(providerName, absRoot, providerOptions)
 		if err != nil {
 			return nil, err
@@ -246,7 +247,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: providerOptions.MCPServers, Observer: runEventTraceObserver()})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: effectiveProviderOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: effectiveProviderOptions.MCPServers, Observer: runEventTraceObserver()})
 		if err != nil {
 			return nil, err
 		}
@@ -331,6 +332,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
+		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(sess.ProjectRoot), providerOptions)
 		handle, err := app.BuildProviderWithOptions(providerName, sess.ProjectRoot, providerOptions)
 		if err != nil {
 			return nil, err
@@ -345,7 +347,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
-		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: providerOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: providerOptions.MCPServers})
+		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: effectiveProviderOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: effectiveProviderOptions.MCPServers})
 		if err != nil {
 			return nil, err
 		}
@@ -356,7 +358,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
-		contextBlocks, contextTruncated := previewContextBlocks(providerOptions.ContextBlocks, maxPreviewBytes)
+		contextBlocks, contextTruncated := previewContextBlocks(effectiveProviderOptions.ContextBlocks, maxPreviewBytes)
 		return &gateway.RunPreviewResponse{
 			SessionID:         req.SessionID,
 			ProjectRoot:       sess.ProjectRoot,

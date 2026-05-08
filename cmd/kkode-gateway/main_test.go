@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -349,6 +350,44 @@ func TestSyncRunPreviewerShowsEffectiveAssembly(t *testing.T) {
 	headers := preview.MCPServers[0].Config["headers"].(map[string]any)
 	if headers["CONTEXT7_API_KEY"] != "[REDACTED]" {
 		t.Fatalf("run preview는 MCP secret header를 숨겨야 해요: %+v", preview.MCPServers[0].Config)
+	}
+}
+
+func TestSyncRunPreviewerExposesDefaultMCPToLocalTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("KKODE_SERENA_COMMAND", "")
+	t.Setenv("KKODE_CONTEXT7_URL", "https://mcp.context7.com/mcp")
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	sess := session.NewSession(t.TempDir(), "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview default MCP", EnabledTools: []string{"mcp_call"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(preview.BaseRequestTools, "mcp") {
+		t.Fatalf("default Context7 should be in provider base request tools: %+v", preview.BaseRequestTools)
+	}
+	if len(preview.LocalTools) != 1 || preview.LocalTools[0] != "mcp_call" {
+		t.Fatalf("default MCP should expose mcp_call on the local tool surface: %+v", preview.LocalTools)
+	}
+	var sawContext7 bool
+	for _, resource := range preview.DefaultMCPServers {
+		if resource.Name == "context7" {
+			sawContext7 = true
+		}
+	}
+	if !sawContext7 {
+		t.Fatalf("default MCP discovery should include Context7: %+v", preview.DefaultMCPServers)
+	}
+	if preview.ProviderRequest == nil || !strings.Contains(preview.ProviderRequest.BodyJSON, "mcp_call") {
+		t.Fatalf("provider preview should include the default-backed local mcp_call tool: %+v", preview.ProviderRequest)
 	}
 }
 
