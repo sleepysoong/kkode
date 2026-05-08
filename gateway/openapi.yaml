@@ -919,6 +919,9 @@ paths:
     get:
       operationId: getPrompts
       summary: 내장 prompt template 목록을 반환해요.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -3883,6 +3886,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PromptTemplate'
+        total_prompts:
+          type: integer
+          description: limit/offset 적용 전 prompt template 수예요.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
+          description: limit 때문에 prompt template 목록이 잘렸는지 알려줘요.
     PromptTemplate:
       type: object
       required: [name]

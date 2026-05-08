@@ -12,7 +12,12 @@ type PromptTemplateDTO struct {
 }
 
 type PromptTemplateListResponse struct {
-	Prompts []PromptTemplateDTO `json:"prompts"`
+	Prompts         []PromptTemplateDTO `json:"prompts"`
+	TotalPrompts    int                 `json:"total_prompts,omitempty"`
+	Limit           int                 `json:"limit,omitempty"`
+	Offset          int                 `json:"offset,omitempty"`
+	NextOffset      int                 `json:"next_offset,omitempty"`
+	ResultTruncated bool                `json:"result_truncated,omitempty"`
 }
 
 type PromptTemplateResponse struct {
@@ -60,7 +65,10 @@ func (s *Server) listPromptTemplates(w http.ResponseWriter, r *http.Request) {
 	for _, name := range names {
 		out = append(out, PromptTemplateDTO{Name: name})
 	}
-	writeJSON(w, PromptTemplateListResponse{Prompts: out})
+	limit := queryLimit(r, "limit", len(out), 500)
+	offset := queryOffset(r, "offset")
+	page, returned, truncated := pageSlice(out, limit, offset)
+	writeJSON(w, PromptTemplateListResponse{Prompts: page, TotalPrompts: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) getPromptTemplate(w http.ResponseWriter, r *http.Request, name string) {

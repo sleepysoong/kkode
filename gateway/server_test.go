@@ -1831,6 +1831,32 @@ func TestGatewayPromptTemplateAPIs(t *testing.T) {
 	if len(listed.Prompts) == 0 || listed.Prompts[0].Name == "" {
 		t.Fatalf("prompt 목록이 이상해요: %+v", listed)
 	}
+	if listed.TotalPrompts != len(listed.Prompts) || listed.Limit != len(listed.Prompts) || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("prompt 목록 metadata가 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts?limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var page PromptTemplateListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Prompts) != 1 || page.TotalPrompts != listed.TotalPrompts || page.Limit != 1 || page.Offset != 1 {
+		t.Fatalf("prompt page가 이상해요: %+v", page)
+	}
+	if wantTruncated := page.TotalPrompts > 2; page.ResultTruncated != wantTruncated {
+		t.Fatalf("prompt page truncation flag가 이상해요: got=%v want=%v page=%+v", page.ResultTruncated, wantTruncated, page)
+	}
+	if page.ResultTruncated && page.NextOffset != 2 {
+		t.Fatalf("prompt page next offset이 이상해요: %+v", page)
+	}
+	if !page.ResultTruncated && page.NextOffset != 0 {
+		t.Fatalf("prompt page next offset이 없어야 해요: %+v", page)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/prompts/agent-system.md", nil)
 	rec = httptest.NewRecorder()
