@@ -120,3 +120,31 @@ printf '%s\n' '{"type":"turn.completed"}'
 		t.Fatalf("stream도 변환된 prompt와 YOLO 실행 인자를 써야 해요: %q", gotArgs)
 	}
 }
+
+func TestReadLimitedFileRejectsLargeCodexOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(path, []byte("12345"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readLimitedFile(path, 4); err == nil || !strings.Contains(err.Error(), "max_bytes=4") {
+		t.Fatalf("large codex output should be rejected: %v", err)
+	}
+	data, err := readLimitedFile(path, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "12345" {
+		t.Fatalf("limited read changed output: %q", data)
+	}
+}
+
+func TestLimitedBufferKeepsBoundedStderr(t *testing.T) {
+	buf := newLimitedBuffer(4)
+	if n, err := buf.Write([]byte("abcdef")); err != nil || n != 6 {
+		t.Fatalf("limited stderr write should report full write: n=%d err=%v", n, err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "abcd") || strings.Contains(got, "ef") || !strings.Contains(got, "stderr truncated") {
+		t.Fatalf("stderr buffer should be bounded and marked truncated: %q", got)
+	}
+}

@@ -26,6 +26,11 @@ type Config struct {
 
 type Client struct{ cfg Config }
 
+const (
+	MaxExecOutputBytes = 8 << 20
+	MaxExecStderrBytes = 64 << 10
+)
+
 func New(cfg Config) *Client {
 	if cfg.Binary == "" {
 		cfg.Binary = "codex"
@@ -72,12 +77,12 @@ func (c *Client) CallProvider(ctx context.Context, req llm.ProviderRequest) (llm
 	_ = out.Close()
 	defer os.Remove(outPath)
 	cmd := c.commandPrompt(ctx, payload.Request, payload.Prompt, "-o", outPath)
-	var stderr bytes.Buffer
+	stderr := newLimitedBuffer(MaxExecStderrBytes)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return llm.ProviderResult{}, fmt.Errorf("codex exec failed: %w: %s", err, stderr.String())
 	}
-	data, err := os.ReadFile(outPath)
+	data, err := readLimitedFile(outPath, MaxExecOutputBytes)
 	if err != nil {
 		return llm.ProviderResult{}, err
 	}
@@ -116,9 +121,15 @@ func (c *Client) StreamProvider(ctx context.Context, req llm.ProviderRequest) (l
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	stderrBuf := newLimitedBuffer(MaxExecStderrBytes)
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		_, _ = io.Copy(&stderrBuf, stderr)
+	}()
 	events := make(chan llm.StreamEvent, 32)
 	closer := &processCloser{cmd: cmd, stdout: stdout, stderr: stderr}
-	go readJSONL(ctx, stdout, stderr, c.Name(), req.Model, events, cmd)
+	go readJSONL(ctx, stdout, c.Name(), req.Model, events, cmd, &stderrBuf, stderrDone)
 	return llm.NewChannelStream(ctx, events, closer), nil
 }
 
@@ -167,7 +178,7 @@ func (p *processCloser) Close() error {
 	return err
 }
 
-func readJSONL(ctx context.Context, stdout io.Reader, stderr io.Reader, provider string, model string, out chan<- llm.StreamEvent, cmd *exec.Cmd) {
+func readJSONL(ctx context.Context, stdout io.Reader, provider string, model string, out chan<- llm.StreamEvent, cmd *exec.Cmd, stderr *limitedBuffer, stderrDone <-chan struct{}) {
 	defer close(out)
 	var text strings.Builder
 	s := bufio.NewScanner(stdout)
@@ -189,11 +200,65 @@ func readJSONL(ctx context.Context, stdout io.Reader, stderr io.Reader, provider
 		return
 	}
 	if err := cmd.Wait(); err != nil {
-		b, _ := io.ReadAll(stderr)
-		out <- llm.StreamEvent{Type: llm.StreamEventError, Provider: provider, Error: fmt.Errorf("codex exec failed: %w: %s", err, string(b))}
+		<-stderrDone
+		out <- llm.StreamEvent{Type: llm.StreamEventError, Provider: provider, Error: fmt.Errorf("codex exec failed: %w: %s", err, stderr.String())}
 		return
 	}
+	<-stderrDone
 	out <- llm.StreamEvent{Type: llm.StreamEventCompleted, Provider: provider, Response: &llm.Response{Provider: provider, Model: model, Status: "completed", Text: text.String(), Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: text.String()}}}}
+}
+
+type limitedBuffer struct {
+	bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func newLimitedBuffer(max int) limitedBuffer {
+	return limitedBuffer{max: max}
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.max <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	remaining := b.max - b.Buffer.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		_, _ = b.Buffer.Write(p[:remaining])
+		b.truncated = true
+		return len(p), nil
+	}
+	_, _ = b.Buffer.Write(p)
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	text := b.Buffer.String()
+	if b.truncated {
+		return text + "\n[stderr truncated]"
+	}
+	return text
+}
+
+func readLimitedFile(path string, maxBytes int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("codex exec output is too large: max_bytes=%d", maxBytes)
+	}
+	return data, nil
 }
 
 func parseCodexEvent(raw []byte, provider string) llm.StreamEvent {
