@@ -678,6 +678,11 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 		ok = false
 	}
 	checks = append(checks, wiringChecks...)
+	providerAuthChecks, providerAuthOK := providerAuthDiagnosticChecks(s.cfg.Providers)
+	if !providerAuthOK {
+		ok = false
+	}
+	checks = append(checks, providerAuthChecks...)
 	checks = append(checks, s.cfg.DiagnosticChecks...)
 	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout), MissingRuntimeWiring: missingRuntimeWiring}
 	if s.cfg.RunRuntimeStats != nil {
@@ -720,6 +725,34 @@ func (s *Server) missingRuntimeWiring() []string {
 		missing = append(missing, "run_event_subscriber")
 	}
 	return missing
+}
+
+func providerAuthDiagnosticChecks(providers []ProviderDTO) ([]DiagnosticCheckDTO, bool) {
+	checks := make([]DiagnosticCheckDTO, 0, len(providers))
+	ok := true
+	for _, provider := range providers {
+		if provider.Name == "" || provider.AuthStatus == "" {
+			continue
+		}
+		check := DiagnosticCheckDTO{Name: "provider_auth." + provider.Name, Status: provider.AuthStatus}
+		switch provider.AuthStatus {
+		case "local":
+			check.Message = "local provider라서 auth env가 필요하지 않아요"
+		case "configured":
+			check.Message = "provider auth env가 설정되어 있어요"
+		case "missing":
+			ok = false
+			if len(provider.AuthEnv) > 0 {
+				check.Message = "필요한 auth env가 비어 있어요: " + strings.Join(provider.AuthEnv, ", ")
+			} else {
+				check.Message = "provider auth env가 비어 있어요"
+			}
+		default:
+			check.Message = "provider auth status=" + provider.AuthStatus
+		}
+		checks = append(checks, check)
+	}
+	return checks, ok
 }
 
 func runtimeWiringChecks(missingRuntimeWiring []string) ([]DiagnosticCheckDTO, bool) {

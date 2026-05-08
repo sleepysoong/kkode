@@ -1194,7 +1194,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		MaxRequestBytes:   123,
 		MaxConcurrentRuns: 2,
 		RunTimeout:        time.Minute,
-		Providers:         []ProviderDTO{{Name: "openai"}},
+		Providers:         []ProviderDTO{{Name: "openai", AuthStatus: "configured", AuthEnv: []string{"OPENAI_API_KEY"}}},
 		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
 		DiagnosticChecks:  []DiagnosticCheckDTO{{Name: "default_mcp.context7", Status: "configured", Message: "url=https://mcp.context7.com/mcp"}},
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
@@ -1254,7 +1254,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	if diagnostics.RunRuntime == nil || diagnostics.RunRuntime.TrackedRuns != 3 || diagnostics.RunRuntime.QueuedRuns != 1 || diagnostics.RunRuntime.RunningRuns != 1 || diagnostics.RunRuntime.AvailableRunSlots != 1 || diagnostics.RunRuntime.RunTimeoutSeconds != 60 {
 		t.Fatalf("runtime diagnostics가 이상해요: %+v", diagnostics.RunRuntime)
 	}
-	var sawStore, sawDefaultMCP, sawRunValidator, sawProviderTester bool
+	var sawStore, sawDefaultMCP, sawRunValidator, sawProviderTester, sawProviderAuth bool
 	for _, check := range diagnostics.Checks {
 		if check.Name == "store" && check.Status == "ok" {
 			sawStore = true
@@ -1268,10 +1268,78 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		if check.Name == "provider_tester" && check.Status == "ok" {
 			sawProviderTester = true
 		}
+		if check.Name == "provider_auth.openai" && check.Status == "configured" {
+			sawProviderAuth = true
+		}
 	}
-	if !sawStore || !sawDefaultMCP || !sawRunValidator || !sawProviderTester {
-		t.Fatalf("store/default MCP/runtime wiring check가 필요해요: %+v", diagnostics.Checks)
+	if !sawStore || !sawDefaultMCP || !sawRunValidator || !sawProviderTester || !sawProviderAuth {
+		t.Fatalf("store/default MCP/runtime wiring/provider auth check가 필요해요: %+v", diagnostics.Checks)
 	}
+}
+
+func TestGatewayDiagnosticsMarksMissingProviderAuthUnhealthy(t *testing.T) {
+	store := openTestStore(t)
+	srv, err := New(Config{
+		Store:     store,
+		Version:   "test",
+		Providers: []ProviderDTO{{Name: "openai", AuthStatus: "missing", AuthEnv: []string{"OPENAI_API_KEY"}}},
+		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+			return &RunDTO{}, nil
+		},
+		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
+			return &RunPreviewResponse{}, nil
+		},
+		RunValidator: func(ctx context.Context, req RunStartRequest) error {
+			return nil
+		},
+		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
+			return &ProviderTestResponse{OK: true, Provider: provider}, nil
+		},
+		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID}, nil
+		},
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			return nil, nil
+		},
+		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
+			return &RunDTO{ID: runID, Status: "cancelled"}, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+			return nil, nil
+		},
+		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
+			ch := make(chan RunDTO)
+			close(ch)
+			return ch, func() {}
+		},
+		RunEventSubscriber: func(ctx context.Context, runID string) (<-chan RunEventDTO, func()) {
+			ch := make(chan RunEventDTO)
+			close(ch)
+			return ch, func() {}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var diagnostics DiagnosticsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if diagnostics.OK {
+		t.Fatalf("missing provider auth는 diagnostics를 unhealthy로 표시해야 해요: %+v", diagnostics)
+	}
+	for _, check := range diagnostics.Checks {
+		if check.Name == "provider_auth.openai" && check.Status == "missing" && strings.Contains(check.Message, "OPENAI_API_KEY") {
+			return
+		}
+	}
+	t.Fatalf("missing provider auth check가 필요해요: %+v", diagnostics.Checks)
 }
 
 func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {
