@@ -2100,6 +2100,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}{
 		{name: "mcp missing transport", path: "/api/v1/mcp/servers", body: `{"name":"broken","config":{"kind":"stdio"}}`, want: "command"},
 		{name: "mcp negative timeout", path: "/api/v1/mcp/servers", body: `{"name":"slow","config":{"kind":"http","url":"https://mcp.example.test","timeout":-1}}`, want: "timeout"},
+		{name: "mcp fractional timeout", path: "/api/v1/mcp/servers", body: `{"name":"slow","config":{"kind":"http","url":"https://mcp.example.test","timeout":1.5}}`, want: "integer"},
 		{name: "mcp bad url", path: "/api/v1/mcp/servers", body: `{"name":"bad-url","config":{"kind":"http","url":"file:///tmp/mcp.sock"}}`, want: "http/https"},
 		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
 		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
@@ -3543,6 +3544,15 @@ func TestGatewayListsAndCallsLSPTools(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
 		t.Fatalf("음수 LSP tool limit은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body = `{"project_root":"` + root + `","tool":"lsp_symbols","arguments":{"query":"Runner","limit":1.5}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "integer") {
+		t.Fatalf("fractional LSP tool limit은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	body = `{"project_root":"` + root + `","tool":"lsp_hover","arguments":{"symbol":"Runner"}}`

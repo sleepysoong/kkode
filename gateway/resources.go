@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -314,6 +315,9 @@ func nonNegativeIntConfig(config map[string]any, key string) (int, error) {
 	case float64:
 		if value < 0 {
 			return 0, fmt.Errorf("%s는 0 이상이어야 해요", key)
+		}
+		if value != math.Trunc(value) {
+			return 0, fmt.Errorf("%s는 integer여야 해요", key)
 		}
 		return int(value), nil
 	case int:

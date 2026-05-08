@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -312,7 +313,7 @@ func intArg(args map[string]any, name string, fallback int) int {
 			return value
 		}
 	case float64:
-		if value > 0 {
+		if value > 0 && value == math.Trunc(value) {
 			return int(value)
 		}
 	case json.Number:
@@ -330,6 +331,9 @@ func positiveIntArg(args map[string]any, name string, fallback int) (int, error)
 	case float64:
 		if value < 0 {
 			return 0, fmt.Errorf("%s는 0 이상이어야 해요", name)
+		}
+		if value != math.Trunc(value) {
+			return 0, fmt.Errorf("%s는 integer여야 해요", name)
 		}
 		if value > 0 {
 			return int(value), nil
