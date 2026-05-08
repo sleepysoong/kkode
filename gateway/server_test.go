@@ -4220,7 +4220,7 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 		t.Fatalf("file content range가 이상해요: %+v", content)
 	}
 
-	body := `{"project_root":"` + root + `","path":"docs/b.md","content":"new"}`
+	body := `{"project_root":" ` + root + ` ","path":" docs/b.md ","content":"new"}`
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/files/content", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -4234,6 +4234,12 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	}
 	if string(data) != "new" {
 		t.Fatalf("file write가 이상해요: %q", data)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &content); err != nil {
+		t.Fatal(err)
+	}
+	if content.ProjectRoot != root || content.Path != "docs/b.md" {
+		t.Fatalf("file write 응답은 canonical project/path를 반환해야 해요: %+v", content)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/b.md&max_bytes=2", nil)

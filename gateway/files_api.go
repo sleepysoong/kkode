@@ -197,6 +197,8 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 		writeJSONDecodeError(w, r, err)
 		return
 	}
+	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
+	req.Path = strings.TrimSpace(req.Path)
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
