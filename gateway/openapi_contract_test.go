@@ -104,6 +104,16 @@ func TestOpenAPIRequiresAPIIndexOperations(t *testing.T) {
 	}
 }
 
+func TestAPIIndexRequiredFieldsAreNotOmitEmpty(t *testing.T) {
+	required := readOpenAPISchemaRequired(t, "APIIndexResponse")
+	omitEmpty := jsonOmitEmptyFields(APIIndexResponse{})
+	for _, field := range sortedKeys(required) {
+		if omitEmpty[field] {
+			t.Fatalf("APIIndexResponse required field %s must not use omitempty", field)
+		}
+	}
+}
+
 func TestOpenAPIOperationsExposeStandardErrorResponse(t *testing.T) {
 	ops := readOpenAPIOperationErrorResponses(t)
 	for op, hasError := range ops {
@@ -915,6 +925,34 @@ func jsonFieldNames(dto any) []string {
 			name = field.Name
 		}
 		out = append(out, name)
+	}
+	return out
+}
+
+func jsonOmitEmptyFields(dto any) map[string]bool {
+	t := reflect.TypeOf(dto)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	out := map[string]bool{}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		tag := field.Tag.Get("json")
+		name, opts, _ := strings.Cut(tag, ",")
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+		for _, opt := range strings.Split(opts, ",") {
+			if opt == "omitempty" {
+				out[name] = true
+			}
+		}
 	}
 	return out
 }

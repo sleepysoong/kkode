@@ -32,7 +32,7 @@ type APIIndexResponse struct {
 	Version    string                 `json:"version"`
 	Commit     string                 `json:"commit,omitempty"`
 	Links      map[string]string      `json:"links"`
-	Operations []APIIndexOperationDTO `json:"operations,omitempty"`
+	Operations []APIIndexOperationDTO `json:"operations"`
 }
 
 type APIIndexOperationDTO struct {
