@@ -1169,6 +1169,7 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
 	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKeyFromRequest(r, req.Metadata))
+	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	if existing := s.findIdempotentRun(r.Context(), req); existing != nil {
 		w.Header().Set(IdempotencyReplayHeader, "true")
 		writeJSON(w, existing)
@@ -1237,6 +1238,7 @@ func (s *Server) validateRun(w http.ResponseWriter, r *http.Request) {
 	idempotencyKey := idempotencyKeyFromRequest(r, req.Metadata)
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestID)
 	req.Metadata = withIdempotencyMetadata(req.Metadata, idempotencyKey)
+	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	resp := RunValidateResponse{OK: true, RequestID: requestID, IdempotencyKey: strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]), Metadata: cloneMap(req.Metadata)}
 	if key := strings.TrimSpace(req.Metadata[IdempotencyMetadataKey]); key != "" {
 		resp.RunID = idempotentRunID(req.SessionID, key)
@@ -1284,6 +1286,7 @@ func (s *Server) previewRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Metadata = withRequestIDMetadata(req.Metadata, requestIDFromRequest(r))
+	req.Metadata = withDefaultMCPMetadata(req.Metadata, s.cfg.DefaultMCPServers)
 	preview, err := s.cfg.RunPreviewer(r.Context(), req)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "preview_run_failed", err.Error())
@@ -1341,6 +1344,7 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 	}
 	metadata["retried_from"] = original.ID
 	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
+	metadata = withDefaultMCPMetadata(metadata, s.cfg.DefaultMCPServers)
 	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), EnabledTools: cloneStringSlice(original.EnabledTools), DisabledTools: cloneStringSlice(original.DisabledTools), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
 	if s.cfg.RunValidator != nil {
 		if err := s.cfg.RunValidator(r.Context(), req); err != nil {

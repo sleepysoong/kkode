@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,9 @@ const IdempotencyMetadataKey = "idempotency_key"
 
 // IdempotencyReusedMetadataKey는 응답 metadata에서 기존 run 재사용 여부를 알려줘요.
 const IdempotencyReusedMetadataKey = "idempotency_reused"
+
+// DefaultMCPMetadataKey는 gateway가 기본으로 붙인 MCP server 이름 목록이에요.
+const DefaultMCPMetadataKey = "default_mcp_servers"
 
 type requestIDContextKey struct{}
 
@@ -80,5 +84,25 @@ func withIdempotencyMetadata(metadata map[string]string, idempotencyKey string) 
 		out = map[string]string{}
 	}
 	out[IdempotencyMetadataKey] = idempotencyKey
+	return out
+}
+
+func withDefaultMCPMetadata(metadata map[string]string, servers []ResourceDTO) map[string]string {
+	names := make([]string, 0, len(servers))
+	for _, server := range servers {
+		name := strings.TrimSpace(server.Name)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return cloneMap(metadata)
+	}
+	sort.Strings(names)
+	out := cloneMap(metadata)
+	if out == nil {
+		out = map[string]string{}
+	}
+	out[DefaultMCPMetadataKey] = strings.Join(names, ",")
 	return out
 }

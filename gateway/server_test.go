@@ -640,7 +640,8 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	var started RunStartRequest
 	var validated RunStartRequest
 	srv, err := New(Config{
-		Store: store,
+		Store:             store,
+		DefaultMCPServers: []ResourceDTO{{Name: "serena"}, {Name: "context7"}},
 		RunValidator: func(ctx context.Context, req RunStartRequest) error {
 			validated = req
 			return nil
@@ -664,10 +665,10 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
 		t.Fatal(err)
 	}
-	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata["source"] != "panel" {
+	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || run.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata["source"] != "panel" {
 		t.Fatalf("unexpected run: %+v", run)
 	}
-	if validated.SessionID != "sess_1" || validated.Metadata[RequestIDMetadataKey] != "req_run" {
+	if validated.SessionID != "sess_1" || validated.Metadata[RequestIDMetadataKey] != "req_run" || validated.Metadata[DefaultMCPMetadataKey] != "context7,serena" {
 		t.Fatalf("run validator는 enqueue 전에 같은 request metadata를 받아야 해요: %+v", validated)
 	}
 }
@@ -677,7 +678,8 @@ func TestGatewayValidatesRunWithoutStarting(t *testing.T) {
 	started := false
 	var validated RunStartRequest
 	srv, err := New(Config{
-		Store: store,
+		Store:             store,
+		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
 		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
 			if q.IdempotencyKey == "idem_validate" {
 				return []RunDTO{{ID: "run_existing", SessionID: q.SessionID, Status: "queued", Metadata: map[string]string{IdempotencyMetadataKey: q.IdempotencyKey}}}, nil
@@ -708,7 +710,7 @@ func TestGatewayValidatesRunWithoutStarting(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.OK || got.RequestID != "req_validate" || got.IdempotencyKey != "idem_validate" || got.RunID == "" || got.ExistingRun == nil || got.ExistingRun.ID != "run_existing" || validated.Metadata[RequestIDMetadataKey] != "req_validate" || validated.Metadata[IdempotencyMetadataKey] != "idem_validate" {
+	if !got.OK || got.RequestID != "req_validate" || got.IdempotencyKey != "idem_validate" || got.RunID == "" || got.ExistingRun == nil || got.ExistingRun.ID != "run_existing" || got.Metadata[DefaultMCPMetadataKey] != "context7" || validated.Metadata[RequestIDMetadataKey] != "req_validate" || validated.Metadata[IdempotencyMetadataKey] != "idem_validate" || validated.Metadata[DefaultMCPMetadataKey] != "context7" {
 		t.Fatalf("validate 응답이 이상해요: got=%+v validated=%+v", got, validated)
 	}
 	if started {
@@ -1616,7 +1618,8 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	}
 	var gotReq RunStartRequest
 	srv, err := New(Config{
-		Store: store,
+		Store:             store,
+		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
 		RunPreviewer: func(ctx context.Context, req RunStartRequest) (*RunPreviewResponse, error) {
 			gotReq = req
 			return &RunPreviewResponse{SessionID: req.SessionID, Provider: "openai", Model: "gpt-5-mini", BaseRequestTools: []string{"mcp"}, ContextBlocks: []string{"선택 context예요"}}, nil
@@ -1636,7 +1639,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || gotReq.Metadata[DefaultMCPMetadataKey] != "context7" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
 }
@@ -2680,7 +2683,8 @@ func TestGatewayRetriesRun(t *testing.T) {
 	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, ContextBlocks: []string{"adapter context"}, Metadata: map[string]string{"source": "discord"}}
 	var retryReq RunStartRequest
 	srv, err := New(Config{
-		Store: store,
+		Store:             store,
+		DefaultMCPServers: []ResourceDTO{{Name: "context7"}},
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
 			copy := original
 			return &copy, nil
@@ -2704,7 +2708,7 @@ func TestGatewayRetriesRun(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &retried); err != nil {
 		t.Fatal(err)
 	}
-	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" || retryReq.Metadata[RequestIDMetadataKey] != "req_retry" {
+	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" || retryReq.Metadata[RequestIDMetadataKey] != "req_retry" || retryReq.Metadata[DefaultMCPMetadataKey] != "context7" {
 		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
 	}
 	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" || len(retryReq.ContextBlocks) != 1 || retryReq.ContextBlocks[0] != "adapter context" {
