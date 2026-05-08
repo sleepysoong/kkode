@@ -413,6 +413,7 @@ type DiagnosticsResponse struct {
 	MaxConcurrentRuns    int                  `json:"max_concurrent_runs,omitempty"`
 	RunTimeoutSeconds    int                  `json:"run_timeout_seconds,omitempty"`
 	MissingRuntimeWiring []string             `json:"missing_runtime_wiring,omitempty"`
+	FailingChecks        []string             `json:"failing_checks,omitempty"`
 	RunRuntime           *RunRuntimeStatsDTO  `json:"run_runtime,omitempty"`
 }
 

@@ -1334,6 +1334,9 @@ func TestGatewayDiagnosticsMarksMissingProviderAuthUnhealthy(t *testing.T) {
 	if diagnostics.OK {
 		t.Fatalf("missing provider auth는 diagnostics를 unhealthy로 표시해야 해요: %+v", diagnostics)
 	}
+	if !containsString(diagnostics.FailingChecks, "provider_auth.openai") {
+		t.Fatalf("provider auth 실패 원인을 failing_checks에 담아야 해요: %+v", diagnostics)
+	}
 	for _, check := range diagnostics.Checks {
 		if check.Name == "provider_auth.openai" && check.Status == "missing" && strings.Contains(check.Message, "OPENAI_API_KEY") {
 			return
@@ -1399,6 +1402,9 @@ func TestGatewayDiagnosticsMarksInjectedFailingCheckUnhealthy(t *testing.T) {
 	if diagnostics.OK {
 		t.Fatalf("injected missing diagnostics check는 unhealthy로 집계해야 해요: %+v", diagnostics)
 	}
+	if !containsString(diagnostics.FailingChecks, "default_mcp.serena") {
+		t.Fatalf("injected check 실패 원인을 failing_checks에 담아야 해요: %+v", diagnostics)
+	}
 	for _, check := range diagnostics.Checks {
 		if check.Name == "default_mcp.serena" && check.Status == "missing" {
 			return
@@ -1430,6 +1436,9 @@ func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {
 	}
 	if diagnostics.OK {
 		t.Fatalf("runtime wiring이 빠진 diagnostics는 unhealthy여야 해요: %+v", diagnostics)
+	}
+	if !containsString(diagnostics.FailingChecks, "run_previewer") || !containsString(diagnostics.FailingChecks, "provider_tester") {
+		t.Fatalf("runtime wiring 실패 원인을 failing_checks에 담아야 해요: %+v", diagnostics)
 	}
 	if len(diagnostics.MissingRuntimeWiring) != 9 {
 		t.Fatalf("diagnostics는 missing runtime wiring 목록을 직접 제공해야 해요: %+v", diagnostics)
@@ -1474,6 +1483,15 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGatewayServesOpenAPISpec(t *testing.T) {

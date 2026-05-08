@@ -2184,6 +2184,11 @@ components:
           description: 필수 runtime boundary 중 연결되지 않은 항목 이름 목록이에요.
           items:
             type: string
+        failing_checks:
+          type: array
+          description: 전체 diagnostics ok=false에 기여한 check 이름 목록이에요.
+          items:
+            type: string
         run_runtime:
           $ref: '#/components/schemas/RunRuntimeStats'
     DiagnosticCheck:
