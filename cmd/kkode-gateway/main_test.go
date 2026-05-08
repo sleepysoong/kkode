@@ -456,6 +456,33 @@ func TestSyncRunPreviewerExposesDefaultMCPToLocalTools(t *testing.T) {
 	}
 }
 
+func TestSyncRunPreviewerUsesAbsoluteWorkspaceRoot(t *testing.T) {
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	parent := t.TempDir()
+	root := filepath.Join(parent, "repo")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(parent)
+	store, err := session.OpenSQLite(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	sess := session.NewSession("repo", "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview absolute root"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ProjectRoot != root {
+		t.Fatalf("preview should expose resolved absolute project root: got=%q want=%q", preview.ProjectRoot, root)
+	}
+}
+
 func TestPreviewContextBlocksRedactsAndTruncatesUTF8(t *testing.T) {
 	if runPreviewBytes(0) != 64<<10 || runPreviewBytes(123) != 123 || runPreviewBytes(gateway.MaxRunPreviewBytes+1) != gateway.MaxRunPreviewBytes {
 		t.Fatal("run preview byte 예산 기본값/override가 이상해요")
