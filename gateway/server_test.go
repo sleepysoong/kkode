@@ -3034,12 +3034,13 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
 		t.Fatalf("음수 run transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	for _, query := range []string{"event_limit=-1", "event_limit=abc"} {
+	for _, query := range []string{"event_limit=-1", "event_limit=abc", "redact=maybe"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "event_limit") {
-			t.Fatalf("잘못된 run transcript event_limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 run transcript query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 }
@@ -3090,16 +3091,13 @@ func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_markdown_bytes") {
 		t.Fatalf("잘못된 request transcript max_markdown_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	for _, query := range []string{"run_limit=-1", "run_limit=abc", "event_limit=-1", "event_limit=abc"} {
+	for _, query := range []string{"run_limit=-1", "run_limit=abc", "event_limit=-1", "event_limit=abc", "redact=maybe"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+requestID+"/transcript?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		want := "event_limit"
-		if strings.Contains(query, "run_limit") {
-			want = "run_limit"
-		}
+		want := strings.Split(query, "=")[0]
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
-			t.Fatalf("잘못된 request transcript limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+			t.Fatalf("잘못된 request transcript query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 }
@@ -4568,6 +4566,8 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 		{name: "bad checkpoint limit", query: "checkpoint_limit=abc", want: "checkpoint_limit"},
 		{name: "negative run limit", query: "run_limit=-1", want: "run_limit"},
 		{name: "bad run limit", query: "run_limit=abc", want: "run_limit"},
+		{name: "bad redact", query: "redact=maybe", want: "redact"},
+		{name: "bad include raw", query: "include_raw=maybe", want: "include_raw"},
 	}
 	for _, tc := range invalidLimits {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?"+tc.query, nil)
@@ -5131,6 +5131,13 @@ func TestGatewaySessionTranscriptAPI(t *testing.T) {
 	}
 	if got.Redacted || !strings.Contains(got.Markdown, "abc1234567890secretvalue") {
 		t.Fatalf("redact=false transcript가 이상해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/transcript?redact=maybe", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "redact") {
+		t.Fatalf("잘못된 session transcript redact는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

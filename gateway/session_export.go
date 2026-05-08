@@ -78,8 +78,15 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
 	}
-	redacted := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "true")
-	includeRaw := !redacted && !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_raw")), "false")
+	redacted, ok := queryBoolParam(w, r, "redact", false, "invalid_session_export")
+	if !ok {
+		return
+	}
+	includeRaw, ok := queryBoolParam(w, r, "include_raw", true, "invalid_session_export")
+	if !ok {
+		return
+	}
+	includeRaw = includeRaw && !redacted
 	turnLimit, ok := queryNonNegativeLimitParam(w, r, "turn_limit", len(sess.Turns), 5000, "invalid_session_export")
 	if !ok {
 		return

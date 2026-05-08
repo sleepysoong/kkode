@@ -620,13 +620,13 @@ paths:
           schema:
             type: boolean
             default: true
-          description: false면 import용 raw_session snapshot을 응답에서 제외해서 preview payload를 줄여요.
+          description: false면 import용 raw_session snapshot을 응답에서 제외해서 preview payload를 줄여요. 잘못된 boolean 값은 400으로 거부해요.
         - in: query
           name: redact
           schema:
             type: boolean
             default: false
-          description: true면 raw_session을 제외하고 secret 패턴을 마스킹해요.
+          description: true면 raw_session을 제외하고 secret 패턴을 마스킹해요. 잘못된 boolean 값은 400으로 거부해요.
       responses:
         '200':
           description: session export bundle이에요.
@@ -738,7 +738,7 @@ paths:
           schema:
             type: boolean
             default: true
-          description: false면 secret redaction 없이 원문 transcript를 반환해요.
+          description: false면 secret redaction 없이 원문 transcript를 반환해요. 잘못된 boolean 값은 400으로 거부해요.
         - in: query
           name: max_markdown_bytes
           schema:
@@ -1960,7 +1960,7 @@ paths:
           schema:
             type: boolean
             default: true
-          description: false면 secret redaction 없이 request transcript를 반환해요.
+          description: false면 secret redaction 없이 request transcript를 반환해요. 잘못된 boolean 값은 400으로 거부해요.
         - in: query
           name: max_markdown_bytes
           schema:
@@ -2050,7 +2050,7 @@ paths:
           schema:
             type: boolean
             default: true
-          description: false면 secret redaction 없이 원문에 가깝게 반환해요.
+          description: false면 secret redaction 없이 원문에 가깝게 반환해요. 잘못된 boolean 값은 400으로 거부해요.
         - in: query
           name: event_limit
           schema:

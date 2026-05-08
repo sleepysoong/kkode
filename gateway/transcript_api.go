@@ -56,7 +56,10 @@ func (s *Server) getSessionTranscript(w http.ResponseWriter, r *http.Request, se
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
 	}
-	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
+	redacted, ok := queryBoolParam(w, r, "redact", true, "invalid_transcript")
+	if !ok {
+		return
+	}
 	resp := toTranscriptResponse(sess, redacted)
 	resp.Markdown, resp.MarkdownBytes, resp.MarkdownTruncated = limitTranscriptMarkdown(resp.Markdown, maxMarkdownBytes)
 	writeJSON(w, resp)
@@ -93,7 +96,10 @@ func (s *Server) getRequestTranscript(w http.ResponseWriter, r *http.Request, re
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
-	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
+	redacted, ok := queryBoolParam(w, r, "redact", true, "invalid_transcript")
+	if !ok {
+		return
+	}
 	sessionCache := make(map[string]*session.Session)
 	transcripts := make([]RunTranscriptResponse, 0, len(runs))
 	for _, run := range runs {
@@ -148,7 +154,10 @@ func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID 
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 		return
 	}
-	redacted := !strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("redact")), "false")
+	redacted, ok := queryBoolParam(w, r, "redact", true, "invalid_transcript")
+	if !ok {
+		return
+	}
 	resp := s.toRunTranscriptResponse(r, *run, sess, redacted, maxMarkdownBytes, eventLimit)
 	writeJSON(w, resp)
 }
