@@ -717,7 +717,13 @@ func (s *SQLiteStore) ListCheckpoints(ctx context.Context, q CheckpointQuery) ([
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, session_id, turn_id, created_at, payload_json FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC LIMIT ?`, q.SessionID, limit)
+	query := `SELECT id, session_id, turn_id, created_at, payload_json FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC LIMIT ?`
+	args := []any{q.SessionID, limit}
+	if q.Offset > 0 {
+		query += ` OFFSET ?`
+		args = append(args, q.Offset)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

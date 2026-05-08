@@ -91,6 +91,7 @@ type SessionQuery struct {
 type CheckpointQuery struct {
 	SessionID string
 	Limit     int
+	Offset    int
 }
 
 // EventQuery는 session event replay를 필요한 범위만 읽을 때 써요.

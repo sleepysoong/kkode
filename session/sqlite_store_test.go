@@ -508,6 +508,21 @@ func TestCheckpointStoreListsAndLoads(t *testing.T) {
 	if len(items) != 1 || items[0].ID != cp.ID {
 		t.Fatalf("checkpoint list가 이상해요: %+v", items)
 	}
+	cp2 := Checkpoint{ID: "cp_2", SessionID: sess.ID, TurnID: "turn_2", Payload: []byte(`{"summary":"next"}`)}
+	if err := store.SaveCheckpoint(ctx, cp2); err != nil {
+		t.Fatal(err)
+	}
+	firstPage, err := store.ListCheckpoints(ctx, CheckpointQuery{SessionID: sess.ID, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offsetPage, err := store.ListCheckpoints(ctx, CheckpointQuery{SessionID: sess.ID, Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPage) != 1 || len(offsetPage) != 1 || firstPage[0].ID == offsetPage[0].ID {
+		t.Fatalf("checkpoint offset list가 이상해요: first=%+v offset=%+v", firstPage, offsetPage)
+	}
 }
 
 func TestTodoToolsUseDedicatedSaveTodosWhenAvailable(t *testing.T) {

@@ -3328,8 +3328,15 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if created.ID == "" || created.SessionID != sess.ID || !strings.Contains(string(created.Payload), "저장") {
 		t.Fatalf("checkpoint 생성 응답이 이상해요: %+v", created)
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/checkpoints", bytes.NewBufferString(`{"turn_id":"turn_2","payload":{"summary":"다음"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?limit=1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3339,11 +3346,28 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Checkpoints) != 1 || listed.Checkpoints[0].ID != created.ID {
+	if len(listed.Checkpoints) != 1 {
 		t.Fatalf("checkpoint 목록이 이상해요: %+v", listed)
 	}
-	if listed.Limit == 0 || listed.ResultTruncated {
+	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
 		t.Fatalf("checkpoint list metadata가 이상해요: %+v", listed)
+	}
+	firstPageID := listed.Checkpoints[0].ID
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = CheckpointListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Checkpoints) != 1 || listed.Checkpoints[0].ID == firstPageID {
+		t.Fatalf("checkpoint offset 목록이 이상해요: %+v", listed)
+	}
+	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("checkpoint offset metadata가 이상해요: %+v", listed)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints/"+created.ID, nil)

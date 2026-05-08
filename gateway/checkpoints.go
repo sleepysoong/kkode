@@ -20,6 +20,8 @@ type CheckpointDTO struct {
 type CheckpointListResponse struct {
 	Checkpoints     []CheckpointDTO `json:"checkpoints"`
 	Limit           int             `json:"limit,omitempty"`
+	Offset          int             `json:"offset,omitempty"`
+	NextOffset      int             `json:"next_offset,omitempty"`
 	ResultTruncated bool            `json:"result_truncated,omitempty"`
 }
 
@@ -49,17 +51,18 @@ func (s *Server) handleSessionCheckpoints(w http.ResponseWriter, r *http.Request
 
 func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string) {
 	limit := queryLimit(r, "limit", 50, 200)
-	items, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: limit + 1})
+	offset := queryOffset(r, "offset")
+	items, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_checkpoints_failed", err.Error())
 		return
 	}
-	items, truncated := trimCheckpoints(items, limit)
+	items, returned, truncated := trimCheckpoints(items, limit)
 	out := make([]CheckpointDTO, 0, len(items))
 	for _, item := range items {
 		out = append(out, toCheckpointDTO(item))
 	}
-	writeJSON(w, CheckpointListResponse{Checkpoints: out, Limit: limit, ResultTruncated: truncated})
+	writeJSON(w, CheckpointListResponse{Checkpoints: out, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) createSessionCheckpoint(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string) {

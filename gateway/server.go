@@ -1429,12 +1429,12 @@ func trimResources(resources []session.Resource, limit int) ([]session.Resource,
 	return resources, len(resources), truncated
 }
 
-func trimCheckpoints(checkpoints []session.Checkpoint, limit int) ([]session.Checkpoint, bool) {
+func trimCheckpoints(checkpoints []session.Checkpoint, limit int) ([]session.Checkpoint, int, bool) {
 	truncated := len(checkpoints) > limit
 	if truncated {
 		checkpoints = checkpoints[:limit]
 	}
-	return checkpoints, truncated
+	return checkpoints, len(checkpoints), truncated
 }
 
 func trimTurns(turns []TurnDTO, limit int) ([]TurnDTO, bool, int) {

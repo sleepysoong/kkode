@@ -502,6 +502,7 @@ paths:
             type: integer
             default: 50
             maximum: 200
+        - $ref: '#/components/parameters/Offset'
       responses:
         default:
           $ref: '#/components/responses/Error'
@@ -3079,6 +3080,10 @@ components:
           items:
             $ref: '#/components/schemas/Checkpoint'
         limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
           type: integer
         result_truncated:
           type: boolean
