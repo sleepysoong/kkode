@@ -73,7 +73,10 @@ func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := queryLimit(r, "limit", 500, 5000)
+	limit, ok := queryLimitParam(w, r, "limit", 500, 5000, "invalid_git_status")
+	if !ok {
+		return
+	}
 	out, outputTruncated, err := runGitCommand(r.Context(), root, []string{"status", "--short", "--branch"}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_status_failed", err.Error())
@@ -119,7 +122,10 @@ func (s *Server) gitLog(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := queryLimit(r, "limit", 20, 100)
+	limit, ok := queryLimitParam(w, r, "limit", 20, 100, "invalid_git_log")
+	if !ok {
+		return
+	}
 	out, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "-n", fmt.Sprint(limit + 1)}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_log_failed", err.Error())

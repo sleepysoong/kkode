@@ -3469,6 +3469,14 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	if len(status.Entries) != 1 || status.TotalEntries < 2 || status.Limit != 1 || !status.EntriesTruncated {
 		t.Fatalf("git status 제한 metadata가 이상해요: %+v", status)
 	}
+	for _, query := range []string{"limit=-1", "limit=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/git/status?project_root="+url.QueryEscape(root)+"&"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("잘못된 git status limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&path="+url.QueryEscape(" ./README.md "), nil)
 	rec = httptest.NewRecorder()
@@ -3510,6 +3518,14 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	}
 	if len(log.Commits) != 1 || log.Commits[0].Subject != "second" || log.Limit != 1 || !log.CommitsTruncated {
 		t.Fatalf("git log 응답이 이상해요: %+v", log)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/git/log?project_root="+url.QueryEscape(root)+"&"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("잘못된 git log limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
 	}
 }
 
