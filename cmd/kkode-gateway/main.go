@@ -556,7 +556,7 @@ func smokeStreamProvider(ctx context.Context, provider llm.Provider, req llm.Req
 		return nil, err
 	}
 	defer stream.Close()
-	var text strings.Builder
+	text := newLimitedProviderTextBuffer(providerTestResultLimit(maxResultBytes))
 	result := &gateway.ProviderTestResultDTO{Status: "streaming"}
 	for i := 0; i < 128; i++ {
 		event, err := stream.Recv()
@@ -615,6 +615,7 @@ func setProviderTestResultText(result *gateway.ProviderTestResultDTO, text strin
 	}
 	redacted := llm.RedactSecrets(text)
 	result.TextBytes = len(redacted)
+	maxBytes = providerTestResultLimit(maxBytes)
 	if maxBytes <= 0 || len(redacted) <= maxBytes {
 		result.Text = redacted
 		result.TextTruncated = false
@@ -622,6 +623,53 @@ func setProviderTestResultText(result *gateway.ProviderTestResultDTO, text strin
 	}
 	result.Text = truncateUTF8Bytes(redacted, maxBytes)
 	result.TextTruncated = true
+}
+
+func providerTestResultLimit(maxBytes int) int {
+	if maxBytes <= 0 {
+		return gateway.MaxProviderTestResultBytes
+	}
+	return maxBytes
+}
+
+type limitedProviderTextBuffer struct {
+	buf       strings.Builder
+	max       int
+	truncated bool
+}
+
+func newLimitedProviderTextBuffer(max int) *limitedProviderTextBuffer {
+	return &limitedProviderTextBuffer{max: max}
+}
+
+func (b *limitedProviderTextBuffer) Len() int {
+	return b.buf.Len()
+}
+
+func (b *limitedProviderTextBuffer) WriteString(text string) {
+	if b.max <= 0 {
+		b.truncated = true
+		return
+	}
+	remaining := b.max - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return
+	}
+	if len(text) > remaining {
+		b.buf.WriteString(truncateUTF8Bytes(text, remaining))
+		b.truncated = true
+		return
+	}
+	b.buf.WriteString(text)
+}
+
+func (b *limitedProviderTextBuffer) String() string {
+	text := b.buf.String()
+	if b.truncated {
+		return strings.TrimRight(text, "\n") + "\n[output truncated]"
+	}
+	return text
 }
 
 func toProviderRoutePreviewDTO(route *app.ProviderRoutePreview) *gateway.ProviderRoutePreviewDTO {

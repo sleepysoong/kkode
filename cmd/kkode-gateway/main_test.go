@@ -679,6 +679,23 @@ func TestSyncProviderTesterTruncatesLiveResult(t *testing.T) {
 	}
 }
 
+func TestProviderTestResultTextDefaultsToBoundedLimit(t *testing.T) {
+	result := &gateway.ProviderTestResultDTO{}
+	setProviderTestResultText(result, strings.Repeat("x", gateway.MaxProviderTestResultBytes+1), 0)
+	if !result.TextTruncated || len(result.Text) > gateway.MaxProviderTestResultBytes {
+		t.Fatalf("default provider test result limit should be bounded: len=%d truncated=%v", len(result.Text), result.TextTruncated)
+	}
+}
+
+func TestLimitedProviderTextBufferKeepsBoundedOutput(t *testing.T) {
+	buf := newLimitedProviderTextBuffer(4)
+	buf.WriteString("가나다")
+	got := buf.String()
+	if got != "가\n[output truncated]" {
+		t.Fatalf("stream provider text should be UTF-8 bounded and marked truncated: %q", got)
+	}
+}
+
 func TestSyncProviderTesterReturnsPreviewErrorCode(t *testing.T) {
 	unregister, err := app.RegisterHTTPJSONProvider(app.HTTPJSONProviderRegistration{
 		Name:         "provider-preview-error-test",
