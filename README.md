@@ -217,7 +217,7 @@ erDiagram
   - OpenAI-compatible `/v1/responses` provider예요.
   - `ResponsesConverter`가 표준 request/response와 Responses payload 사이를 변환하고, `Client`가 API caller/stream caller 역할을 해요.
   - SSE streaming도 같은 변환 레이어를 거쳐서 retry/backoff, built-in tool helper, response parsing을 제공해요.
-  - `providers/internal/httptransport`의 JSON request/header/retry/SSE framing helper를 써서 파생 provider와 HTTP 처리 방식을 공유해요.
+  - `providers/internal/httptransport`의 JSON request/header/retry/SSE framing helper를 써서 파생 provider와 HTTP 처리 방식을 공유해요. SSE event data도 event당 최대 4194304 byte envelope 안에서만 조립해요.
 - `providers/copilot`
   - GitHub Copilot SDK session adapter예요.
   - `SessionConverter`가 표준 request를 SDK session prompt payload로 바꾸고, `Client`가 SDK caller 역할을 해요.

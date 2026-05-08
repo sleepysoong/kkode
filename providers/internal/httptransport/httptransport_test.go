@@ -156,3 +156,21 @@ func TestReadSSEFramesEvents(t *testing.T) {
 		t.Fatalf("SSE framing이 이상해요: events=%v payloads=%v", events, payloads)
 	}
 }
+
+func TestReadSSERejectsOversizedMultiLineEvent(t *testing.T) {
+	var input strings.Builder
+	chunk := strings.Repeat("x", 64*1024)
+	for input.Len() <= MaxSSEEventBytes+len(chunk) {
+		input.WriteString("data: ")
+		input.WriteString(chunk)
+		input.WriteString("\n")
+	}
+	input.WriteString("\n")
+	err := ReadSSE(context.Background(), strings.NewReader(input.String()), func(eventName string, data []byte) bool {
+		t.Fatal("oversized SSE event should not be delivered")
+		return true
+	})
+	if err == nil || !strings.Contains(err.Error(), "SSE event data") {
+		t.Fatalf("oversized SSE event should fail before delivery: %v", err)
+	}
+}

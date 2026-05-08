@@ -13,6 +13,7 @@ import (
 )
 
 const DefaultMaxResponseBodyBytes int64 = 32 << 20
+const MaxSSEEventBytes = 4 << 20
 
 // RetryConfig는 provider HTTP 호출의 공통 retry/backoff 정책이에요.
 type RetryConfig struct {
@@ -273,16 +274,19 @@ func DoJSONRaw(ctx context.Context, client *http.Client, method string, endpoint
 func ReadSSE(ctx context.Context, reader io.Reader, handle func(eventName string, data []byte) bool) error {
 	s := bufio.NewScanner(reader)
 	// 큰 JSON event도 처리할 수 있게 buffer를 넉넉하게 잡아요.
-	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	s.Buffer(make([]byte, 0, 64*1024), MaxSSEEventBytes)
 	var eventName string
 	var dataLines []string
+	dataBytes := 0
 	flush := func() bool {
 		if len(dataLines) == 0 {
 			eventName = ""
+			dataBytes = 0
 			return true
 		}
 		data := strings.Join(dataLines, "\n")
 		dataLines = nil
+		dataBytes = 0
 		if data == "[DONE]" {
 			return false
 		}
@@ -313,7 +317,16 @@ func ReadSSE(ctx context.Context, reader io.Reader, handle func(eventName string
 			continue
 		}
 		if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			value := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			nextBytes := dataBytes + len(value)
+			if len(dataLines) > 0 {
+				nextBytes++
+			}
+			if nextBytes > MaxSSEEventBytes {
+				return fmt.Errorf("SSE event data가 너무 커요: max_bytes=%d", MaxSSEEventBytes)
+			}
+			dataLines = append(dataLines, value)
+			dataBytes = nextBytes
 			continue
 		}
 	}
