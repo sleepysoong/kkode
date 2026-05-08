@@ -2420,12 +2420,17 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		{name: "mcp bad id", path: "/api/v1/mcp/servers", body: `{"id":"bad id","name":"broken","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource id"},
 		{name: "mcp long name", path: "/api/v1/mcp/servers", body: `{"name":"` + strings.Repeat("n", maxResourceNameBytes+1) + `","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource name"},
 		{name: "mcp long config", path: "/api/v1/mcp/servers", body: `{"name":"huge","config":{"kind":"http","url":"https://mcp.example.test","headers":{"X-Fill":"` + strings.Repeat("x", maxResourceConfigBytes+1) + `"}}}`, want: "resource config"},
+		{name: "mcp long command", path: "/api/v1/mcp/servers", body: `{"name":"long-command","config":{"kind":"stdio","command":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}`, want: "command"},
 		{name: "mcp too many args", path: "/api/v1/mcp/servers", body: `{"name":"many-args","config":{"kind":"stdio","command":"mcp-fs","args":[` + quotedStringList("arg", maxResourceStringArrayItems+1) + `]}}`, want: "최대"},
 		{name: "mcp long arg", path: "/api/v1/mcp/servers", body: `{"name":"long-arg","config":{"kind":"stdio","command":"mcp-fs","args":["` + strings.Repeat("x", maxResourceStringArrayItemBytes+1) + `"]}}`, want: "args[0]"},
 		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
+		{name: "skill long path", path: "/api/v1/skills", body: `{"name":"long-skill","config":{"path":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}`, want: "path"},
 		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
+		{name: "subagent long prompt", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}`, want: "prompt"},
 		{name: "subagent long tool", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","tools":["` + strings.Repeat("x", maxResourceStringArrayItemBytes+1) + `"]}}`, want: "tools[0]"},
 		{name: "subagent blank inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"  ":"mcp-fs"}}}`, want: "label"},
+		{name: "subagent long inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"` + strings.Repeat("x", maxResourceInlineMCPLabelBytes+1) + `":"mcp-fs"}}}`, want: "label"},
+		{name: "subagent long inline mcp command", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"fs":"` + strings.Repeat("x", maxResourceConfigStringBytes+1) + `"}}}`, want: "command"},
 		{name: "subagent duplicate canonical inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{" context7 ":"mcp-a","context7":"mcp-b"}}}`, want: "중복"},
 	}
 	for _, tc := range invalidResources {

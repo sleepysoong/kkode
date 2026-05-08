@@ -16,6 +16,8 @@ const maxResourceIDBytes = 128
 const maxResourceNameBytes = 256
 const maxResourceDescriptionBytes = 4096
 const maxResourceConfigBytes = 1 << 20
+const maxResourceConfigStringBytes = 64 << 10
+const maxResourceInlineMCPLabelBytes = 128
 const maxResourceStringArrayItems = 256
 const maxResourceStringArrayItemBytes = 4096
 
@@ -270,6 +272,9 @@ func validateResourceConfig(kind session.ResourceKind, config map[string]any) er
 	case session.ResourceMCPServer:
 		return validateMCPResourceConfig(config, "config")
 	case session.ResourceSkill:
+		if err := validateStringConfigFields(config, "skill config", "path", "directory"); err != nil {
+			return err
+		}
 		if strings.TrimSpace(configString(config, "path")) == "" && strings.TrimSpace(configString(config, "directory")) == "" {
 			return fmt.Errorf("skill config에는 path 또는 directory가 필요해요")
 		}
@@ -282,6 +287,9 @@ func validateResourceConfig(kind session.ResourceKind, config map[string]any) er
 }
 
 func validateSubagentResourceConfig(config map[string]any) error {
+	if err := validateStringConfigFields(config, "subagent config", "display_name", "description", "prompt"); err != nil {
+		return err
+	}
 	if err := validateStringArrayConfig(config, "tools"); err != nil {
 		return err
 	}
@@ -308,12 +316,19 @@ func validateSubagentResourceConfig(config map[string]any) error {
 		if labels[serverName] {
 			return fmt.Errorf("subagent config mcp_servers.%s label이 중복됐어요", serverName)
 		}
+		if len(serverName) > maxResourceInlineMCPLabelBytes {
+			return fmt.Errorf("subagent config mcp_servers.%s label은 %d byte 이하여야 해요", serverName, maxResourceInlineMCPLabelBytes)
+		}
 		labels[serverName] = true
 		label := "subagent config mcp_servers." + serverName
 		switch value := raw.(type) {
 		case string:
-			if strings.TrimSpace(value) == "" {
+			command := strings.TrimSpace(value)
+			if command == "" {
 				return fmt.Errorf("%s command가 필요해요", label)
+			}
+			if len(command) > maxResourceConfigStringBytes {
+				return fmt.Errorf("%s command는 %d byte 이하여야 해요", label, maxResourceConfigStringBytes)
 			}
 		case map[string]any:
 			if err := validateMCPResourceConfig(value, label); err != nil {
@@ -327,6 +342,9 @@ func validateSubagentResourceConfig(config map[string]any) error {
 }
 
 func validateMCPResourceConfig(config map[string]any, label string) error {
+	if err := validateStringConfigFields(config, label, "kind", "name", "command", "url", "cwd"); err != nil {
+		return err
+	}
 	kind := strings.TrimSpace(configString(config, "kind"))
 	command := strings.TrimSpace(configString(config, "command"))
 	rawURL := strings.TrimSpace(configString(config, "url"))
@@ -354,6 +372,23 @@ func validateMCPResourceConfig(config map[string]any, label string) error {
 	}
 	if rawURL != "" && !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		return fmt.Errorf("%s url은 http/https여야 해요", label)
+	}
+	return nil
+}
+
+func validateStringConfigFields(config map[string]any, label string, keys ...string) error {
+	for _, key := range keys {
+		raw, ok := config[key]
+		if !ok || raw == nil {
+			continue
+		}
+		value, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("%s %s는 string이어야 해요", label, key)
+		}
+		if len(strings.TrimSpace(value)) > maxResourceConfigStringBytes {
+			return fmt.Errorf("%s %s는 %d byte 이하여야 해요", label, key, maxResourceConfigStringBytes)
+		}
 	}
 	return nil
 }
