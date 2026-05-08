@@ -37,9 +37,15 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := ws.WriteFile("main.go", "package main\n\n// Run executes work.\nfunc Run() {}\n"); err != nil {
+		t.Fatal(err)
+	}
 	defs, handlers := StandardTools(SurfaceOptions{Workspace: ws, WebMaxBytes: 1024})
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("file_read handler는 표준 surface에 있어야 해요")
+	}
+	if _, ok := handlers["lsp_symbols"]; !ok {
+		t.Fatal("lsp_symbols handler는 표준 surface에 있어야 해요")
 	}
 	if _, ok := handlers["web_fetch"]; !ok {
 		t.Fatal("web_fetch handler는 표준 surface에 있어야 해요")
@@ -48,17 +54,35 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	for _, def := range defs {
 		seen[def.Name] = true
 	}
-	if !seen["shell_run"] || !seen["web_fetch"] {
+	if !seen["shell_run"] || !seen["web_fetch"] || !seen["lsp_hover"] {
 		t.Fatalf("표준 surface 정의가 부족해요: %#v", seen)
+	}
+	result, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_symbols", Arguments: []byte(`{"query":"Run","limit":5}`)})
+	if err != nil || !strings.Contains(result.Output, `"Run"`) {
+		t.Fatalf("lsp_symbols가 agent surface에서 실행돼야 해요: result=%+v err=%v", result, err)
 	}
 
 	defs, handlers = StandardTools(SurfaceOptions{Workspace: ws, NoWeb: true})
 	if _, ok := handlers["web_fetch"]; ok {
 		t.Fatal("NoWeb이면 web_fetch handler를 붙이면 안 돼요")
 	}
+	if _, ok := handlers["lsp_symbols"]; !ok {
+		t.Fatal("NoWeb이어도 codeintel tool은 유지해야 해요")
+	}
 	for _, def := range defs {
 		if def.Name == "web_fetch" {
 			t.Fatal("NoWeb이면 web_fetch 정의도 빠져야 해요")
 		}
+	}
+
+	defs, handlers = StandardTools(SurfaceOptions{Workspace: ws, Enabled: []string{"lsp_symbols", "file_read"}, Disabled: []string{"file_read"}})
+	if _, ok := handlers["lsp_symbols"]; !ok {
+		t.Fatal("enabled_tools로 lsp tool을 선택할 수 있어야 해요")
+	}
+	if _, ok := handlers["file_read"]; ok {
+		t.Fatal("disabled_tools가 file_read를 숨겨야 해요")
+	}
+	if len(defs) != 1 || defs[0].Name != "lsp_symbols" {
+		t.Fatalf("filtered 표준 surface가 이상해요: %+v", defs)
 	}
 }

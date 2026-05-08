@@ -633,6 +633,9 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("표준 file_read tool은 노출해야해요")
 	}
+	if _, ok := handlers["lsp_symbols"]; !ok {
+		t.Fatal("agent run에도 codeintel lsp_symbols tool을 노출해야 해요")
+	}
 	if _, ok := handlers["web_fetch"]; ok {
 		t.Fatal("NoWeb이면 web_fetch를 자동 노출하지 않아요")
 	}
@@ -654,7 +657,7 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 		t.Fatal("기본 agent surface에는 web_fetch도 붙어야 해요")
 	}
 
-	ag, err = NewAgent(fakeProvider{}, ws, AgentOptions{Model: "fake", EnabledTools: []string{"file_read", "shell_run"}, DisabledTools: []string{"shell_run"}})
+	ag, err = NewAgent(fakeProvider{}, ws, AgentOptions{Model: "fake", EnabledTools: []string{"file_read", "shell_run", "lsp_symbols"}, DisabledTools: []string{"shell_run"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -662,10 +665,13 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("enabled_tools에 포함된 tool은 노출해야 해요")
 	}
+	if _, ok := handlers["lsp_symbols"]; !ok {
+		t.Fatal("enabled_tools에 포함된 lsp tool은 노출해야 해요")
+	}
 	if _, ok := handlers["shell_run"]; ok {
 		t.Fatal("disabled_tools는 enabled_tools보다 우선해서 tool을 숨겨야 해요")
 	}
-	if len(req.Tools) != 1 || req.Tools[0].Name != "file_read" {
+	if len(req.Tools) != 2 || req.Tools[0].Name != "file_read" || req.Tools[1].Name != "lsp_symbols" {
 		t.Fatalf("요청 tool 정의도 필터링해야 해요: %+v", req.Tools)
 	}
 }

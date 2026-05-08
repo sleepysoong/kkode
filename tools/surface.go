@@ -20,11 +20,13 @@ type SurfaceOptions struct {
 	Disabled    []string
 }
 
-// StandardToolSet은 file/shell/web 표준 tool surface를 한 묶음으로 조립해요.
+// StandardToolSet은 file/shell/web/codeintel 표준 tool surface를 한 묶음으로 조립해요.
 // 권한이나 승인 단계는 여기 없고, 연결된 workspace와 HTTP 설정으로 바로 실행해요.
 func StandardToolSet(opts SurfaceOptions) llm.ToolSet {
 	defs, handlers := FileTools(opts.Workspace)
 	set := llm.NewToolSet(defs, handlers)
+	codeIntelDefs, codeIntelHandlers := CodeIntelTools(opts.Workspace)
+	set.Merge(llm.NewToolSet(codeIntelDefs, codeIntelHandlers))
 	if opts.NoWeb {
 		return filterToolSet(set, opts.Enabled, opts.Disabled)
 	}

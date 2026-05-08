@@ -155,20 +155,7 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 
 func gatewayToolDefinitions() []llm.Tool {
 	defs, _ := ktools.StandardToolSet(ktools.SurfaceOptions{}).Parts()
-	return append(defs, lspToolDefinitions()...)
-}
-
-func lspToolDefinitions() []llm.Tool {
-	strict := true
-	cursorOrSymbol := map[string]any{"symbol": ktools.StringSchema(), "path": ktools.StringSchema(), "line": ktools.IntegerSchema(), "column": ktools.IntegerSchema(), "limit": ktools.IntegerSchema()}
-	return []llm.Tool{
-		{Kind: llm.ToolFunction, Name: "lsp_symbols", Description: "Go workspace symbol 목록을 검색해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(map[string]any{"query": ktools.StringSchema(), "limit": ktools.IntegerSchema()}, nil)},
-		{Kind: llm.ToolFunction, Name: "lsp_document_symbols", Description: "Go 파일 하나의 symbol outline을 반환해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(map[string]any{"path": ktools.StringSchema()}, []string{"path"})},
-		{Kind: llm.ToolFunction, Name: "lsp_definitions", Description: "Go symbol 또는 cursor 위치의 definition을 찾아요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(cursorOrSymbol, nil)},
-		{Kind: llm.ToolFunction, Name: "lsp_references", Description: "Go symbol 또는 cursor 위치의 reference를 찾아요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(cursorOrSymbol, nil)},
-		{Kind: llm.ToolFunction, Name: "lsp_hover", Description: "Go symbol 또는 cursor 위치의 signature와 doc comment를 반환해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(cursorOrSymbol, nil)},
-		{Kind: llm.ToolFunction, Name: "lsp_diagnostics", Description: "Go parser diagnostics를 반환해요", Strict: &strict, Parameters: ktools.ObjectSchemaRequired(map[string]any{"path": ktools.StringSchema(), "limit": ktools.IntegerSchema()}, nil)},
-	}
+	return defs
 }
 
 func executeLSPTool(root string, name string, args map[string]any) (string, error) {

@@ -2958,6 +2958,13 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
 		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
 	}
+	seenTools := map[string]bool{}
+	for _, tool := range listed.Tools {
+		if seenTools[tool.Name] {
+			t.Fatalf("tool 목록에 중복 이름이 있으면 안 돼요: %+v", listed.Tools)
+		}
+		seenTools[tool.Name] = true
+	}
 	if !findTool(listed.Tools, "file_write").RequiresWorkspace || findTool(listed.Tools, "web_fetch").RequiresWorkspace {
 		t.Fatalf("tool별 workspace 요구 여부를 discovery해야 해요: %+v", listed.Tools)
 	}
