@@ -16,6 +16,8 @@ const maxResourceIDBytes = 128
 const maxResourceNameBytes = 256
 const maxResourceDescriptionBytes = 4096
 const maxResourceConfigBytes = 1 << 20
+const maxResourceStringArrayItems = 256
+const maxResourceStringArrayItemBytes = 4096
 
 // ResourceDTO는 MCP server, skill, subagent를 외부 API에 노출하는 공통 manifest예요.
 type ResourceDTO struct {
@@ -499,9 +501,16 @@ func validateStringArrayConfig(config map[string]any, key string) error {
 		return fmt.Errorf("%s는 string array여야 해요", key)
 	}
 	for i, text := range values {
-		if strings.TrimSpace(text) == "" {
+		text = strings.TrimSpace(text)
+		if text == "" {
 			return fmt.Errorf("%s[%d]는 비어 있지 않은 string이어야 해요", key, i)
 		}
+		if len(text) > maxResourceStringArrayItemBytes {
+			return fmt.Errorf("%s[%d]는 %d byte 이하여야 해요", key, i, maxResourceStringArrayItemBytes)
+		}
+	}
+	if len(values) > maxResourceStringArrayItems {
+		return fmt.Errorf("%s는 최대 %d개까지 허용돼요", key, maxResourceStringArrayItems)
 	}
 	return nil
 }

@@ -2420,8 +2420,11 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		{name: "mcp bad id", path: "/api/v1/mcp/servers", body: `{"id":"bad id","name":"broken","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource id"},
 		{name: "mcp long name", path: "/api/v1/mcp/servers", body: `{"name":"` + strings.Repeat("n", maxResourceNameBytes+1) + `","config":{"kind":"http","url":"https://mcp.example.test"}}`, want: "resource name"},
 		{name: "mcp long config", path: "/api/v1/mcp/servers", body: `{"name":"huge","config":{"kind":"http","url":"https://mcp.example.test","headers":{"X-Fill":"` + strings.Repeat("x", maxResourceConfigBytes+1) + `"}}}`, want: "resource config"},
+		{name: "mcp too many args", path: "/api/v1/mcp/servers", body: `{"name":"many-args","config":{"kind":"stdio","command":"mcp-fs","args":[` + quotedStringList("arg", maxResourceStringArrayItems+1) + `]}}`, want: "최대"},
+		{name: "mcp long arg", path: "/api/v1/mcp/servers", body: `{"name":"long-arg","config":{"kind":"stdio","command":"mcp-fs","args":["` + strings.Repeat("x", maxResourceStringArrayItemBytes+1) + `"]}}`, want: "args[0]"},
 		{name: "skill missing path", path: "/api/v1/skills", body: `{"name":"empty","config":{}}`, want: "path"},
 		{name: "subagent bad inline mcp", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"context7":{"kind":"http"}}}}`, want: "url"},
+		{name: "subagent long tool", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","tools":["` + strings.Repeat("x", maxResourceStringArrayItemBytes+1) + `"]}}`, want: "tools[0]"},
 		{name: "subagent blank inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{"  ":"mcp-fs"}}}`, want: "label"},
 		{name: "subagent duplicate canonical inline mcp label", path: "/api/v1/subagents", body: `{"name":"bad-agent","config":{"prompt":"계획해요","mcp_servers":{" context7 ":"mcp-a","context7":"mcp-b"}}}`, want: "중복"},
 	}
@@ -4985,6 +4988,14 @@ func hasResourceDTO(resources []ResourceDTO, id string) bool {
 		}
 	}
 	return false
+}
+
+func quotedStringList(prefix string, count int) string {
+	items := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		items = append(items, fmt.Sprintf("%q", fmt.Sprintf("%s_%d", prefix, i)))
+	}
+	return strings.Join(items, ",")
 }
 
 func TestGatewayExportsRedactedSessionBundle(t *testing.T) {
