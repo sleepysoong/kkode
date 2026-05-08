@@ -132,12 +132,14 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		symbols, truncated := limitLSPSymbols(symbols, limit)
 		writeJSON(w, LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated})
 	case "document-symbols":
-		symbols, err := scanGoDocumentSymbols(root, strings.TrimSpace(r.URL.Query().Get("path")))
+		limit := queryLimit(r, "limit", 200, 1000)
+		symbols, err := scanGoDocumentSymbols(root, strings.TrimSpace(r.URL.Query().Get("path")), limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_document_symbols_failed", err.Error())
 			return
 		}
-		writeJSON(w, LSPSymbolListResponse{Symbols: symbols})
+		symbols, truncated := limitLSPSymbols(symbols, limit)
+		writeJSON(w, LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated})
 	case "definitions":
 		symbol, err := lspSymbolFromQuery(root, r)
 		if err != nil {
@@ -372,9 +374,12 @@ func collectGoSymbols(file *ast.File, appendSymbol func(name string, kind string
 	}
 }
 
-func scanGoDocumentSymbols(root string, relPath string) ([]LSPSymbolDTO, error) {
+func scanGoDocumentSymbols(root string, relPath string, limit int) ([]LSPSymbolDTO, error) {
 	if strings.TrimSpace(relPath) == "" {
 		return nil, fmt.Errorf("path가 필요해요")
+	}
+	if limit <= 0 {
+		limit = 200
 	}
 	absRoot, err := normalizeProjectRoot(root)
 	if err != nil {
@@ -392,7 +397,7 @@ func scanGoDocumentSymbols(root string, relPath string) ([]LSPSymbolDTO, error) 
 	rel, _ := filepath.Rel(absRoot, path)
 	out := []LSPSymbolDTO{}
 	appendSymbol := func(name string, kind string, pos token.Pos, container string) {
-		if name == "" {
+		if name == "" || len(out) >= limit {
 			return
 		}
 		p := fset.Position(pos)

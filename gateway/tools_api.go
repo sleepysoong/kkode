@@ -182,11 +182,13 @@ func executeLSPTool(root string, name string, args map[string]any) (string, erro
 		symbols, truncated := limitLSPSymbols(symbols, limit)
 		value = LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated}
 	case "lsp_document_symbols":
-		symbols, scanErr := scanGoDocumentSymbols(root, stringArg(args, "path"))
+		limit := intArg(args, "limit", 200)
+		symbols, scanErr := scanGoDocumentSymbols(root, stringArg(args, "path"), limit+1)
 		if scanErr != nil {
 			return "", scanErr
 		}
-		value = LSPSymbolListResponse{Symbols: symbols}
+		symbols, truncated := limitLSPSymbols(symbols, limit)
+		value = LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated}
 	case "lsp_definitions":
 		symbol, scanErr := lspSymbolFromToolArgs(root, args)
 		if scanErr != nil {

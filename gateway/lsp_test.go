@@ -80,14 +80,14 @@ type Runner struct{}
 func (Runner) Run() {}
 func Build() {}
 `)
-	symbols, err := scanGoDocumentSymbols(root, "pkg/outline.go")
+	symbols, err := scanGoDocumentSymbols(root, "pkg/outline.go", 200)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(symbols) != 3 || symbols[0].Name != "Runner" || symbols[1].Kind != "method" || symbols[1].Container != "Runner" {
 		t.Fatalf("document symbols가 이상해요: %+v", symbols)
 	}
-	if _, err := scanGoDocumentSymbols(root, "../outside.go"); err == nil {
+	if _, err := scanGoDocumentSymbols(root, "../outside.go", 200); err == nil {
 		t.Fatal("project_root 밖 path는 거부해야 해요")
 	}
 }

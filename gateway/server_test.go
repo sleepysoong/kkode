@@ -2110,6 +2110,20 @@ func (r *Runner) Run() {}
 	if !sawType || !sawMethod {
 		t.Fatalf("LSP symbol 검색이 이상해요: %+v", symbols.Symbols)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/document-symbols?project_root="+root+"&path=main.go&limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var documentSymbols LSPSymbolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &documentSymbols); err != nil {
+		t.Fatal(err)
+	}
+	if len(documentSymbols.Symbols) != 1 || documentSymbols.Limit != 1 || !documentSymbols.ResultTruncated {
+		t.Fatalf("document symbol limit metadata가 이상해요: %+v", documentSymbols)
+	}
 }
 
 func TestGatewayLSPDefinitionsAndReferences(t *testing.T) {
