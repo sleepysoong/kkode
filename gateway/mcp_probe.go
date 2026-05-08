@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
+	ktools "github.com/sleepysoong/kkode/tools"
 )
 
 const maxMCPHTTPResponseBytes = 8 << 20
@@ -267,22 +269,27 @@ func getMCPPrompt(ctx context.Context, resource session.Resource, promptName str
 }
 
 func callMCPTool(ctx context.Context, resource session.Resource, toolName string, arguments map[string]any) (map[string]any, error) {
-	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return nil, fmt.Errorf("MCP tool 이름이 필요해요")
-	}
-	if arguments == nil {
-		arguments = map[string]any{}
-	}
-	resp, err := runMCPRequest(ctx, resource, "tools/call", map[string]any{"name": toolName, "arguments": arguments})
+	server, err := mcpServerFromProbeResource(resource)
 	if err != nil {
 		return nil, err
 	}
-	result, _ := resp["result"].(map[string]any)
-	if result == nil {
-		result = map[string]any{}
+	return ktools.CallMCPTool(ctx, server, toolName, arguments)
+}
+
+func mcpServerFromProbeResource(resource session.Resource) (llm.MCPServer, error) {
+	cfg, err := parseMCPProbeConfig(resource)
+	if err != nil {
+		return llm.MCPServer{}, err
 	}
-	return result, nil
+	kind := llm.MCPServerKind(cfg.Kind)
+	if kind == "" {
+		if cfg.URL != "" {
+			kind = llm.MCPHTTP
+		} else {
+			kind = llm.MCPStdio
+		}
+	}
+	return llm.MCPServer{Kind: kind, Name: resource.Name, Timeout: cfg.Timeout, Command: cfg.Command, Args: cfg.Args, Env: cfg.Env, Cwd: cfg.Cwd, URL: cfg.URL, Headers: cfg.Headers}, nil
 }
 
 func truncateMCPToolResult(result map[string]any, maxBytes int) (map[string]any, int, bool) {

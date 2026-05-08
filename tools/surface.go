@@ -18,6 +18,7 @@ type SurfaceOptions struct {
 	Timeout     time.Duration
 	Enabled     []string
 	Disabled    []string
+	MCPServers  map[string]llm.MCPServer
 }
 
 // StandardToolSet은 file/shell/web/codeintel 표준 tool surface를 한 묶음으로 조립해요.
@@ -27,6 +28,8 @@ func StandardToolSet(opts SurfaceOptions) llm.ToolSet {
 	set := llm.NewToolSet(defs, handlers)
 	codeIntelDefs, codeIntelHandlers := CodeIntelTools(opts.Workspace)
 	set.Merge(llm.NewToolSet(codeIntelDefs, codeIntelHandlers))
+	mcpDefs, mcpHandlers := MCPTools(opts.MCPServers)
+	set.Merge(llm.NewToolSet(mcpDefs, mcpHandlers))
 	if opts.NoWeb {
 		return filterToolSet(set, opts.Enabled, opts.Disabled)
 	}

@@ -3212,7 +3212,7 @@ components:
             type: string
         local_tools:
           type: array
-          description: provider request에 포함될 local tool 이름 목록이에요.
+          description: provider request에 포함될 local tool 이름 목록이에요. 선택된 MCP server가 있으면 mcp_call도 포함될 수 있어요.
           items:
             type: string
         context_blocks:

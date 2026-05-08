@@ -31,6 +31,7 @@ type AgentOptions struct {
 	WebMaxBytes   int64
 	EnabledTools  []string
 	DisabledTools []string
+	MCPServers    map[string]llm.MCPServer
 	Transcript    *transcript.Transcript
 	Guardrails    agent.Guardrails
 	Observer      agent.Observer
@@ -75,7 +76,7 @@ func NewWorkspace(opts WorkspaceOptions) (*workspace.Workspace, string, error) {
 	return ws, absRoot, nil
 }
 
-// NewAgent는 표준 file/web tool만 연결해서 agent를 만들어요.
+// NewAgent는 표준 file/web/codeintel/MCP local tool surface를 연결해서 agent를 만들어요.
 func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions) (*agent.Agent, error) {
 	if ws == nil {
 		return nil, fmt.Errorf("workspace is required")
@@ -83,7 +84,7 @@ func NewAgent(provider llm.Provider, ws *workspace.Workspace, opts AgentOptions)
 	if opts.Model == "" && provider != nil {
 		opts.Model = DefaultModel(provider.Name())
 	}
-	toolSet := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Enabled: opts.EnabledTools, Disabled: opts.DisabledTools})
+	toolSet := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, Enabled: opts.EnabledTools, Disabled: opts.DisabledTools, MCPServers: opts.MCPServers})
 	return agent.New(agent.Config{
 		Provider:      provider,
 		Model:         opts.Model,
