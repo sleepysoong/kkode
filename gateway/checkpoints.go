@@ -2,12 +2,16 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/sleepysoong/kkode/session"
 )
+
+const maxCheckpointIDBytes = 128
+const maxCheckpointPayloadBytes = 1 << 20
 
 type CheckpointDTO struct {
 	ID        string          `json:"id,omitempty"`
@@ -77,10 +81,16 @@ func (s *Server) createSessionCheckpoint(w http.ResponseWriter, r *http.Request,
 		writeJSONDecodeError(w, r, err)
 		return
 	}
-	if ok := s.validateCheckpointTarget(w, r, sessionID, strings.TrimSpace(req.TurnID)); !ok {
+	req.ID = strings.TrimSpace(req.ID)
+	req.TurnID = strings.TrimSpace(req.TurnID)
+	if err := validateCheckpointDTO(req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", err.Error())
 		return
 	}
-	cp := session.Checkpoint{ID: strings.TrimSpace(req.ID), SessionID: sessionID, TurnID: strings.TrimSpace(req.TurnID), CreatedAt: req.CreatedAt, Payload: req.Payload}
+	if ok := s.validateCheckpointTarget(w, r, sessionID, req.TurnID); !ok {
+		return
+	}
+	cp := session.Checkpoint{ID: req.ID, SessionID: sessionID, TurnID: req.TurnID, CreatedAt: req.CreatedAt, Payload: req.Payload}
 	if cp.ID == "" {
 		cp.ID = session.NewID("cp")
 	}
@@ -136,4 +146,19 @@ func (s *Server) checkpointStore() session.CheckpointStore {
 
 func toCheckpointDTO(cp session.Checkpoint) CheckpointDTO {
 	return CheckpointDTO{ID: cp.ID, SessionID: cp.SessionID, TurnID: cp.TurnID, CreatedAt: cp.CreatedAt, Payload: cp.Payload}
+}
+
+func validateCheckpointDTO(dto CheckpointDTO) error {
+	if dto.ID != "" {
+		if len(dto.ID) > maxCheckpointIDBytes {
+			return fmt.Errorf("checkpoint id는 %d byte 이하여야 해요", maxCheckpointIDBytes)
+		}
+		if !validRunMetadataKey(dto.ID) {
+			return fmt.Errorf("checkpoint id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		}
+	}
+	if len(dto.Payload) > maxCheckpointPayloadBytes {
+		return fmt.Errorf("checkpoint payload는 %d byte 이하여야 해요", maxCheckpointPayloadBytes)
+	}
+	return nil
 }

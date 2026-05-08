@@ -253,6 +253,12 @@ func (s *Server) prepareImportCheckpoints(w http.ResponseWriter, r *http.Request
 	}
 	checkpoints := make([]session.Checkpoint, 0, len(items))
 	for _, item := range items {
+		item.ID = strings.TrimSpace(item.ID)
+		item.TurnID = strings.TrimSpace(item.TurnID)
+		if err := validateCheckpointDTO(item); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_import", err.Error())
+			return nil, nil, false
+		}
 		cp := checkpointFromDTO(item, imported.ID)
 		if cp.TurnID != "" && !sessionHasTurn(imported, cp.TurnID) {
 			writeError(w, r, http.StatusBadRequest, "invalid_import", "checkpoint turn_id가 raw_session에 없어요")

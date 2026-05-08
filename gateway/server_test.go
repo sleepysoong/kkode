@@ -4440,6 +4440,24 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if created.ID == "" || created.SessionID != sess.ID || !strings.Contains(string(created.Payload), "저장") {
 		t.Fatalf("checkpoint 생성 응답이 이상해요: %+v", created)
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/checkpoints", bytes.NewBufferString(`{"id":"bad id","payload":{"summary":"bad"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "checkpoint id") {
+		t.Fatalf("잘못된 checkpoint id는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	largePayload, err := json.Marshal(map[string]string{"summary": strings.Repeat("x", maxCheckpointPayloadBytes+1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/checkpoints", bytes.NewBufferString(`{"payload":`+string(largePayload)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "checkpoint payload") {
+		t.Fatalf("너무 큰 checkpoint payload는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/checkpoints", bytes.NewBufferString(`{"turn_id":"turn_missing","payload":{"summary":"bad"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -4761,6 +4779,24 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 	}
 	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("artifact preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
+	}
+	body, err = json.Marshal(SessionImportRequest{
+		FormatVersion: sessionExportFormatVersion,
+		RawSession:    sess,
+		Checkpoints:   []CheckpointDTO{{ID: "bad id", TurnID: turn.ID, Payload: json.RawMessage(`{"summary":"bad"}`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "checkpoint id") {
+		t.Fatalf("invalid checkpoint id import는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("checkpoint id preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
 	}
 }
 
