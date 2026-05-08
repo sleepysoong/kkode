@@ -3660,6 +3660,22 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if len(listed.Entries) != 1 || listed.Entries[0].Name != "a.md" || listed.Entries[0].Kind != "file" || listed.TotalEntries != 2 || listed.Limit != 1 || !listed.EntriesTruncated {
 		t.Fatalf("files list가 이상해요: %+v", listed)
 	}
+	if listed.Offset != 0 || listed.NextOffset != 1 {
+		t.Fatalf("files list paging metadata가 이상해요: %+v", listed)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files?project_root="+root+"&path=docs&limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = FileListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "b.md" || listed.TotalEntries != 2 || listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.EntriesTruncated {
+		t.Fatalf("files offset list가 이상해요: %+v", listed)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/a.md&offset_line=2&limit_lines=1", nil)
 	rec = httptest.NewRecorder()

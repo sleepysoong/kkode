@@ -24,6 +24,8 @@ type FileListResponse struct {
 	Entries          []FileEntryDTO `json:"entries"`
 	TotalEntries     int            `json:"total_entries,omitempty"`
 	Limit            int            `json:"limit,omitempty"`
+	Offset           int            `json:"offset,omitempty"`
+	NextOffset       int            `json:"next_offset,omitempty"`
 	EntriesTruncated bool           `json:"entries_truncated,omitempty"`
 }
 
@@ -125,11 +127,18 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, "limit", 500, 5000)
+	offset := queryOffset(r, "offset")
 	total := len(entries)
-	truncated := total > limit
-	if len(entries) > limit {
+	if offset >= total {
+		entries = nil
+	} else if offset > 0 {
+		entries = entries[offset:]
+	}
+	truncated := len(entries) > limit
+	if truncated {
 		entries = entries[:limit]
 	}
+	returned := len(entries)
 	out := make([]FileEntryDTO, 0, len(entries))
 	for _, entry := range entries {
 		info, err := entry.Info()
@@ -143,7 +152,7 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, FileEntryDTO{Name: entry.Name(), Path: childRel, Kind: kind, Size: info.Size(), ModTime: info.ModTime().UTC()})
 	}
-	writeJSON(w, FileListResponse{ProjectRoot: projectRoot, Path: filepath.ToSlash(rel), Entries: out, TotalEntries: total, Limit: limit, EntriesTruncated: truncated})
+	writeJSON(w, FileListResponse{ProjectRoot: projectRoot, Path: filepath.ToSlash(rel), Entries: out, TotalEntries: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), EntriesTruncated: truncated})
 }
 
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
