@@ -106,7 +106,11 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 		writeError(w, r, http.StatusNotFound, "not_found", route.Name+" endpoint를 찾을 수 없어요")
 		return
 	}
-	id := rest[0]
+	id := strings.TrimSpace(rest[0])
+	if id == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_resource", "resource id가 필요해요")
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		s.withResource(w, r, route.Kind, id, func(resource session.Resource) {
@@ -126,6 +130,11 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 }
 
 func (s *Server) withResource(w http.ResponseWriter, r *http.Request, kind session.ResourceKind, id string, fn func(session.Resource)) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_resource", "resource id가 필요해요")
+		return
+	}
 	store := s.resourceStore()
 	if store == nil {
 		writeError(w, r, http.StatusNotImplemented, "resource_store_missing", "이 gateway에는 resource store가 연결되지 않았어요")
@@ -192,6 +201,7 @@ func (s *Server) resourceStore() session.ResourceStore {
 }
 
 func resourceFromDTO(kind session.ResourceKind, id string, dto ResourceDTO) (session.Resource, error) {
+	id = strings.TrimSpace(id)
 	name := strings.TrimSpace(dto.Name)
 	if name == "" {
 		return session.Resource{}, errResourceNameRequired{}

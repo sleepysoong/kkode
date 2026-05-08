@@ -2160,6 +2160,20 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		t.Fatalf("조회 응답은 secret config를 숨겨야 해요: %+v", got.Config)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/%20"+created.ID+"%20", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("space-padded resource id 조회 status = %d body = %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/mcp/servers/%20%20", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "resource id") {
+		t.Fatalf("blank resource id 조회는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	body = bytes.NewBufferString(`{"name":"planner","config":{"prompt":"계획을 세워요","tools":[" file_read ","file_read"],"skills":[" review ","review"],"mcp_server_ids":[" mcp_context7 ","mcp_context7"]}}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/subagents", body)
 	rec = httptest.NewRecorder()
@@ -2222,7 +2236,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		t.Fatalf("resource offset metadata가 이상해요: %+v", listed)
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/v1/mcp/servers/"+created.ID, nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/mcp/servers/%20"+created.ID+"%20", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
