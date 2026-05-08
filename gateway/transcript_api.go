@@ -182,9 +182,7 @@ func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *sess
 		sessionDTO.ProjectRoot = llm.RedactSecrets(sessionDTO.ProjectRoot)
 		sessionDTO.Summary = llm.RedactSecrets(sessionDTO.Summary)
 		sessionDTO.Metadata = redactStringMap(sessionDTO.Metadata)
-		run.Prompt = llm.RedactSecrets(run.Prompt)
-		run.Error = llm.RedactSecrets(run.Error)
-		run.Metadata = redactStringMap(run.Metadata)
+		run = redactRunEventSnapshot(run)
 		if turn != nil {
 			turn.Prompt = llm.RedactSecrets(turn.Prompt)
 			turn.ResponseText = llm.RedactSecrets(turn.ResponseText)
@@ -200,14 +198,7 @@ func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *sess
 			}
 		}
 		for i := range runEvents {
-			runEvents[i].Message = llm.RedactSecrets(runEvents[i].Message)
-			runEvents[i].Error = llm.RedactSecrets(runEvents[i].Error)
-			runEvents[i].Run.Prompt = llm.RedactSecrets(runEvents[i].Run.Prompt)
-			runEvents[i].Run.Error = llm.RedactSecrets(runEvents[i].Run.Error)
-			runEvents[i].Run.Metadata = redactStringMap(runEvents[i].Run.Metadata)
-			if len(runEvents[i].Payload) > 0 {
-				runEvents[i].Payload = redactRawJSON(runEvents[i].Payload)
-			}
+			runEvents[i] = redactRunEvent(runEvents[i])
 		}
 		markdown, markdownBytes, markdownTruncated := limitTranscriptMarkdown(markdown, maxMarkdownBytes)
 		return RunTranscriptResponse{Run: run, Session: sessionDTO, Turn: turn, Events: events, RunEvents: runEvents, Markdown: markdown, MarkdownBytes: markdownBytes, MarkdownTruncated: markdownTruncated, Redacted: redacted}

@@ -3390,7 +3390,7 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	run := session.Run{ID: "run_transcript", SessionID: sess.ID, TurnID: turn.ID, Status: "completed", Prompt: "run " + secret, Provider: "openai", Model: "gpt-5-mini"}
+	run := session.Run{ID: "run_transcript", SessionID: sess.ID, TurnID: turn.ID, Status: "completed", Prompt: "run " + secret, Provider: "openai", Model: "gpt-5-mini", ContextBlocks: []string{"context " + secret}}
 	if _, _, err := store.SaveRunWithEvent(ctx, run, session.RunEvent{RunID: run.ID, Type: "tool.completed", Tool: "file_read", Message: "message " + secret, At: time.Now().UTC(), Run: run}); err != nil {
 		t.Fatal(err)
 	}
@@ -3415,6 +3415,9 @@ func TestGatewayRunTranscriptEndpoint(t *testing.T) {
 	body := rec.Body.String()
 	if !got.Redacted || !strings.Contains(body, "[REDACTED]") || strings.Contains(body, secret) {
 		t.Fatalf("run transcript는 기본 redaction을 적용해야 해요: %s", body)
+	}
+	if len(got.Run.ContextBlocks) != 1 || !strings.Contains(got.Run.ContextBlocks[0], "[REDACTED]") {
+		t.Fatalf("run transcript context_blocks redaction이 이상해요: %+v", got.Run.ContextBlocks)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_transcript/transcript?max_markdown_bytes=-1", nil)
@@ -3447,7 +3450,7 @@ func TestGatewayRequestCorrelationTranscriptEndpoint(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	run := session.Run{ID: "run_request_transcript", SessionID: sess.ID, TurnID: turn.ID, Status: "completed", Prompt: "run " + secret, Provider: "openai", Model: "gpt-5-mini", Metadata: map[string]string{RequestIDMetadataKey: requestID}}
+	run := session.Run{ID: "run_request_transcript", SessionID: sess.ID, TurnID: turn.ID, Status: "completed", Prompt: "run " + secret, Provider: "openai", Model: "gpt-5-mini", Metadata: map[string]string{RequestIDMetadataKey: requestID}, ContextBlocks: []string{"context " + secret}}
 	if _, _, err := store.SaveRunWithEvent(ctx, run, session.RunEvent{RunID: run.ID, Type: "tool.completed", Tool: "file_read", Message: "message " + secret, At: time.Now().UTC(), Run: run}); err != nil {
 		t.Fatal(err)
 	}
