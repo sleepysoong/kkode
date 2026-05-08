@@ -643,6 +643,8 @@ LSP format preview는 입력 Go 파일을 8388608 byte까지 허용하고, forma
 
 직접 tool 호출의 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte이고, `web_max_bytes`도 최대 8388608 byte로 제한해서 권한 프롬프트 없는 adapter tool 실행 응답이 bounded envelope를 유지하게 해요.
 
+`web_fetch` tool argument의 `max_bytes`는 `WebConfig.MaxBytes`로 정해진 configured envelope를 넘으면 거부해서 agent run과 direct tool call 모두 배포자가 정한 web body 상한을 우회하지 못하게 해요.
+
 MCP prompt/tool 직접 검증의 `max_message_bytes`와 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한해서 저장된 stdio/http MCP 서버 응답도 bounded adapter envelope로 반환해요.
 
 Run event replay와 request correlation event replay는 같은 incremental cursor 계약을 공유해요. JSON과 SSE 요청은 durable event를 읽기 전에 `after_seq`를 검증하고, adapter가 polling을 이어가야 하면 JSON 응답에 `next_after_seq`를 노출해요.

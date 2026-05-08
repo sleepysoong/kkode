@@ -65,11 +65,15 @@ func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, ti
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		return nil, fmt.Errorf("only http/https URLs are supported: %s", rawURL)
 	}
-	if maxBytes <= 0 {
-		maxBytes = cfg.MaxBytes
+	configMaxBytes := cfg.MaxBytes
+	if configMaxBytes <= 0 {
+		configMaxBytes = 1 << 20
 	}
 	if maxBytes <= 0 {
-		maxBytes = 1 << 20
+		maxBytes = configMaxBytes
+	}
+	if maxBytes > configMaxBytes {
+		return nil, fmt.Errorf("max_bytes must be <= %d", configMaxBytes)
 	}
 	if timeout <= 0 {
 		timeout = cfg.Timeout

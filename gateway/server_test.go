@@ -4372,6 +4372,15 @@ func TestGatewayCallsWebFetchTool(t *testing.T) {
 		t.Fatalf("음수 web_fetch max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
+	body = `{"tool":"web_fetch","arguments":{"url":"` + upstream.URL + `","max_bytes":` + strconv.FormatInt(maxToolCallWebBytes+1, 10) + `}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
+		t.Fatalf("큰 web_fetch max_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		_, _ = w.Write([]byte("slow"))

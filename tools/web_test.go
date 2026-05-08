@@ -50,3 +50,13 @@ func TestWebFetchRejectsNegativeBudgets(t *testing.T) {
 		t.Fatalf("negative timeout_ms는 거부해야 해요: %v", err)
 	}
 }
+
+func TestWebFetchRejectsMaxBytesAboveConfiguredEnvelope(t *testing.T) {
+	if _, err := Fetch(context.Background(), WebConfig{MaxBytes: 4}, "https://example.test", 5, 0); err == nil || !strings.Contains(err.Error(), "max_bytes") {
+		t.Fatalf("configured max_bytes 초과는 거부해야 해요: %v", err)
+	}
+	_, handlers := WebTools(WebConfig{MaxBytes: 4})
+	if _, err := handlers.Execute(context.Background(), toolCall("web_fetch", `{"url":"https://example.test","max_bytes":5}`)); err == nil || !strings.Contains(err.Error(), "max_bytes") {
+		t.Fatalf("tool argument max_bytes 초과는 거부해야 해요: %v", err)
+	}
+}
