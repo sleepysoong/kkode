@@ -1130,6 +1130,8 @@ func (t *Transcript) Save(path string) error
 func (t *Transcript) SaveRedacted(path string) error
 ```
 
+`Load`, `Save`, `SaveRedacted`는 transcript JSON 파일을 최대 8388608 byte로 제한해서 CLI transcript 경로가 과도한 파일을 한 번에 읽거나 쓰지 않게 해요.
+
 예제는 이렇게 써요.
 
 ```go

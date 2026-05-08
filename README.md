@@ -281,7 +281,7 @@ erDiagram
   - workspace path boundary, read-range/write/replace/apply-patch/list/glob/grep/search/shell tool을 제공해요.
   - shell 실행은 stdout 문자열뿐 아니라 exit code, stderr, timeout 여부를 구조화해서 tool output으로 돌려줘요.
 - `transcript`
-  - request/response/error turn을 JSON으로 저장해요.
+  - request/response/error turn을 최대 8388608 byte JSON 파일로 저장하고, 그보다 큰 transcript load/save는 거부해요.
   - secret redaction 저장도 지원해요.
 
 ## Agent CLI 예제

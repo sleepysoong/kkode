@@ -25,6 +25,24 @@ func TestSaveLoad(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsOversizedTranscript(t *testing.T) {
+	path := t.TempDir() + "/huge.json"
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", MaxFileBytes+1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "transcript file") {
+		t.Fatalf("oversized transcript load should be rejected: %v", err)
+	}
+}
+
+func TestSaveRejectsOversizedTranscript(t *testing.T) {
+	tr := New("huge")
+	tr.Add(llm.Request{Model: "m", Messages: []llm.Message{llm.UserText(strings.Repeat("x", MaxFileBytes))}}, nil, nil)
+	if err := tr.Save(t.TempDir() + "/huge.json"); err == nil || !strings.Contains(err.Error(), "transcript file") {
+		t.Fatalf("oversized transcript save should be rejected: %v", err)
+	}
+}
+
 func TestSaveRedacted(t *testing.T) {
 	tr := New("t2")
 	tr.Add(llm.Request{Model: "m", Messages: []llm.Message{llm.UserText("token=abc1234567890secretvalue")}}, nil, nil)

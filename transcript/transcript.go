@@ -2,11 +2,15 @@ package transcript
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/sleepysoong/kkode/llm"
 )
+
+const MaxFileBytes = 8 << 20
 
 type Transcript struct {
 	ID        string    `json:"id"`
@@ -37,9 +41,17 @@ func (t *Transcript) Add(req llm.Request, resp *llm.Response, err error) {
 }
 
 func Load(path string) (*Transcript, error) {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, MaxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > MaxFileBytes {
+		return nil, fmt.Errorf("transcript file must be <= %d bytes", MaxFileBytes)
 	}
 	var t Transcript
 	if err := json.Unmarshal(b, &t); err != nil {
@@ -53,6 +65,9 @@ func (t *Transcript) Save(path string) error {
 	if err != nil {
 		return err
 	}
+	if len(b) > MaxFileBytes {
+		return fmt.Errorf("transcript file must be <= %d bytes", MaxFileBytes)
+	}
 	return os.WriteFile(path, b, 0o644)
 }
 
@@ -61,5 +76,9 @@ func (t *Transcript) SaveRedacted(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(llm.RedactSecrets(string(b))), 0o644)
+	b = []byte(llm.RedactSecrets(string(b)))
+	if len(b) > MaxFileBytes {
+		return fmt.Errorf("transcript file must be <= %d bytes", MaxFileBytes)
+	}
+	return os.WriteFile(path, b, 0o644)
 }
