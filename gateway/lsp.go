@@ -123,7 +123,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 	}
 	switch parts[1] {
 	case "symbols":
-		limit := queryLimit(r, "limit", 200, 1000)
+		limit, ok := queryLimitParam(w, r, "limit", 200, 1000, "invalid_lsp_limit")
+		if !ok {
+			return
+		}
 		symbols, err := scanGoSymbols(root, strings.TrimSpace(r.URL.Query().Get("query")), limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, "scan_symbols_failed", err.Error())
@@ -132,7 +135,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		symbols, truncated := limitLSPSymbols(symbols, limit)
 		writeJSON(w, LSPSymbolListResponse{Symbols: symbols, Limit: limit, ResultTruncated: truncated})
 	case "document-symbols":
-		limit := queryLimit(r, "limit", 200, 1000)
+		limit, ok := queryLimitParam(w, r, "limit", 200, 1000, "invalid_lsp_limit")
+		if !ok {
+			return
+		}
 		symbols, err := scanGoDocumentSymbols(root, strings.TrimSpace(r.URL.Query().Get("path")), limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_document_symbols_failed", err.Error())
@@ -146,7 +152,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
 			return
 		}
-		limit := queryLimit(r, "limit", 50, 200)
+		limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_lsp_limit")
+		if !ok {
+			return
+		}
 		definitions, err := scanGoDefinitions(root, symbol, limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_definitions_failed", err.Error())
@@ -160,7 +169,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
 			return
 		}
-		limit := queryLimit(r, "limit", 100, 1000)
+		limit, ok := queryLimitParam(w, r, "limit", 100, 1000, "invalid_lsp_limit")
+		if !ok {
+			return
+		}
 		references, err := scanGoReferences(root, symbol, limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_references_failed", err.Error())
@@ -175,7 +187,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 			return
 		}
 		newName := strings.TrimSpace(r.URL.Query().Get("new_name"))
-		limit := queryLimit(r, "limit", 1000, 5000)
+		limit, ok := queryLimitParam(w, r, "limit", 1000, 5000, "invalid_lsp_limit")
+		if !ok {
+			return
+		}
 		preview, err := scanGoRenamePreview(root, symbol, newName, limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_rename_preview_failed", err.Error())
@@ -199,7 +214,10 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		}
 		writeJSON(w, preview)
 	case "diagnostics":
-		limit := queryLimit(r, "limit", 200, 1000)
+		limit, ok := queryLimitParam(w, r, "limit", 200, 1000, "invalid_lsp_limit")
+		if !ok {
+			return
+		}
 		diagnostics, err := scanGoDiagnostics(root, strings.TrimSpace(r.URL.Query().Get("path")), limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusBadRequest, "scan_diagnostics_failed", err.Error())
