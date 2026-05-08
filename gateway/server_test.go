@@ -3991,7 +3991,7 @@ func TestGatewayFilesAPIAppliesPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.Applied || string(updated) != "one\npatched\nthree\n" {
+	if !resp.Applied || resp.PatchBytes != len(patch) || string(updated) != "one\npatched\nthree\n" {
 		t.Fatalf("patch 적용이 이상해요: resp=%+v content=%q", resp, updated)
 	}
 }

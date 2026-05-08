@@ -2708,6 +2708,8 @@ components:
           type: string
         applied:
           type: boolean
+        patch_bytes:
+          type: integer
     FileWriteRequest:
       type: object
       required: [project_root, path, content]

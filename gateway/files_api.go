@@ -81,6 +81,7 @@ type FilePatchRequest struct {
 type FilePatchResponse struct {
 	ProjectRoot string `json:"project_root"`
 	Applied     bool   `json:"applied"`
+	PatchBytes  int    `json:"patch_bytes,omitempty"`
 }
 
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -227,7 +228,7 @@ func (s *Server) applyFilePatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "apply_patch_failed", err.Error())
 		return
 	}
-	writeJSON(w, FilePatchResponse{ProjectRoot: projectRoot, Applied: true})
+	writeJSON(w, FilePatchResponse{ProjectRoot: projectRoot, Applied: true, PatchBytes: len(req.PatchText)})
 }
 
 func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
