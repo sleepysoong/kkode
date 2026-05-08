@@ -683,6 +683,9 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 		ok = false
 	}
 	checks = append(checks, providerAuthChecks...)
+	if !diagnosticChecksOK(s.cfg.DiagnosticChecks) {
+		ok = false
+	}
 	checks = append(checks, s.cfg.DiagnosticChecks...)
 	resp := DiagnosticsResponse{OK: ok, Version: s.cfg.Version, Commit: s.cfg.Commit, Time: s.cfg.Now(), Checks: checks, Providers: len(s.cfg.Providers), Features: len(features), DefaultMCPServers: len(s.cfg.DefaultMCPServers), MaxRequestBytes: s.cfg.MaxRequestBytes, MaxConcurrentRuns: s.cfg.MaxConcurrentRuns, RunTimeoutSeconds: durationSeconds(s.cfg.RunTimeout), MissingRuntimeWiring: missingRuntimeWiring}
 	if s.cfg.RunRuntimeStats != nil {
@@ -753,6 +756,16 @@ func providerAuthDiagnosticChecks(providers []ProviderDTO) ([]DiagnosticCheckDTO
 		checks = append(checks, check)
 	}
 	return checks, ok
+}
+
+func diagnosticChecksOK(checks []DiagnosticCheckDTO) bool {
+	for _, check := range checks {
+		switch strings.ToLower(strings.TrimSpace(check.Status)) {
+		case "missing", "error", "failed", "unhealthy":
+			return false
+		}
+	}
+	return true
 }
 
 func runtimeWiringChecks(missingRuntimeWiring []string) ([]DiagnosticCheckDTO, bool) {
