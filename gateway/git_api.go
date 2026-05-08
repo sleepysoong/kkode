@@ -88,6 +88,7 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rel := strings.TrimSpace(r.URL.Query().Get("path"))
+	canonicalRel := ""
 	args := []string{"diff", "--"}
 	if rel != "" {
 		if filepath.IsAbs(rel) {
@@ -98,7 +99,8 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusBadRequest, "invalid_path", err.Error())
 			return
 		}
-		args = append(args, filepath.ToSlash(filepath.Clean(rel)))
+		canonicalRel = filepath.ToSlash(filepath.Clean(rel))
+		args = append(args, canonicalRel)
 	}
 	maxBytes := queryLimit(r, "max_bytes", 1<<20, 4<<20)
 	out, truncated, err := runGitCommand(r.Context(), root, args, int64(maxBytes))
@@ -106,7 +108,7 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "git_diff_failed", err.Error())
 		return
 	}
-	writeJSON(w, GitDiffResponse{ProjectRoot: root, Path: filepath.ToSlash(rel), Diff: out, Truncated: truncated})
+	writeJSON(w, GitDiffResponse{ProjectRoot: root, Path: canonicalRel, Diff: out, Truncated: truncated})
 }
 
 func (s *Server) gitLog(w http.ResponseWriter, r *http.Request) {

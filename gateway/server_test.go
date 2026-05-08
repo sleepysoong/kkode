@@ -3251,7 +3251,7 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 		t.Fatalf("git status 제한 metadata가 이상해요: %+v", status)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&path=README.md", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&path="+url.QueryEscape(" ./README.md "), nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
