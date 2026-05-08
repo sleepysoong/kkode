@@ -2090,7 +2090,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	store := openTestStore(t)
 	srv := newTestServer(t, store, "")
 
-	body := bytes.NewBufferString(`{"name":"filesystem","description":"파일 MCP예요","config":{"kind":"stdio","command":"mcp-fs","args":["."],"headers":{"Authorization":"Bearer secret-token"}}}`)
+	body := bytes.NewBufferString(`{"name":"filesystem","description":"파일 MCP예요","config":{"kind":" stdio ","command":" mcp-fs ","args":["."],"headers":{"Authorization":"Bearer secret-token"}}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/servers", body)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -2103,6 +2103,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if created.ID == "" || created.Kind != string(session.ResourceMCPServer) || created.Config["command"] != "mcp-fs" {
 		t.Fatalf("생성된 MCP manifest가 이상해요: %+v", created)
+	}
+	if created.Config["kind"] != "stdio" {
+		t.Fatalf("생성된 MCP manifest kind는 canonical 값이어야 해요: %+v", created.Config)
 	}
 	if created.Config["headers"].(map[string]any)["Authorization"] != "[REDACTED]" {
 		t.Fatalf("생성 응답은 secret config를 숨겨야 해요: %+v", created.Config)
@@ -2155,12 +2158,25 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		t.Fatalf("조회 응답은 secret config를 숨겨야 해요: %+v", got.Config)
 	}
 
-	body = bytes.NewBufferString(`{"name":"planner","config":{"prompt":"계획을 세워요","tools":["file_read"]}}`)
+	body = bytes.NewBufferString(`{"name":"planner","config":{"prompt":"계획을 세워요","tools":[" file_read ","file_read"],"skills":[" review ","review"],"mcp_server_ids":[" mcp_context7 ","mcp_context7"]}}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/subagents", body)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var planner ResourceDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &planner); err != nil {
+		t.Fatal(err)
+	}
+	if tools, _ := planner.Config["tools"].([]any); len(tools) != 1 || tools[0] != "file_read" {
+		t.Fatalf("subagent tools config는 canonical array여야 해요: %+v", planner.Config)
+	}
+	if skills, _ := planner.Config["skills"].([]any); len(skills) != 1 || skills[0] != "review" {
+		t.Fatalf("subagent skills config는 canonical array여야 해요: %+v", planner.Config)
+	}
+	if ids, _ := planner.Config["mcp_server_ids"].([]any); len(ids) != 1 || ids[0] != "mcp_context7" {
+		t.Fatalf("subagent MCP id config는 canonical array여야 해요: %+v", planner.Config)
 	}
 	body = bytes.NewBufferString(`{"name":"reviewer","config":{"prompt":"검토해요","tools":["file_read"]}}`)
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/subagents", body)

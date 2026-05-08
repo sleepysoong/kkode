@@ -207,6 +207,7 @@ func resourceFromDTO(kind session.ResourceKind, id string, dto ResourceDTO) (ses
 	if err := validateResourceConfig(kind, config); err != nil {
 		return session.Resource{}, err
 	}
+	config = normalizeResourceConfig(kind, config)
 	encoded, err := json.Marshal(config)
 	if err != nil {
 		return session.Resource{}, err
@@ -301,6 +302,89 @@ func validateMCPResourceConfig(config map[string]any, label string) error {
 	return nil
 }
 
+func normalizeResourceConfig(kind session.ResourceKind, config map[string]any) map[string]any {
+	out := cloneAnyMap(config)
+	switch kind {
+	case session.ResourceMCPServer:
+		normalizeMCPResourceConfig(out)
+	case session.ResourceSkill:
+		trimStringConfig(out, "path")
+		trimStringConfig(out, "directory")
+	case session.ResourceSubagent:
+		trimStringConfig(out, "display_name")
+		trimStringConfig(out, "description")
+		normalizeStringArrayConfig(out, "tools")
+		normalizeStringArrayConfig(out, "skills")
+		normalizeStringArrayConfig(out, "mcp_server_ids")
+		normalizeInlineMCPServers(out)
+	}
+	return out
+}
+
+func normalizeMCPResourceConfig(config map[string]any) {
+	for _, key := range []string{"kind", "name", "command", "url", "cwd"} {
+		trimStringConfig(config, key)
+	}
+}
+
+func normalizeInlineMCPServers(config map[string]any) {
+	rawServers, ok := config["mcp_servers"]
+	if !ok || rawServers == nil {
+		return
+	}
+	servers, ok := rawServers.(map[string]any)
+	if !ok {
+		return
+	}
+	out := make(map[string]any, len(servers))
+	for name, raw := range servers {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		switch value := raw.(type) {
+		case string:
+			out[name] = strings.TrimSpace(value)
+		case map[string]any:
+			nested := cloneAnyMap(value)
+			normalizeMCPResourceConfig(nested)
+			out[name] = nested
+		default:
+			out[name] = raw
+		}
+	}
+	config["mcp_servers"] = out
+}
+
+func trimStringConfig(config map[string]any, key string) {
+	value, ok := config[key].(string)
+	if ok {
+		config[key] = strings.TrimSpace(value)
+	}
+}
+
+func normalizeStringArrayConfig(config map[string]any, key string) {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return
+	}
+	var values []string
+	switch items := raw.(type) {
+	case []any:
+		values = make([]string, 0, len(items))
+		for _, item := range items {
+			if text, ok := item.(string); ok {
+				values = append(values, text)
+			}
+		}
+	case []string:
+		values = append([]string(nil), items...)
+	default:
+		return
+	}
+	config[key] = sanitizeUniqueStrings(values)
+}
+
 func configString(config map[string]any, key string) string {
 	value, _ := config[key].(string)
 	return value
@@ -344,13 +428,24 @@ func validateStringArrayConfig(config map[string]any, key string) error {
 	if !ok || raw == nil {
 		return nil
 	}
-	values, ok := raw.([]any)
-	if !ok {
+	var values []string
+	switch items := raw.(type) {
+	case []any:
+		values = make([]string, 0, len(items))
+		for _, value := range items {
+			text, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("%s는 string array여야 해요", key)
+			}
+			values = append(values, text)
+		}
+	case []string:
+		values = items
+	default:
 		return fmt.Errorf("%s는 string array여야 해요", key)
 	}
-	for i, value := range values {
-		text, ok := value.(string)
-		if !ok || strings.TrimSpace(text) == "" {
+	for i, text := range values {
+		if strings.TrimSpace(text) == "" {
 			return fmt.Errorf("%s[%d]는 비어 있지 않은 string이어야 해요", key, i)
 		}
 	}
