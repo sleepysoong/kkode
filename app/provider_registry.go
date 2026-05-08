@@ -210,6 +210,9 @@ func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) 
 	if err != nil {
 		return nil, err
 	}
+	if opts.MaxResponseBytes < 0 {
+		return nil, fmt.Errorf("max_response_bytes는 0 이상이어야 해요")
+	}
 	providerName := strings.TrimSpace(opts.ProviderName)
 	if providerName == "" {
 		providerName = spec.Name
@@ -264,6 +267,9 @@ func BuildHTTPJSONProviderAdapter(profile string, opts HTTPJSONProviderOptions) 
 // 새 OpenAI-compatible gateway는 profile/base URL/API key/env/route만 넘기면 `요청 -> 변환 -> API 호출 -> 응답 변환` 흐름을 재사용해요.
 func RegisterHTTPJSONProvider(reg HTTPJSONProviderRegistration) (func(), error) {
 	reg = cloneHTTPJSONProviderRegistration(reg)
+	if reg.MaxResponseBytes < 0 {
+		return nil, fmt.Errorf("max_response_bytes는 0 이상이어야 해요")
+	}
 	profile := strings.TrimSpace(reg.Profile)
 	if profile == "" {
 		profile = "openai-compatible"
