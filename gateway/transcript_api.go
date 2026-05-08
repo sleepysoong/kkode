@@ -145,7 +145,7 @@ func (s *Server) getRunTranscript(w http.ResponseWriter, r *http.Request, runID 
 func (s *Server) toRunTranscriptResponse(r *http.Request, run RunDTO, sess *session.Session, redacted bool, maxMarkdownBytes int) RunTranscriptResponse {
 	turn := s.runTranscriptTurn(r, run)
 	events := s.runTranscriptEvents(r, run)
-	runEvents := s.runEventSnapshot(r, run.ID, run, 0)
+	runEvents := s.runEventSnapshot(r, run.ID, run, 0, 200)
 	markdown := runTranscriptMarkdown(run, sess, turn, events, runEvents)
 	if redacted {
 		markdown = llm.RedactSecrets(markdown)

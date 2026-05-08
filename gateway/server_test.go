@@ -426,6 +426,15 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 		t.Fatalf("잘못된 event after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
+	for _, query := range []string{"limit=-1", "limit=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("잘못된 event limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?stream=true", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -1845,6 +1854,14 @@ func TestGatewaySessionTurnsAPI(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
 		t.Fatalf("잘못된 turn after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	for _, query := range []string{"limit=-1", "limit=abc"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns?"+query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
+			t.Fatalf("잘못된 turn limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/turns/"+second.ID, nil)
 	rec = httptest.NewRecorder()
@@ -2799,12 +2816,18 @@ func TestGatewayRunEventsRejectInvalidAfterSeq(t *testing.T) {
 	}{
 		{name: "negative", query: "after_seq=-1"},
 		{name: "malformed", query: "after_seq=abc"},
+		{name: "negative limit", query: "limit=-1"},
+		{name: "malformed limit", query: "limit=abc"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?"+tc.query, nil)
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "after_seq") {
-			t.Fatalf("%s run after_seq는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
+		want := "after_seq"
+		if strings.Contains(tc.query, "limit") {
+			want = "limit"
+		}
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("%s run event query는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
 		}
 	}
 }

@@ -1008,7 +1008,10 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 	if !ok {
 		return
 	}
-	limit := queryLimit(r, "limit", 500, 5000)
+	limit, ok := queryLimitParam(w, r, "limit", 500, 5000, "invalid_session_events")
+	if !ok {
+		return
+	}
 	var events []EventDTO
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
 		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
@@ -1085,7 +1088,10 @@ func (s *Server) listSessionTurnsFromTimeline(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	limit := queryLimit(r, "limit", 100, 500)
+	limit, ok := queryLimitParam(w, r, "limit", 100, 500, "invalid_session_turns")
+	if !ok {
+		return
+	}
 	records, err := timeline.ListTurns(r.Context(), session.TurnQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
@@ -1117,7 +1123,10 @@ func (s *Server) listSessionTurns(w http.ResponseWriter, r *http.Request, sess *
 	if !ok {
 		return
 	}
-	limit := queryLimit(r, "limit", 100, 500)
+	limit, ok := queryLimitParam(w, r, "limit", 100, 500, "invalid_session_turns")
+	if !ok {
+		return
+	}
 	out := make([]TurnDTO, 0, min(len(sess.Turns), limit))
 	for i, turn := range sess.Turns {
 		seq := i + 1
@@ -1443,6 +1452,10 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 	if !ok {
 		return
 	}
+	limit, ok := queryLimitParam(w, r, "limit", 200, 1000, "invalid_run_events")
+	if !ok {
+		return
+	}
 	var live <-chan RunDTO
 	var liveEvents <-chan RunEventDTO
 	var unsubscribe func()
@@ -1460,19 +1473,17 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		return
 	}
 	if !wantsSSE(r) {
-		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq))
+		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq, limit))
 		return
 	}
-	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq)
+	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq, limit)
 }
 
-func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO, afterSeq int) []RunEventDTO {
-	limit := queryLimit(r, "limit", 200, 1000)
+func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) []RunEventDTO {
 	return s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit)
 }
 
-func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO, afterSeq int) RunEventListResponse {
-	limit := queryLimit(r, "limit", 200, 1000)
+func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) RunEventListResponse {
 	events := s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit+1)
 	events, truncated, nextAfterSeq := trimRunEvents(events, limit)
 	return RunEventListResponse{Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq}
@@ -1565,7 +1576,7 @@ func trimRunEvents(events []RunEventDTO, limit int) ([]RunEventDTO, bool, int) {
 	return events, truncated, next
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int) {
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int, limit int) {
 	if unsubscribe != nil {
 		defer unsubscribe()
 	}
@@ -1575,7 +1586,7 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	flusher, _ := w.(http.Flusher)
 	heartbeat := time.NewTicker(sseHeartbeatInterval(r))
 	defer heartbeat.Stop()
-	events := s.runEventSnapshot(r, runID, initial, afterSeq)
+	events := s.runEventSnapshot(r, runID, initial, afterSeq, limit)
 	seq := 0
 	lastStatus := initial.Status
 	for _, event := range events {
