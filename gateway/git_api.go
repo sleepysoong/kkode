@@ -55,6 +55,7 @@ type GitLogResponse struct {
 const (
 	defaultGitDiffBytes = 1 << 20
 	maxGitDiffBytes     = 4 << 20
+	maxGitPathBytes     = 4096
 	maxGitStderrBytes   = 1 << 20
 )
 
@@ -109,6 +110,10 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 	canonicalRel := ""
 	args := []string{"diff", "--"}
 	if rel != "" {
+		if len(rel) > maxGitPathBytes {
+			writeError(w, r, http.StatusBadRequest, "invalid_path", fmt.Sprintf("git diff path는 %d byte 이하여야 해요", maxGitPathBytes))
+			return
+		}
 		if filepath.IsAbs(rel) {
 			writeError(w, r, http.StatusBadRequest, "invalid_path", "git diff path는 project_root 기준 상대 경로여야 해요")
 			return
