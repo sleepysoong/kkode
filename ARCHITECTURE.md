@@ -549,7 +549,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 `RunQuery`는 `session_id`, `turn_id`, `status`, `provider`, `model`, `request_id`, `idempotency_key`, `limit`, `offset`을 받아 외부 adapter가 run dashboard나 turn detail에서 본 provider/model/turn bucket을 그대로 목록 조회로 좁힐 수 있게 해요.
 
-Run 목록 API는 일반 `GET /api/v1/runs?turn_id=...`와 request-scoped `GET /api/v1/requests/{request_id}/runs?turn_id=...` 양쪽에서 turn 필터를 지원해서 adapter가 전체 run 목록을 스캔하지 않고 turn detail을 채우게 해요.
+Run 목록 API는 일반 `GET /api/v1/runs?turn_id=...`와 request-scoped `GET /api/v1/requests/{request_id}/runs?turn_id=...` 양쪽에서 turn 필터를 지원하고 `total_runs`를 반환해서 adapter가 전체 run 목록을 스캔하지 않고 turn detail과 page count를 채우게 해요.
 
 현재 endpoint는 다음과 같아요.
 

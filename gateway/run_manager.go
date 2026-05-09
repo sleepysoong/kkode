@@ -31,6 +31,9 @@ type RunGetter func(ctx context.Context, runID string) (*RunDTO, error)
 // RunLister는 run 목록 조회 경계예요.
 type RunLister func(ctx context.Context, q RunQuery) ([]RunDTO, error)
 
+// RunCounter는 run 목록 필터와 같은 조건의 총개수 조회 경계예요.
+type RunCounter func(ctx context.Context, q RunQuery) (int, error)
+
 // RunCanceler는 실행 중인 background run을 멈추는 경계예요.
 type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 
@@ -370,6 +373,24 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (m *AsyncRunManager) Count(ctx context.Context, q RunQuery) (int, error) {
+	if m == nil {
+		return 0, errors.New("run manager가 필요해요")
+	}
+	if counter, ok := m.runStore.(session.RunCounter); ok {
+		return counter.CountRuns(ctx, session.RunQuery{SessionID: q.SessionID, TurnID: q.TurnID, Status: q.Status, Provider: q.Provider, Model: q.Model, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey})
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	total := 0
+	for _, managed := range m.runs {
+		if runMatchesQuery(managed.run, q) {
+			total++
+		}
+	}
+	return total, nil
 }
 
 func runMatchesQuery(run RunDTO, q RunQuery) bool {

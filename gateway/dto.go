@@ -266,6 +266,7 @@ type ProviderRoutePreviewDTO struct {
 // RunListResponse는 background run 목록 응답이에요.
 type RunListResponse struct {
 	Runs            []RunDTO `json:"runs"`
+	TotalRuns       int      `json:"total_runs,omitempty"`
 	Limit           int      `json:"limit,omitempty"`
 	Offset          int      `json:"offset,omitempty"`
 	NextOffset      int      `json:"next_offset,omitempty"`
@@ -276,6 +277,7 @@ type RunListResponse struct {
 type RequestCorrelationResponse struct {
 	RequestID       string   `json:"request_id"`
 	Runs            []RunDTO `json:"runs"`
+	TotalRuns       int      `json:"total_runs,omitempty"`
 	Limit           int      `json:"limit,omitempty"`
 	Offset          int      `json:"offset,omitempty"`
 	NextOffset      int      `json:"next_offset,omitempty"`

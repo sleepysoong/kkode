@@ -1292,6 +1292,44 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 		limit = 50
 	}
 	query := `SELECT id, session_id, turn_id, status, prompt, provider, model, working_directory, max_output_tokens, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, usage_json, metadata_json, created_at, updated_at FROM runs`
+	where, args := runQueryWhere(q)
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	if q.Offset > 0 {
+		query += ` OFFSET ?`
+		args = append(args, q.Offset)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Run
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) CountRuns(ctx context.Context, q RunQuery) (int, error) {
+	query := `SELECT COUNT(*) FROM runs`
+	where, args := runQueryWhere(q)
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func runQueryWhere(q RunQuery) ([]string, []any) {
 	args := []any{}
 	where := []string{}
 	if q.SessionID != "" {
@@ -1322,29 +1360,7 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 		where = append(where, `json_extract(CAST(metadata_json AS TEXT), '$.idempotency_key') = ?`)
 		args = append(args, q.IdempotencyKey)
 	}
-	if len(where) > 0 {
-		query += ` WHERE ` + strings.Join(where, ` AND `)
-	}
-	query += ` ORDER BY updated_at DESC LIMIT ?`
-	args = append(args, limit)
-	if q.Offset > 0 {
-		query += ` OFFSET ?`
-		args = append(args, q.Offset)
-	}
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Run
-	for rows.Next() {
-		run, err := scanRun(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, run)
-	}
-	return out, rows.Err()
+	return where, args
 }
 
 func (s *SQLiteStore) AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error) {

@@ -5100,6 +5100,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Run'
+        total_runs:
+          type: integer
+          description: 현재 필터에 매칭되는 background run 총개수예요.
         limit:
           type: integer
         offset:
@@ -5119,6 +5122,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Run'
+        total_runs:
+          type: integer
+          description: 현재 request/filter에 매칭되는 background run 총개수예요.
         limit:
           type: integer
         offset:

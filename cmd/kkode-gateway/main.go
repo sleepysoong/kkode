@@ -107,6 +107,7 @@ func run(args []string) error {
 		RunRuntimeStats:      runManager.RuntimeStats,
 		RunGetter:            runManager.Get,
 		RunLister:            runManager.List,
+		RunCounter:           runManager.Count,
 		RunCanceler:          runManager.Cancel,
 		RunEventLister:       runManager.Events,
 		RunSubscriber:        runManager.Subscribe,

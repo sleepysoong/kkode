@@ -64,6 +64,7 @@ type Config struct {
 	RunRuntimeStats      RunRuntimeStatsGetter
 	RunGetter            RunGetter
 	RunLister            RunLister
+	RunCounter           RunCounter
 	RunCanceler          RunCanceler
 	RunEventLister       RunEventLister
 	RunSubscriber        RunEventSubscriber
@@ -299,13 +300,21 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{TurnID: turnID, Provider: provider, Model: model, RequestID: requestID, Limit: limit + 1, Offset: offset})
+	query := RunQuery{TurnID: turnID, Provider: provider, Model: model, RequestID: requestID}
+	totalRuns, ok := s.countRuns(w, r, query, "count_runs_failed")
+	if !ok {
+		return
+	}
+	pageQuery := query
+	pageQuery.Limit = limit + 1
+	pageQuery.Offset = offset
+	runs, err := s.cfg.RunLister(r.Context(), pageQuery)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
 	runs, returned, truncated := trimRuns(runs, limit)
-	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+	writeJSON(w, RequestCorrelationResponse{RequestID: requestID, Runs: runs, TotalRuns: totalRuns, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -1459,13 +1468,33 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), TurnID: turnID, Status: r.URL.Query().Get("status"), Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey, Limit: limit + 1, Offset: offset})
+	query := RunQuery{SessionID: r.URL.Query().Get("session_id"), TurnID: turnID, Status: r.URL.Query().Get("status"), Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey}
+	totalRuns, ok := s.countRuns(w, r, query, "count_runs_failed")
+	if !ok {
+		return
+	}
+	pageQuery := query
+	pageQuery.Limit = limit + 1
+	pageQuery.Offset = offset
+	runs, err := s.cfg.RunLister(r.Context(), pageQuery)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
 	}
 	runs, returned, truncated := trimRuns(runs, limit)
-	writeJSON(w, RunListResponse{Runs: runs, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+	writeJSON(w, RunListResponse{Runs: runs, TotalRuns: totalRuns, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+}
+
+func (s *Server) countRuns(w http.ResponseWriter, r *http.Request, q RunQuery, code string) (int, bool) {
+	if s.cfg.RunCounter == nil {
+		return 0, true
+	}
+	total, err := s.cfg.RunCounter(r.Context(), q)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, code, err.Error())
+		return 0, false
+	}
+	return total, true
 }
 
 func queryRunProviderModel(w http.ResponseWriter, r *http.Request, code string) (string, string, bool) {

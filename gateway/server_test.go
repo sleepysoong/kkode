@@ -1259,6 +1259,12 @@ func TestGatewayListsRunsWithNextOffset(t *testing.T) {
 				{ID: "run_3", SessionID: "sess_1", Status: "completed"},
 			}, nil
 		},
+		RunCounter: func(ctx context.Context, q RunQuery) (int, error) {
+			if q.SessionID != "sess_1" {
+				t.Fatalf("run count query가 이상해요: %+v", q)
+			}
+			return 9, nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1276,7 +1282,7 @@ func TestGatewayListsRunsWithNextOffset(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Runs) != 2 || body.Runs[0].ID != "run_1" || !body.ResultTruncated || body.NextOffset != 6 {
+	if len(body.Runs) != 2 || body.Runs[0].ID != "run_1" || body.TotalRuns != 9 || !body.ResultTruncated || body.NextOffset != 6 {
 		t.Fatalf("run list page metadata가 이상해요: %+v", body)
 	}
 }
@@ -1289,6 +1295,12 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
 			query = q
 			return []RunDTO{{ID: "run_req", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
+		},
+		RunCounter: func(ctx context.Context, q RunQuery) (int, error) {
+			if q.RequestID != "req_filter" || q.Provider != "copilot" || q.Model != "gpt-5-mini" || q.TurnID != "turn_filter" {
+				t.Fatalf("request correlation count query가 이상해요: %+v", q)
+			}
+			return 1, nil
 		},
 	})
 	if err != nil {
@@ -1307,7 +1319,7 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.RequestID != "req_filter" || body.Offset != 3 || len(body.Runs) != 1 || body.Runs[0].ID != "run_req" {
+	if body.RequestID != "req_filter" || body.Offset != 3 || body.TotalRuns != 1 || len(body.Runs) != 1 || body.Runs[0].ID != "run_req" {
 		t.Fatalf("request correlation 응답이 이상해요: %+v", body)
 	}
 	if body.Limit != 7 || body.ResultTruncated {

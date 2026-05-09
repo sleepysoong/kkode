@@ -77,6 +77,10 @@ type RunStore interface {
 	ListRuns(ctx context.Context, q RunQuery) ([]Run, error)
 }
 
+type RunCounter interface {
+	CountRuns(ctx context.Context, q RunQuery) (int, error)
+}
+
 type RunEventStore interface {
 	AppendRunEvent(ctx context.Context, event RunEvent) (RunEvent, error)
 	ListRunEvents(ctx context.Context, q RunEventQuery) ([]RunEvent, error)

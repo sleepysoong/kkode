@@ -470,6 +470,13 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != "run_1" {
 		t.Fatalf("run list가 이상해요: %+v", listed)
 	}
+	count, err := store.CountRuns(ctx, RunQuery{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("run count가 이상해요: %d", count)
+	}
 	if _, err := store.SaveRun(ctx, Run{ID: "run_0", SessionID: sess.ID, Status: "queued", Prompt: "older"}); err != nil {
 		t.Fatal(err)
 	}
@@ -493,6 +500,13 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	}
 	if len(byRequestID) != 1 || byRequestID[0].ID != "run_1" {
 		t.Fatalf("request_id run list가 이상해요: %+v", byRequestID)
+	}
+	count, err = store.CountRuns(ctx, RunQuery{RequestID: "req_store"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("request_id run count가 이상해요: %d", count)
 	}
 	byProviderModel, err := store.ListRuns(ctx, RunQuery{Provider: "copilot", Model: "gpt-5-mini", Limit: 10})
 	if err != nil {
@@ -520,6 +534,13 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	}
 	if len(byIdempotencyKey) != 1 || byIdempotencyKey[0].ID != "run_1" {
 		t.Fatalf("idempotency_key run list가 이상해요: %+v", byIdempotencyKey)
+	}
+	count, err = store.CountRuns(ctx, RunQuery{SessionID: sess.ID, IdempotencyKey: "idem_store"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("idempotency_key run count가 이상해요: %d", count)
 	}
 	assertSQLiteIndexExists(t, store, "runs", "idx_runs_idempotency_key_updated")
 }

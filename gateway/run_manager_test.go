@@ -83,6 +83,13 @@ func TestAsyncRunManagerListsRunsByRequestID(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != first.ID || listed[0].Metadata[RequestIDMetadataKey] != "req_one" {
 		t.Fatalf("request_id run 목록이 이상해요: %+v", listed)
 	}
+	total, err := manager.Count(context.Background(), RunQuery{RequestID: "req_one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 {
+		t.Fatalf("request_id run count가 이상해요: %d", total)
+	}
 }
 
 func TestAsyncRunManagerListsRunsByProviderAndModel(t *testing.T) {
