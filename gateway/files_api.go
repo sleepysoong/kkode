@@ -64,6 +64,8 @@ type FileGrepResponse struct {
 	Regex           bool               `json:"regex,omitempty"`
 	Matches         []FileGrepMatchDTO `json:"matches"`
 	Limit           int                `json:"limit,omitempty"`
+	Offset          int                `json:"offset,omitempty"`
+	NextOffset      int                `json:"next_offset,omitempty"`
 	ResultTruncated bool               `json:"result_truncated,omitempty"`
 }
 
@@ -647,6 +649,14 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_file_grep")
+	if !ok {
+		return
+	}
+	if offset >= workspace.MaxGrepMatches {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_grep", fmt.Sprintf("offset은 %d보다 작아야 해요", workspace.MaxGrepMatches))
+		return
+	}
 	regex, ok := queryBoolParam(w, r, "regex", false, "invalid_file_grep")
 	if !ok {
 		return
@@ -655,9 +665,9 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	maxMatches := limit
-	if limit < workspace.MaxGrepMatches {
-		maxMatches = limit + 1
+	maxMatches := workspace.MaxGrepMatches
+	if offset+limit < workspace.MaxGrepMatches {
+		maxMatches = offset + limit + 1
 	}
 	opts := workspace.GrepOptions{
 		PathGlob:      strings.TrimSpace(r.URL.Query().Get("path_glob")),
@@ -670,11 +680,18 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "grep_files_failed", err.Error())
 		return
 	}
-	truncated := len(matches) > limit || len(matches) == workspace.MaxGrepMatches
-	if truncated {
-		matches = matches[:limit]
+	pageMatches := matches
+	if offset >= len(pageMatches) {
+		pageMatches = nil
+	} else if offset > 0 {
+		pageMatches = pageMatches[offset:]
 	}
-	writeJSON(w, FileGrepResponse{ProjectRoot: projectRoot, Pattern: pattern, PathGlob: opts.PathGlob, Regex: opts.Regex, Matches: fileGrepMatchDTOs(matches), Limit: limit, ResultTruncated: truncated})
+	pageTruncated := len(pageMatches) > limit
+	if pageTruncated {
+		pageMatches = pageMatches[:limit]
+	}
+	truncated := pageTruncated || len(matches) == workspace.MaxGrepMatches
+	writeJSON(w, FileGrepResponse{ProjectRoot: projectRoot, Pattern: pattern, PathGlob: opts.PathGlob, Regex: opts.Regex, Matches: fileGrepMatchDTOs(pageMatches), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, len(pageMatches), pageTruncated), ResultTruncated: truncated})
 }
 
 func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {

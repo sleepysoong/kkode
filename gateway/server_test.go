@@ -6448,8 +6448,21 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &grep); err != nil {
 		t.Fatal(err)
 	}
-	if grep.ProjectRoot != root || grep.Pattern != "todo" || grep.PathGlob != "src/**" || len(grep.Matches) != 1 || grep.Matches[0].Path != "src/a.go" || grep.Matches[0].Line != 2 || grep.Limit != 1 || !grep.ResultTruncated {
+	if grep.ProjectRoot != root || grep.Pattern != "todo" || grep.PathGlob != "src/**" || len(grep.Matches) != 1 || grep.Matches[0].Path != "src/a.go" || grep.Matches[0].Line != 2 || grep.Limit != 1 || grep.Offset != 0 || grep.NextOffset != 1 || !grep.ResultTruncated {
 		t.Fatalf("grep 결과가 이상해요: %+v", grep)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&path_glob=src/**&max_matches=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("offset grep status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	grep = FileGrepResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &grep); err != nil {
+		t.Fatal(err)
+	}
+	if len(grep.Matches) != 1 || grep.Matches[0].Path != "src/b.go" || grep.Limit != 1 || grep.Offset != 1 || grep.NextOffset != 0 || grep.ResultTruncated {
+		t.Fatalf("grep offset 결과가 이상해요: %+v", grep)
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern="+url.QueryEscape("TODO: (wire|second)")+"&regex=true&case_sensitive=true", nil)
 	rec = httptest.NewRecorder()
@@ -6471,7 +6484,7 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("pattern 없는 grep은 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	for _, query := range []string{"max_matches=-1", "max_matches=abc", "regex=maybe", "case_sensitive=maybe"} {
+	for _, query := range []string{"max_matches=-1", "max_matches=abc", "offset=-1", "offset=abc", "offset=" + strconv.Itoa(workspace.MaxGrepMatches), "regex=maybe", "case_sensitive=maybe"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)

@@ -321,6 +321,12 @@ paths:
             type: integer
             default: 100
             maximum: 1000
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+            maximum: 999
       responses:
         '200':
           description: grep 검색 결과예요.
@@ -3330,9 +3336,15 @@ components:
         limit:
           type: integer
           description: 이번 응답에 적용된 match 제한이에요.
+        offset:
+          type: integer
+          description: 이번 응답에 적용된 0-based match offset이에요.
+        next_offset:
+          type: integer
+          description: 다음 page가 있으면 다음 요청에 넣을 offset이에요.
         result_truncated:
           type: boolean
-          description: max_matches 때문에 matches가 잘렸는지 알려줘요.
+          description: max_matches/offset page 또는 workspace grep envelope 때문에 matches가 잘렸는지 알려줘요.
     FileGrepMatch:
       type: object
       required: [path, line, excerpt]
