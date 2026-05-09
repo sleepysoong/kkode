@@ -217,6 +217,29 @@ func TestOpenAPIOperationParametersAreUnique(t *testing.T) {
 	}
 }
 
+func TestOpenAPIExposesAdapterListFilters(t *testing.T) {
+	parameters := readOpenAPIOperationParameters(t)
+	required := map[string][]string{
+		"get /api/v1/runs":                       {"query:turn_id"},
+		"get /api/v1/requests/{request_id}/runs": {"query:turn_id"},
+		"get /api/v1/files/checkpoints":          {"query:path"},
+	}
+	for op, wantNames := range required {
+		available := map[string]bool{}
+		for _, name := range parameters[op] {
+			available[name] = true
+		}
+		if len(available) == 0 {
+			t.Fatalf("OpenAPI operation %s parameters를 찾지 못했어요", op)
+		}
+		for _, want := range wantNames {
+			if !available[want] {
+				t.Fatalf("OpenAPI operation %s에 adapter list filter %s가 필요해요: %+v", op, want, parameters[op])
+			}
+		}
+	}
+}
+
 func TestOpenAPIComponentReferencesExist(t *testing.T) {
 	data, err := os.ReadFile("openapi.yaml")
 	if err != nil {
