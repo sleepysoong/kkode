@@ -225,6 +225,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSessions(w, r, parts)
 	case "runs":
 		s.handleRuns(w, r, parts)
+	case "artifacts":
+		s.handleArtifacts(w, r, parts)
 	case "requests":
 		s.handleRequests(w, r, parts)
 	case "mcp":
@@ -1017,6 +1019,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 	}
 	if len(parts) >= 3 && parts[2] == "checkpoints" {
 		s.handleSessionCheckpoints(w, r, sessionID, parts[3:])
+		return
+	}
+	if len(parts) >= 3 && parts[2] == "artifacts" {
+		s.handleSessionArtifacts(w, r, sessionID, parts[3:])
 		return
 	}
 	if len(parts) == 3 && parts[2] == "compact" {

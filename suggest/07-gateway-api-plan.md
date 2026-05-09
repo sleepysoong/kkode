@@ -42,7 +42,7 @@
 아직 남은 것:
 
 - run interrupt는 별도 명령으로 분리되지 않았고 cancel/retry 중심이에요.
-- artifact API는 아직 없고 transcript/export/checkpoint로 대체하고 있어요.
+- artifact API는 SQLite-backed `session.ArtifactStore`와 `GET/POST /api/v1/sessions/{session_id}/artifacts`, `GET/DELETE /api/v1/artifacts/{artifact_id}`로 구현됐고 export/import bundle에도 포함돼요.
 - session checkpoint는 payload 저장/조회 중심이고, file mutation checkpoint/restore/list/delete/prune는 전용 files API와 tool로 구현됐어요. 아직 conversation rewind와 undo/redo UX는 없어요.
 - Discord/webhook adapter가 없어요.
 
@@ -250,7 +250,7 @@ Run은 session 안에서 하나의 prompt 실행이에요.
 }
 ```
 
-초기에는 artifact table 없이 event payload에 넣고, 큰 payload만 파일/SQLite blob으로 빼도 돼요.
+현재는 SQLite `artifacts` table에 JSON content를 저장하고 session/run/turn/kind filter로 조회해요. List 응답은 metadata와 `content_bytes` 중심이고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해 큰 tool output을 event payload로만 싣지 않게 해요.
 
 ## REST endpoint 초안
 
@@ -462,6 +462,7 @@ PATCH /api/v1/sessions/{session_id}/todos/{todo_id}
 
 ```http
 GET /api/v1/sessions/{session_id}/artifacts
+POST /api/v1/sessions/{session_id}/artifacts
 GET /api/v1/artifacts/{artifact_id}
 DELETE /api/v1/artifacts/{artifact_id}
 ```
@@ -694,7 +695,7 @@ func ToEventDTO(ev session.Event) EventDTO
 작업:
 
 - files API 추가해요.
-- artifact API 추가해요.
+- artifact API는 추가됐고, 남은 작업은 run/tool 실행 경로에서 큰 stdout/diff/web 결과를 자동 artifact로 승격하는 정책이에요.
 - todo API 추가해요.
 - CORS/local auth 설정 추가해요.
 
@@ -766,7 +767,7 @@ curl -N http://127.0.0.1:41234/api/v1/runs/run_.../events \
 
 ## 데이터베이스 확장 제안
 
-현재 `session` SQLite schema에 events/turns는 있어요. Gateway에는 run과 artifact table이 추가되면 좋아요.
+현재 `session` SQLite schema에 events/turns/runs/artifacts가 있어요. 다음 단계는 artifact retention과 run/tool 자동 생성 정책을 정하면 돼요.
 
 ```sql
 CREATE TABLE runs (

@@ -271,7 +271,7 @@ func TestOpenAPISchemaContractCoversGatewayDTOs(t *testing.T) {
 
 func TestOpenAPIStatsResponseRequiresDashboardTotals(t *testing.T) {
 	required := readOpenAPISchemaRequired(t, "StatsResponse")
-	for _, field := range []string{"sessions", "turns", "events", "todos", "checkpoints", "total_runs", "runs", "total_resources", "resources"} {
+	for _, field := range []string{"sessions", "turns", "events", "todos", "checkpoints", "artifacts", "total_runs", "runs", "total_resources", "resources"} {
 		if !required[field] {
 			t.Fatalf("StatsResponse OpenAPI required에 %s 필드가 필요해요: %+v", field, sortedKeys(required))
 		}
@@ -362,6 +362,8 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "LSPDiagnosticListResponse", dto: LSPDiagnosticListResponse{}},
 		{schema: "LSPHoverResponse", dto: LSPHoverResponse{}},
 		{schema: "CheckpointListResponse", dto: CheckpointListResponse{}},
+		{schema: "ArtifactListResponse", dto: ArtifactListResponse{}},
+		{schema: "Artifact", dto: ArtifactDTO{}},
 		{schema: "ResourceListResponse", dto: ResourceListResponse{}},
 		{schema: "Resource", dto: ResourceDTO{}},
 

@@ -146,6 +146,7 @@ type StoreStats struct {
 	Events      int
 	Todos       int
 	Checkpoints int
+	Artifacts   int
 	Runs        map[string]int
 	Resources   map[string]int
 }

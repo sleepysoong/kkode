@@ -120,6 +120,9 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err := store.SaveCheckpoint(ctx, Checkpoint{ID: "cp_stats", SessionID: sess.ID, TurnID: turn.ID}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.SaveArtifact(ctx, Artifact{ID: "artifact_stats", SessionID: sess.ID, TurnID: turn.ID, Kind: "tool_output", Content: json.RawMessage(`{"text":"ok"}`)}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.SaveResource(ctx, Resource{Kind: ResourceSkill, Name: "skill"}); err != nil {
 		t.Fatal(err)
 	}
@@ -127,11 +130,59 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 {
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.Artifacts != 1 {
 		t.Fatalf("기본 stats가 이상해요: %+v", stats)
 	}
 	if stats.Runs["completed"] != 1 || stats.Resources[string(ResourceSkill)] != 1 {
 		t.Fatalf("grouped stats가 이상해요: %+v", stats)
+	}
+}
+
+func TestSQLiteStorePersistsArtifacts(t *testing.T) {
+	ctx := context.Background()
+	store := openSQLiteForTest(t)
+	sess := NewSession("/repo", "openai", "gpt-5-mini", "agent", AgentModeBuild)
+	turn := NewTurn("artifact", llm.Request{Model: "gpt-5-mini"})
+	sess.AppendTurn(turn)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveArtifact(ctx, Artifact{
+		ID:        "artifact_1",
+		SessionID: sess.ID,
+		RunID:     "run_1",
+		TurnID:    turn.ID,
+		Kind:      "tool_output",
+		Name:      "grep result",
+		MimeType:  "application/json",
+		Content:   json.RawMessage(`{"matches":1}`),
+		Metadata:  map[string]string{"tool": "file_grep"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.ID != "artifact_1" || saved.CreatedAt.IsZero() || saved.UpdatedAt.IsZero() {
+		t.Fatalf("saved artifact가 이상해요: %+v", saved)
+	}
+	loaded, err := store.LoadArtifact(ctx, "artifact_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SessionID != sess.ID || loaded.RunID != "run_1" || loaded.TurnID != turn.ID || loaded.Metadata["tool"] != "file_grep" || string(loaded.Content) != `{"matches":1}` {
+		t.Fatalf("loaded artifact가 이상해요: %+v", loaded)
+	}
+	listed, err := store.ListArtifacts(ctx, ArtifactQuery{SessionID: sess.ID, RunID: "run_1", Kind: "tool_output", Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != "artifact_1" {
+		t.Fatalf("artifact 목록이 이상해요: %+v", listed)
+	}
+	if err := store.DeleteArtifact(ctx, "artifact_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LoadArtifact(ctx, "artifact_1"); err == nil {
+		t.Fatal("deleted artifact는 다시 읽히면 안 돼요")
 	}
 }
 

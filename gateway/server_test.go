@@ -92,14 +92,16 @@ func TestGatewayAPIIndex(t *testing.T) {
 		operations[op.Name] = op
 	}
 	for name, want := range map[string]APIIndexOperationDTO{
-		"session_create":         {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
-		"file_write":             {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
-		"file_move":              {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
-		"file_restore":           {Name: "file_restore", Method: "POST", Path: "/api/v1/files/restore"},
-		"file_checkpoints_prune": {Name: "file_checkpoints_prune", Method: "POST", Path: "/api/v1/files/checkpoints/prune"},
-		"file_checkpoint_delete": {Name: "file_checkpoint_delete", Method: "DELETE", Path: "/api/v1/files/checkpoints/{checkpoint_id}"},
-		"run_cancel":             {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
-		"lsp_hover":              {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
+		"session_create":          {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
+		"file_write":              {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
+		"file_move":               {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
+		"file_restore":            {Name: "file_restore", Method: "POST", Path: "/api/v1/files/restore"},
+		"file_checkpoints_prune":  {Name: "file_checkpoints_prune", Method: "POST", Path: "/api/v1/files/checkpoints/prune"},
+		"file_checkpoint_delete":  {Name: "file_checkpoint_delete", Method: "DELETE", Path: "/api/v1/files/checkpoints/{checkpoint_id}"},
+		"session_artifact_create": {Name: "session_artifact_create", Method: "POST", Path: "/api/v1/sessions/{session_id}/artifacts"},
+		"artifact_delete":         {Name: "artifact_delete", Method: "DELETE", Path: "/api/v1/artifacts/{artifact_id}"},
+		"run_cancel":              {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
+		"lsp_hover":               {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
 	} {
 		if operations[name] != want {
 			t.Fatalf("API index operation %s = %+v, want %+v", name, operations[name], want)
@@ -144,6 +146,7 @@ func TestGatewayMethodNotAllowedIncludesAllowHeader(t *testing.T) {
 		{name: "prompt render", method: http.MethodGet, path: "/api/v1/prompts/default/render", allow: "POST"},
 		{name: "todo item", method: http.MethodPatch, path: "/api/v1/sessions/sess_1/todos/todo_1", allow: "DELETE"},
 		{name: "checkpoint item", method: http.MethodPatch, path: "/api/v1/sessions/sess_1/checkpoints/cp_1", allow: "GET"},
+		{name: "artifact item", method: http.MethodPatch, path: "/api/v1/artifacts/artifact_1", allow: "GET, DELETE"},
 		{name: "session detail", method: http.MethodPost, path: "/api/v1/sessions/sess_1", allow: "GET"},
 		{name: "session fork", method: http.MethodGet, path: "/api/v1/sessions/sess_1/fork", allow: "POST"},
 		{name: "run preview", method: http.MethodGet, path: "/api/v1/runs/preview", allow: "POST"},
@@ -5121,6 +5124,82 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	}
 }
 
+func TestGatewayCreatesListsReadsAndDeletesArtifacts(t *testing.T) {
+	store := openTestStore(t)
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	turn := session.NewTurn("artifact 요청", llm.Request{Model: "gpt"})
+	turn.ID = "turn_artifact"
+	sess.AppendTurn(turn)
+	if err := store.CreateSession(context.Background(), sess); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, store, "")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/artifacts", bytes.NewBufferString(`{"id":"artifact_1","turn_id":"turn_artifact","run_id":"run_1","kind":"tool_output","name":"grep","mime_type":"application/json","content":{"matches":1},"metadata":{"tool":"file_grep"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var created ArtifactDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.ID != "artifact_1" || created.SessionID != sess.ID || created.TurnID != "turn_artifact" || created.ContentBytes == 0 || created.Metadata["tool"] != "file_grep" {
+		t.Fatalf("artifact 생성 응답이 이상해요: %+v", created)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/artifacts", bytes.NewBufferString(`{"turn_id":"missing","kind":"tool_output","content":{"bad":true}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_artifact") {
+		t.Fatalf("없는 turn artifact는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/artifacts?limit=1&kind=tool_output&run_id=run_1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var listed ArtifactListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Artifacts) != 1 || listed.Artifacts[0].ID != "artifact_1" || listed.Limit != 1 {
+		t.Fatalf("artifact 목록이 이상해요: %+v", listed)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/artifact_1?max_content_bytes=4", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got ArtifactDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "artifact_1" || !got.ContentTruncated || got.ContentBytes == 0 {
+		t.Fatalf("artifact 상세 truncation이 이상해요: %+v", got)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/artifacts/artifact_1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/artifact_1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("deleted artifact는 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGatewayExportsSessionBundle(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)
@@ -5134,6 +5213,9 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_export", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"복구해요"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveArtifact(ctx, session.Artifact{ID: "artifact_export", SessionID: sess.ID, TurnID: turn.ID, Kind: "tool_output", Name: "result", Content: json.RawMessage(`{"text":"ok"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	mcpResource, err := store.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp","headers":{"Authorization":"Bearer secret-token"}}`)})
@@ -5178,13 +5260,13 @@ func TestGatewayExportsSessionBundle(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
 		t.Fatal(err)
 	}
-	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || exported.RawSession == nil || exported.RawSession.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 || len(exported.Resources) != 3 {
+	if exported.FormatVersion != sessionExportFormatVersion || exported.Session.ID != sess.ID || exported.RawSession == nil || exported.RawSession.ID != sess.ID || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Todos) != 1 || len(exported.Checkpoints) != 1 || len(exported.Artifacts) != 1 || len(exported.Runs) != 1 || len(exported.Resources) != 3 {
 		t.Fatalf("session export가 이상해요: %+v", exported)
 	}
-	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Todos != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Runs != 1 || exported.Counts.Resources != 3 {
+	if exported.Counts.Turns != 1 || exported.Counts.Events != 1 || exported.Counts.Todos != 1 || exported.Counts.Checkpoints != 1 || exported.Counts.Artifacts != 1 || exported.Counts.Runs != 1 || exported.Counts.Resources != 3 {
 		t.Fatalf("session export counts가 이상해요: %+v", exported.Counts)
 	}
-	if exported.Turns[0].ResponseText != "ok" || exported.RawSession.Turns[0].Response.Output[0].Content != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Runs[0].ID != "run_export" || !hasResourceDTO(exported.Resources, mcpResource.ID) || !hasResourceDTO(exported.Resources, skillResource.ID) || !hasResourceDTO(exported.Resources, subagentResource.ID) {
+	if exported.Turns[0].ResponseText != "ok" || exported.RawSession.Turns[0].Response.Output[0].Content != "ok" || exported.Checkpoints[0].ID != "cp_export" || exported.Artifacts[0].ID != "artifact_export" || exported.Runs[0].ID != "run_export" || !hasResourceDTO(exported.Resources, mcpResource.ID) || !hasResourceDTO(exported.Resources, skillResource.ID) || !hasResourceDTO(exported.Resources, subagentResource.ID) {
 		t.Fatalf("session export 상세가 이상해요: %+v", exported)
 	}
 }
@@ -5209,6 +5291,9 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 		if _, err := store.SaveRun(ctx, session.Run{ID: fmt.Sprintf("run_bounded_%d", i), SessionID: sess.ID, Status: "completed", Prompt: turn.Prompt}); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := store.SaveArtifact(ctx, session.Artifact{ID: fmt.Sprintf("artifact_bounded_%d", i), SessionID: sess.ID, TurnID: turn.ID, Kind: "tool_output", Content: json.RawMessage(`{"summary":"bounded"}`)}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	srv, err := New(Config{
 		Store: store,
@@ -5227,7 +5312,7 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?include_raw=false&turn_limit=1&event_limit=1&checkpoint_limit=1&run_limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/export?include_raw=false&turn_limit=1&event_limit=1&checkpoint_limit=1&artifact_limit=1&run_limit=1", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -5237,7 +5322,7 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
 		t.Fatal(err)
 	}
-	if exported.RawSession != nil || exported.RawSessionIncluded || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Checkpoints) != 1 || len(exported.Runs) != 1 || exported.TurnLimit != 1 || exported.EventLimit != 1 || exported.CheckpointLimit != 1 || exported.RunLimit != 1 || !exported.CheckpointsTruncated || !exported.RunsTruncated || !exported.ResultTruncated {
+	if exported.RawSession != nil || exported.RawSessionIncluded || len(exported.Turns) != 1 || len(exported.Events) != 1 || len(exported.Checkpoints) != 1 || len(exported.Artifacts) != 1 || len(exported.Runs) != 1 || exported.TurnLimit != 1 || exported.EventLimit != 1 || exported.CheckpointLimit != 1 || exported.ArtifactLimit != 1 || exported.RunLimit != 1 || !exported.CheckpointsTruncated || !exported.ArtifactsTruncated || !exported.RunsTruncated || !exported.ResultTruncated {
 		t.Fatalf("bounded session export preview가 이상해요: %+v", exported)
 	}
 
@@ -5252,6 +5337,8 @@ func TestGatewayExportsBoundedSessionBundlePreview(t *testing.T) {
 		{name: "bad event limit", query: "event_limit=abc", want: "event_limit"},
 		{name: "negative checkpoint limit", query: "checkpoint_limit=-1", want: "checkpoint_limit"},
 		{name: "bad checkpoint limit", query: "checkpoint_limit=abc", want: "checkpoint_limit"},
+		{name: "negative artifact limit", query: "artifact_limit=-1", want: "artifact_limit"},
+		{name: "bad artifact limit", query: "artifact_limit=abc", want: "artifact_limit"},
 		{name: "negative run limit", query: "run_limit=-1", want: "run_limit"},
 		{name: "bad run limit", query: "run_limit=abc", want: "run_limit"},
 		{name: "bad redact", query: "redact=maybe", want: "redact"},
@@ -5281,6 +5368,9 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err := sourceStore.SaveCheckpoint(ctx, session.Checkpoint{ID: "cp_import", SessionID: sess.ID, TurnID: turn.ID, CreatedAt: time.Now().UTC(), Payload: json.RawMessage(`{"summary":"옮겨요"}`)}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := sourceStore.SaveArtifact(ctx, session.Artifact{ID: "artifact_import", SessionID: sess.ID, TurnID: turn.ID, Kind: "tool_output", Content: json.RawMessage(`{"text":"옮겨요"}`)}); err != nil {
+		t.Fatal(err)
+	}
 	mcpResource, err := sourceStore.SaveResource(ctx, session.Resource{Kind: session.ResourceMCPServer, Name: "context7", Enabled: true, Config: []byte(`{"kind":"http","url":"https://mcp.context7.com/mcp"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -5294,7 +5384,7 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := json.Marshal(SessionImportRequest{FormatVersion: exported.FormatVersion, RawSession: exported.RawSession, Checkpoints: exported.Checkpoints, Runs: exported.Runs, Resources: exported.Resources, NewSessionID: "sess_imported"})
+	body, err := json.Marshal(SessionImportRequest{FormatVersion: exported.FormatVersion, RawSession: exported.RawSession, Checkpoints: exported.Checkpoints, Artifacts: exported.Artifacts, Runs: exported.Runs, Resources: exported.Resources, NewSessionID: "sess_imported"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5309,7 +5399,7 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &imported); err != nil {
 		t.Fatal(err)
 	}
-	if imported.Session.ID != "sess_imported" || !imported.RewrittenSessionID || imported.OriginalSessionID != sess.ID || imported.Counts.Turns != 1 || imported.Counts.Events != 1 || imported.Counts.Checkpoints != 1 || imported.Counts.Runs != 1 || imported.Counts.Resources != 1 {
+	if imported.Session.ID != "sess_imported" || !imported.RewrittenSessionID || imported.OriginalSessionID != sess.ID || imported.Counts.Turns != 1 || imported.Counts.Events != 1 || imported.Counts.Checkpoints != 1 || imported.Counts.Artifacts != 1 || imported.Counts.Runs != 1 || imported.Counts.Resources != 1 {
 		t.Fatalf("import 응답이 이상해요: %+v", imported)
 	}
 	loaded, err := targetStore.LoadSession(ctx, "sess_imported")
@@ -5322,6 +5412,10 @@ func TestGatewayImportsSessionBundleWithNewID(t *testing.T) {
 	checkpoint, err := targetStore.LoadCheckpoint(ctx, "sess_imported", "cp_import")
 	if err != nil || checkpoint.SessionID != "sess_imported" {
 		t.Fatalf("import된 checkpoint가 이상해요: %+v err=%v", checkpoint, err)
+	}
+	artifact, err := targetStore.LoadArtifact(ctx, "artifact_import")
+	if err != nil || artifact.SessionID != "sess_imported" || artifact.TurnID != turn.ID {
+		t.Fatalf("import된 artifact가 이상해요: %+v err=%v", artifact, err)
 	}
 	run, err := targetStore.LoadRun(ctx, "run_import")
 	if err != nil || run.SessionID != "sess_imported" || run.EventsURL != runEventsURL("run_import") {
@@ -5453,6 +5547,42 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 	}
 	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("checkpoint id preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
+	}
+	body, err = json.Marshal(SessionImportRequest{
+		FormatVersion: sessionExportFormatVersion,
+		RawSession:    sess,
+		Artifacts:     []ArtifactDTO{{ID: "artifact_bad_turn", TurnID: "turn_missing", Kind: "tool_output", Content: json.RawMessage(`{"summary":"bad"}`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "artifact turn_id") {
+		t.Fatalf("invalid artifact turn import는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("artifact turn preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
+	}
+	body, err = json.Marshal(SessionImportRequest{
+		FormatVersion: sessionExportFormatVersion,
+		RawSession:    sess,
+		Artifacts:     []ArtifactDTO{{ID: "bad id", TurnID: turn.ID, Kind: "tool_output", Content: json.RawMessage(`{"summary":"bad"}`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "artifact id") {
+		t.Fatalf("invalid artifact id import는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := store.LoadSession(ctx, sess.ID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("artifact id preflight 실패 후 session이 저장되면 안 돼요: err=%v", err)
 	}
 	for _, tc := range []struct {
 		name string

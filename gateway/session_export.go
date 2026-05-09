@@ -37,11 +37,14 @@ type SessionExportResponse struct {
 	TurnLimit            int                    `json:"turn_limit,omitempty"`
 	EventLimit           int                    `json:"event_limit,omitempty"`
 	CheckpointLimit      int                    `json:"checkpoint_limit,omitempty"`
+	ArtifactLimit        int                    `json:"artifact_limit,omitempty"`
 	RunLimit             int                    `json:"run_limit,omitempty"`
 	CheckpointsTruncated bool                   `json:"checkpoints_truncated,omitempty"`
+	ArtifactsTruncated   bool                   `json:"artifacts_truncated,omitempty"`
 	RunsTruncated        bool                   `json:"runs_truncated,omitempty"`
 	ResultTruncated      bool                   `json:"result_truncated,omitempty"`
 	Checkpoints          []CheckpointDTO        `json:"checkpoints,omitempty"`
+	Artifacts            []ArtifactDTO          `json:"artifacts,omitempty"`
 	Runs                 []RunDTO               `json:"runs,omitempty"`
 	Resources            []ResourceDTO          `json:"resources,omitempty"`
 }
@@ -52,6 +55,7 @@ type SessionExportCountsDTO struct {
 	Events      int `json:"events"`
 	Todos       int `json:"todos"`
 	Checkpoints int `json:"checkpoints"`
+	Artifacts   int `json:"artifacts"`
 	Runs        int `json:"runs"`
 	Resources   int `json:"resources"`
 }
@@ -61,6 +65,7 @@ type SessionImportRequest struct {
 	FormatVersion string           `json:"format_version,omitempty"`
 	RawSession    *session.Session `json:"raw_session"`
 	Checkpoints   []CheckpointDTO  `json:"checkpoints,omitempty"`
+	Artifacts     []ArtifactDTO    `json:"artifacts,omitempty"`
 	Runs          []RunDTO         `json:"runs,omitempty"`
 	Resources     []ResourceDTO    `json:"resources,omitempty"`
 	NewSessionID  string           `json:"new_session_id,omitempty"`
@@ -108,6 +113,10 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 	if !ok {
 		return
 	}
+	artifactLimit, ok := queryNonNegativeLimitParam(w, r, "artifact_limit", 200, 5000, "invalid_session_export")
+	if !ok {
+		return
+	}
 	runLimit, ok := queryNonNegativeLimitParam(w, r, "run_limit", 200, 5000, "invalid_session_export")
 	if !ok {
 		return
@@ -125,6 +134,7 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		TurnLimit:          turnLimit,
 		EventLimit:         eventLimit,
 		CheckpointLimit:    checkpointLimit,
+		ArtifactLimit:      artifactLimit,
 		RunLimit:           runLimit,
 		ResultTruncated:    turnsTruncated || eventsTruncated,
 	}
@@ -141,6 +151,15 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		checkpoints, _, resp.CheckpointsTruncated = trimExportSlice(checkpoints, checkpointLimit)
 		resp.Checkpoints = checkpointDTOs(checkpoints)
 	}
+	if store := s.artifactStore(); store != nil {
+		artifacts, err := store.ListArtifacts(r.Context(), session.ArtifactQuery{SessionID: sessionID, Limit: artifactLimit + 1})
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "export_artifacts_failed", err.Error())
+			return
+		}
+		artifacts, _, resp.ArtifactsTruncated = trimExportSlice(artifacts, artifactLimit)
+		resp.Artifacts = artifactDTOs(artifacts)
+	}
 	if s.cfg.RunLister != nil {
 		runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: sessionID, Limit: runLimit + 1})
 		if err != nil {
@@ -150,14 +169,14 @@ func (s *Server) exportSession(w http.ResponseWriter, r *http.Request, sessionID
 		runs, _, resp.RunsTruncated = trimExportSlice(runs, runLimit)
 		resp.Runs = runs
 	}
-	resp.ResultTruncated = resp.ResultTruncated || resp.CheckpointsTruncated || resp.RunsTruncated
+	resp.ResultTruncated = resp.ResultTruncated || resp.CheckpointsTruncated || resp.ArtifactsTruncated || resp.RunsTruncated
 	if resources, err := s.exportReferencedResources(r.Context(), resp.Runs); err != nil {
 		writeError(w, r, http.StatusInternalServerError, "export_resources_failed", err.Error())
 		return
 	} else {
 		resp.Resources = resources
 	}
-	resp.Counts = SessionExportCountsDTO{Turns: len(resp.Turns), Events: len(resp.Events), Todos: len(resp.Todos), Checkpoints: len(resp.Checkpoints), Runs: len(resp.Runs), Resources: len(resp.Resources)}
+	resp.Counts = SessionExportCountsDTO{Turns: len(resp.Turns), Events: len(resp.Events), Todos: len(resp.Todos), Checkpoints: len(resp.Checkpoints), Artifacts: len(resp.Artifacts), Runs: len(resp.Runs), Resources: len(resp.Resources)}
 	if redacted {
 		redactSessionExport(&resp)
 	}
@@ -205,6 +224,10 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	artifactStore, artifacts, ok := s.prepareImportArtifacts(w, r, imported, req.Artifacts)
+	if !ok {
+		return
+	}
 	resourceStore, resources, ok := s.prepareImportResources(w, r, req.Resources)
 	if !ok {
 		return
@@ -225,6 +248,15 @@ func (s *Server) importSession(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			counts.Checkpoints++
+		}
+	}
+	if len(artifacts) > 0 {
+		for _, artifact := range artifacts {
+			if _, err := artifactStore.SaveArtifact(r.Context(), artifact); err != nil {
+				writeError(w, r, http.StatusInternalServerError, "import_artifact_failed", err.Error())
+				return
+			}
+			counts.Artifacts++
 		}
 	}
 	if len(resources) > 0 {
@@ -281,6 +313,45 @@ func (s *Server) prepareImportCheckpoints(w http.ResponseWriter, r *http.Request
 		checkpoints = append(checkpoints, cp)
 	}
 	return store, checkpoints, true
+}
+
+func (s *Server) prepareImportArtifacts(w http.ResponseWriter, r *http.Request, imported session.Session, items []ArtifactDTO) (session.ArtifactStore, []session.Artifact, bool) {
+	if len(items) == 0 {
+		return nil, nil, true
+	}
+	store := s.artifactStore()
+	if store == nil {
+		writeError(w, r, http.StatusNotImplemented, "artifact_store_missing", "이 gateway에는 artifact store가 연결되지 않았어요")
+		return nil, nil, false
+	}
+	artifacts := make([]session.Artifact, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		item.ID = strings.TrimSpace(item.ID)
+		item.RunID = strings.TrimSpace(item.RunID)
+		item.TurnID = strings.TrimSpace(item.TurnID)
+		item.Kind = strings.TrimSpace(item.Kind)
+		item.Name = strings.TrimSpace(item.Name)
+		item.MimeType = strings.TrimSpace(item.MimeType)
+		if err := validateArtifactDTO(item); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_import", err.Error())
+			return nil, nil, false
+		}
+		if item.ID != "" {
+			if seen[item.ID] {
+				writeError(w, r, http.StatusBadRequest, "invalid_import", "artifact id가 중복됐어요")
+				return nil, nil, false
+			}
+			seen[item.ID] = true
+		}
+		if item.TurnID != "" && !sessionHasTurn(imported, item.TurnID) {
+			writeError(w, r, http.StatusBadRequest, "invalid_import", "artifact turn_id가 raw_session에 없어요")
+			return nil, nil, false
+		}
+		artifact := artifactFromDTO(item, imported.ID)
+		artifacts = append(artifacts, artifact)
+	}
+	return store, artifacts, true
 }
 
 func (s *Server) prepareImportResources(w http.ResponseWriter, r *http.Request, items []ResourceDTO) (session.ResourceStore, []session.Resource, bool) {
@@ -675,6 +746,14 @@ func checkpointFromDTO(dto CheckpointDTO, sessionID string) session.Checkpoint {
 	return cp
 }
 
+func artifactDTOs(artifacts []session.Artifact) []ArtifactDTO {
+	out := make([]ArtifactDTO, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		out = append(out, toArtifactDTO(artifact, 0))
+	}
+	return out
+}
+
 func redactSessionExport(resp *SessionExportResponse) {
 	resp.Redacted = true
 	resp.RawSession = nil
@@ -699,6 +778,11 @@ func redactSessionExport(resp *SessionExportResponse) {
 	}
 	for i := range resp.Checkpoints {
 		resp.Checkpoints[i].Payload = redactRawJSON(resp.Checkpoints[i].Payload)
+	}
+	for i := range resp.Artifacts {
+		resp.Artifacts[i].Name = llm.RedactSecrets(resp.Artifacts[i].Name)
+		resp.Artifacts[i].Content = redactRawJSON(resp.Artifacts[i].Content)
+		resp.Artifacts[i].Metadata = redactStringMap(resp.Artifacts[i].Metadata)
 	}
 	for i := range resp.Runs {
 		resp.Runs[i].Prompt = llm.RedactSecrets(resp.Runs[i].Prompt)

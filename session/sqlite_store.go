@@ -160,6 +160,22 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL,
 			payload_json BLOB
 		);`,
+		`CREATE TABLE IF NOT EXISTS artifacts (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+			run_id TEXT NOT NULL DEFAULT '',
+			turn_id TEXT NOT NULL DEFAULT '',
+			kind TEXT NOT NULL,
+			name TEXT NOT NULL DEFAULT '',
+			mime_type TEXT NOT NULL DEFAULT '',
+			content_json BLOB NOT NULL DEFAULT 'null',
+			metadata_json BLOB NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_artifacts_session_updated ON artifacts(session_id, updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_artifacts_run_updated ON artifacts(run_id, updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_artifacts_turn_updated ON artifacts(turn_id, updated_at);`,
 		`CREATE TABLE IF NOT EXISTS resources (
 			id TEXT NOT NULL,
 			kind TEXT NOT NULL,
@@ -536,6 +552,7 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		{query: `SELECT COUNT(1) FROM events`, out: &stats.Events},
 		{query: `SELECT COUNT(1) FROM todos`, out: &stats.Todos},
 		{query: `SELECT COUNT(1) FROM checkpoints`, out: &stats.Checkpoints},
+		{query: `SELECT COUNT(1) FROM artifacts`, out: &stats.Artifacts},
 	}
 	for _, item := range counts {
 		if err := s.db.QueryRowContext(ctx, item.query).Scan(item.out); err != nil {
@@ -763,6 +780,144 @@ func scanCheckpoint(scanner checkpointScanner) (Checkpoint, error) {
 		cp.Payload = append([]byte(nil), payload...)
 	}
 	return cp, nil
+}
+
+func (s *SQLiteStore) SaveArtifact(ctx context.Context, artifact Artifact) (Artifact, error) {
+	normalizeArtifact(&artifact)
+	metadata, err := json.Marshal(artifact.Metadata)
+	if err != nil {
+		return artifact, err
+	}
+	content := artifact.Content
+	if len(content) == 0 {
+		content = json.RawMessage(`null`)
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO artifacts (id, session_id, run_id, turn_id, kind, name, mime_type, content_json, metadata_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			session_id=excluded.session_id,
+			run_id=excluded.run_id,
+			turn_id=excluded.turn_id,
+			kind=excluded.kind,
+			name=excluded.name,
+			mime_type=excluded.mime_type,
+			content_json=excluded.content_json,
+			metadata_json=excluded.metadata_json,
+			updated_at=excluded.updated_at`,
+		artifact.ID, artifact.SessionID, artifact.RunID, artifact.TurnID, artifact.Kind, artifact.Name, artifact.MimeType, []byte(content), metadata, formatTime(artifact.CreatedAt), formatTime(artifact.UpdatedAt))
+	return artifact, err
+}
+
+func (s *SQLiteStore) LoadArtifact(ctx context.Context, id string) (Artifact, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, session_id, run_id, turn_id, kind, name, mime_type, content_json, metadata_json, created_at, updated_at FROM artifacts WHERE id = ?`, id)
+	return scanArtifact(row)
+}
+
+func (s *SQLiteStore) ListArtifacts(ctx context.Context, q ArtifactQuery) ([]Artifact, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `SELECT id, session_id, run_id, turn_id, kind, name, mime_type, content_json, metadata_json, created_at, updated_at FROM artifacts`
+	args := []any{}
+	where := []string{}
+	if q.SessionID != "" {
+		where = append(where, `session_id = ?`)
+		args = append(args, q.SessionID)
+	}
+	if q.RunID != "" {
+		where = append(where, `run_id = ?`)
+		args = append(args, q.RunID)
+	}
+	if q.TurnID != "" {
+		where = append(where, `turn_id = ?`)
+		args = append(args, q.TurnID)
+	}
+	if q.Kind != "" {
+		where = append(where, `kind = ?`)
+		args = append(args, q.Kind)
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, limit)
+	if q.Offset > 0 {
+		query += ` OFFSET ?`
+		args = append(args, q.Offset)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Artifact
+	for rows.Next() {
+		artifact, err := scanArtifact(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, artifact)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteArtifact(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM artifacts WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if count, err := res.RowsAffected(); err == nil && count == 0 {
+		return fmt.Errorf("artifact not found: %s", id)
+	}
+	return nil
+}
+
+type artifactScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanArtifact(scanner artifactScanner) (Artifact, error) {
+	var artifact Artifact
+	var content, metadata []byte
+	var created, updated string
+	if err := scanner.Scan(&artifact.ID, &artifact.SessionID, &artifact.RunID, &artifact.TurnID, &artifact.Kind, &artifact.Name, &artifact.MimeType, &content, &metadata, &created, &updated); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Artifact{}, fmt.Errorf("artifact not found")
+		}
+		return Artifact{}, err
+	}
+	if len(content) > 0 && string(content) != "null" {
+		artifact.Content = append(json.RawMessage(nil), content...)
+	}
+	if len(metadata) > 0 {
+		if err := json.Unmarshal(metadata, &artifact.Metadata); err != nil {
+			return Artifact{}, err
+		}
+	}
+	if artifact.Metadata == nil {
+		artifact.Metadata = map[string]string{}
+	}
+	artifact.CreatedAt = parseTime(created)
+	artifact.UpdatedAt = parseTime(updated)
+	return artifact, nil
+}
+
+func normalizeArtifact(artifact *Artifact) {
+	now := time.Now().UTC()
+	if artifact.ID == "" {
+		artifact.ID = NewID("artifact")
+	}
+	if artifact.Kind == "" {
+		artifact.Kind = "blob"
+	}
+	if artifact.Metadata == nil {
+		artifact.Metadata = map[string]string{}
+	}
+	if artifact.CreatedAt.IsZero() {
+		artifact.CreatedAt = now
+	}
+	artifact.UpdatedAt = now
 }
 
 func (s *SQLiteStore) SaveTodos(ctx context.Context, sessionID string, todos []Todo) error {

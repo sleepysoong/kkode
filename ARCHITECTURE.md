@@ -673,6 +673,8 @@ Provider live smoke의 `max_result_bytes`를 생략해도 결과 text와 streami
 
 OmniRoute A2A helper는 artifact content를 합칠 때 최대 8388608 byte envelope 안에서만 text를 보존해서 bounded HTTP body를 다시 unbounded provider text로 복제하지 않아요.
 
+Gateway artifact API는 큰 tool output, diff, generated preview를 session event payload와 분리해서 SQLite `artifacts` table에 저장해요. `session.ArtifactStore`는 `SaveArtifact`, `LoadArtifact`, `ListArtifacts`, `DeleteArtifact`만 노출하고, gateway는 `GET/POST /api/v1/sessions/{session_id}/artifacts`, `GET/DELETE /api/v1/artifacts/{artifact_id}`로 session/run/turn scoped JSON content를 다뤄요. List 응답은 metadata와 `content_bytes`만 반환하고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해요. Session export/import도 `artifacts`와 `artifact_limit`/`artifacts_truncated`를 포함해서 복구 bundle이 산출물을 잃지 않게 해요.
+
 `web_fetch` tool argument의 `max_bytes`는 `WebConfig.MaxBytes`로 정해진 configured envelope를 넘으면 거부해서 agent run과 direct tool call 모두 배포자가 정한 web body 상한을 우회하지 못하게 해요. body truncation은 UTF-8 안전 byte 경계를 보존해서 외부 adapter가 한글/이모지 web 응답을 깨진 문자열로 받지 않게 해요.
 
 MCP prompt/tool 직접 검증의 `max_message_bytes`와 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한해서 저장된 stdio/http MCP 서버 응답도 bounded adapter envelope로 반환해요. HTTP MCP body reader도 명시 상한이 없으면 8388608 byte envelope를 기본으로 써요.
