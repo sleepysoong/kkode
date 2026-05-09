@@ -614,6 +614,11 @@ paths:
             type: integer
             default: 20
             maximum: 100
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: git log 결과예요.
@@ -3576,9 +3581,13 @@ components:
             $ref: '#/components/schemas/GitLogEntry'
         limit:
           type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
         commits_truncated:
           type: boolean
-          description: limit 때문에 commit 목록이 잘렸는지 알려줘요.
+          description: limit/offset page 때문에 commit 목록이 잘렸는지 알려줘요.
     GitLogEntry:
       type: object
       required: [hash, subject, raw]

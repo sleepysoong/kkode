@@ -4410,15 +4410,30 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &log); err != nil {
 		t.Fatal(err)
 	}
-	if len(log.Commits) != 1 || log.Commits[0].Subject != "second" || log.Limit != 1 || !log.CommitsTruncated {
+	if len(log.Commits) != 1 || log.Commits[0].Subject != "second" || log.Limit != 1 || log.Offset != 0 || log.NextOffset != 1 || !log.CommitsTruncated {
 		t.Fatalf("git log 응답이 이상해요: %+v", log)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc"} {
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/log?project_root="+url.QueryEscape(root)+"&limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("log offset status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	log = GitLogResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &log); err != nil {
+		t.Fatal(err)
+	}
+	if len(log.Commits) != 1 || log.Commits[0].Subject != "initial" || log.Limit != 1 || log.Offset != 1 || log.NextOffset != 0 || log.CommitsTruncated {
+		t.Fatalf("git log offset 응답이 이상해요: %+v", log)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/git/log?project_root="+url.QueryEscape(root)+"&"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 git log limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 git log query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 }

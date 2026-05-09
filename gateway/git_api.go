@@ -46,6 +46,8 @@ type GitLogResponse struct {
 	ProjectRoot      string           `json:"project_root"`
 	Commits          []GitLogEntryDTO `json:"commits"`
 	Limit            int              `json:"limit,omitempty"`
+	Offset           int              `json:"offset,omitempty"`
+	NextOffset       int              `json:"next_offset,omitempty"`
 	CommitsTruncated bool             `json:"commits_truncated,omitempty"`
 }
 
@@ -138,13 +140,17 @@ func (s *Server) gitLog(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "-n", fmt.Sprint(limit + 1)}, 512*1024)
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_git_log")
+	if !ok {
+		return
+	}
+	out, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "--skip", fmt.Sprint(offset), "-n", fmt.Sprint(limit + 1)}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_log_failed", err.Error())
 		return
 	}
 	commits, truncated := limitGitLog(parseGitLog(out), limit)
-	writeJSON(w, GitLogResponse{ProjectRoot: root, Commits: commits, Limit: limit, CommitsTruncated: truncated})
+	writeJSON(w, GitLogResponse{ProjectRoot: root, Commits: commits, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, len(commits), truncated), CommitsTruncated: truncated})
 }
 
 func parseGitStatus(root string, out string) GitStatusResponse {
