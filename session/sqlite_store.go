@@ -643,24 +643,7 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]Sessi
 	}
 	query := `SELECT s.id, s.project_root, s.provider_name, s.model, s.agent_name, s.mode, s.summary, s.updated_at, COUNT(t.id) AS turn_count
 		FROM sessions s LEFT JOIN turns t ON t.session_id = s.id`
-	args := []any{}
-	where := []string{}
-	if q.ProjectRoot != "" {
-		where = append(where, `s.project_root = ?`)
-		args = append(args, q.ProjectRoot)
-	}
-	if q.ProviderName != "" {
-		where = append(where, `s.provider_name = ?`)
-		args = append(args, q.ProviderName)
-	}
-	if q.Model != "" {
-		where = append(where, `s.model = ?`)
-		args = append(args, q.Model)
-	}
-	if q.Mode != "" {
-		where = append(where, `s.mode = ?`)
-		args = append(args, string(q.Mode))
-	}
+	where, args := sessionQueryWhere(q)
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
@@ -688,6 +671,39 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]Sessi
 		out = append(out, ss)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteStore) CountSessions(ctx context.Context, q SessionQuery) (int, error) {
+	query := `SELECT COUNT(*) FROM sessions s`
+	where, args := sessionQueryWhere(q)
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func sessionQueryWhere(q SessionQuery) ([]string, []any) {
+	args := []any{}
+	where := []string{}
+	if q.ProjectRoot != "" {
+		where = append(where, `s.project_root = ?`)
+		args = append(args, q.ProjectRoot)
+	}
+	if q.ProviderName != "" {
+		where = append(where, `s.provider_name = ?`)
+		args = append(args, q.ProviderName)
+	}
+	if q.Model != "" {
+		where = append(where, `s.model = ?`)
+		args = append(args, q.Model)
+	}
+	if q.Mode != "" {
+		where = append(where, `s.mode = ?`)
+		args = append(args, string(q.Mode))
+	}
+	return where, args
 }
 
 func (s *SQLiteStore) AppendEvent(ctx context.Context, ev Event) error {

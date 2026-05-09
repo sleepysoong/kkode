@@ -1115,7 +1115,20 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_session_list", "mode는 build, plan, ask 중 하나여야 해요")
 		return
 	}
-	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: projectRoot, ProviderName: provider, Model: model, Mode: mode, Limit: limit + 1, Offset: offset})
+	query := session.SessionQuery{ProjectRoot: projectRoot, ProviderName: provider, Model: model, Mode: mode}
+	totalSessions := 0
+	if counter, ok := s.cfg.Store.(session.SessionCounter); ok {
+		total, err := counter.CountSessions(r.Context(), query)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "count_sessions_failed", err.Error())
+			return
+		}
+		totalSessions = total
+	}
+	pageQuery := query
+	pageQuery.Limit = limit + 1
+	pageQuery.Offset = offset
+	sessions, err := s.cfg.Store.ListSessions(r.Context(), pageQuery)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_sessions_failed", err.Error())
 		return
@@ -1125,7 +1138,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	for _, summary := range sessions {
 		out = append(out, toSessionSummaryDTO(summary))
 	}
-	writeJSON(w, SessionListResponse{Sessions: out, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+	writeJSON(w, SessionListResponse{Sessions: out, TotalSessions: totalSessions, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {

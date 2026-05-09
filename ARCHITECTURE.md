@@ -751,6 +751,8 @@ func Fork(ctx context.Context, store Store, sourceID string, atTurnID string) (*
 func TodoTools(store todoSaver, sessionID string) ([]llm.Tool, llm.ToolRegistry)
 ```
 
+SQLiteStore는 선택 interface인 `CountSessions`도 제공해서 session list API가 `project_root`/provider/model/mode 필터와 같은 조건의 `total_sessions`를 함께 내려요.
+
 `kruntime.Runtime`은 prompt 실행 전에 기존 turn을 message history로 붙이고, todo tool을 추가하고, 실행 뒤에는 turn/event/todo를 SQLite에 저장해요.
 
 ```go

@@ -377,7 +377,7 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if len(listed.Sessions) != 1 || listed.Sessions[0].ID != created.ID {
 		t.Fatalf("unexpected list: %+v", listed)
 	}
-	if listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
+	if listed.TotalSessions != 1 || listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("session list metadata가 이상해요: %+v", listed)
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?project_root="+url.QueryEscape(" /tmp/repo ")+"&limit=10", nil)
@@ -410,6 +410,9 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if len(listed.Sessions) != 1 || listed.Sessions[0].ID != extra.ID {
 		t.Fatalf("session provider/model/mode filter가 이상해요: %+v", listed)
 	}
+	if listed.TotalSessions != 1 {
+		t.Fatalf("session provider/model/mode total이 이상해요: %+v", listed)
+	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?limit=1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -420,7 +423,7 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Sessions) != 1 || !listed.ResultTruncated || listed.Limit != 1 {
+	if len(listed.Sessions) != 1 || listed.TotalSessions != 2 || !listed.ResultTruncated || listed.Limit != 1 {
 		t.Fatalf("session list truncation metadata가 이상해요: %+v", listed)
 	}
 	if listed.NextOffset != 1 {
@@ -440,7 +443,7 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if len(listed.Sessions) != 1 || listed.Sessions[0].ID == firstPageID {
 		t.Fatalf("session offset page가 이상해요: %+v", listed)
 	}
-	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
+	if listed.TotalSessions != 2 || listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("session offset metadata가 이상해요: %+v", listed)
 	}
 	longProvider := strings.Repeat("p", maxRunProviderModelBytes+1)

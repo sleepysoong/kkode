@@ -210,6 +210,10 @@ type Store interface {
 	Close() error
 }
 
+type SessionCounter interface {
+	CountSessions(ctx context.Context, q SessionQuery) (int, error)
+}
+
 type HealthChecker interface {
 	Ping(ctx context.Context) error
 }
