@@ -455,22 +455,13 @@ func validateImportedRunDTO(run RunDTO) error {
 	if run.Status == "" {
 		return fmt.Errorf("run status가 필요해요")
 	}
-	if !validImportedRunStatus(run.Status) {
+	if !isValidRunStatus(run.Status) {
 		return fmt.Errorf("run status %q는 지원하지 않아요", run.Status)
 	}
 	if err := validateRunRequestShape(RunStartRequest{Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MCPServers: run.MCPServers, Skills: run.Skills, Subagents: run.Subagents, EnabledTools: run.EnabledTools, DisabledTools: run.DisabledTools, ContextBlocks: run.ContextBlocks}); err != nil {
 		return err
 	}
 	return validateRunMetadata(run.Metadata)
-}
-
-func validImportedRunStatus(status string) bool {
-	switch status {
-	case "queued", "running", "cancelling", "completed", "failed", "cancelled":
-		return true
-	default:
-		return false
-	}
 }
 
 func trimExportSlice[T any](items []T, limit int) ([]T, int, bool) {

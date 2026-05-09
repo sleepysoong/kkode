@@ -1217,7 +1217,7 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if body.Limit != 5 || body.Offset != 10 || body.NextOffset != 0 || body.ResultTruncated {
 		t.Fatalf("run list metadata가 이상해요: %+v", body)
 	}
-	for _, queryString := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+	for _, queryString := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc", "status=paused"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs?"+queryString, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
@@ -1229,6 +1229,9 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 		}
 		if strings.Contains(queryString, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("run list offset 오류는 offset을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
+		}
+		if strings.Contains(queryString, "status") && !strings.Contains(rec.Body.String(), "status") {
+			t.Fatalf("run list status 오류는 status를 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
 		}
 	}
 	for _, tc := range []struct {

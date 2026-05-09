@@ -1489,6 +1489,11 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != "" && !isValidRunStatus(status) {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", "status는 queued, running, cancelling, completed, failed, cancelled 중 하나여야 해요")
+		return
+	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_run_list")
 	if !ok {
 		return
@@ -1497,7 +1502,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	query := RunQuery{SessionID: r.URL.Query().Get("session_id"), TurnID: turnID, Status: r.URL.Query().Get("status"), Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey}
+	query := RunQuery{SessionID: r.URL.Query().Get("session_id"), TurnID: turnID, Status: status, Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey}
 	totalRuns, ok := s.countRuns(w, r, query, "count_runs_failed")
 	if !ok {
 		return
@@ -2075,6 +2080,15 @@ func runEventType(status string) string {
 func isTerminalRunStatus(status string) bool {
 	switch status {
 	case "completed", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidRunStatus(status string) bool {
+	switch status {
+	case "queued", "running", "cancelling", "completed", "failed", "cancelled":
 		return true
 	default:
 		return false
