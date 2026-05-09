@@ -33,6 +33,7 @@ type RunDurationStatsDTO struct {
 	SumMS int64 `json:"sum_ms"`
 	AvgMS int64 `json:"avg_ms"`
 	MaxMS int64 `json:"max_ms"`
+	P95MS int64 `json:"p95_ms"`
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -75,7 +76,7 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 }
 
 func runDurationStatsDTOFromSession(stats session.RunDurationStats) RunDurationStatsDTO {
-	return RunDurationStatsDTO{Count: stats.Count, SumMS: stats.SumMS, AvgMS: stats.AvgMS, MaxMS: stats.MaxMS}
+	return RunDurationStatsDTO{Count: stats.Count, SumMS: stats.SumMS, AvgMS: stats.AvgMS, MaxMS: stats.MaxMS, P95MS: stats.P95MS}
 }
 
 func runDurationStatsDTOMapFromSession(in map[string]session.RunDurationStats) map[string]RunDurationStatsDTO {

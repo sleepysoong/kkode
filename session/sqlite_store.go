@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -1780,6 +1781,9 @@ func loadRunDurationStats(ctx context.Context, db *sql.DB, stats *StoreStats) er
 		return err
 	}
 	defer rows.Close()
+	var allDurations []int64
+	providerDurations := map[string][]int64{}
+	modelDurations := map[string][]int64{}
 	for rows.Next() {
 		var provider, model, startedRaw, endedRaw string
 		if err := rows.Scan(&provider, &model, &startedRaw, &endedRaw); err != nil {
@@ -1791,15 +1795,32 @@ func loadRunDurationStats(ctx context.Context, db *sql.DB, stats *StoreStats) er
 			continue
 		}
 		durationMS := ended.Sub(started).Milliseconds()
+		allDurations = append(allDurations, durationMS)
 		addRunDuration(&stats.RunDuration, durationMS)
 		providerStats := stats.RunDurationByProvider[provider]
 		addRunDuration(&providerStats, durationMS)
 		stats.RunDurationByProvider[provider] = providerStats
+		providerDurations[provider] = append(providerDurations[provider], durationMS)
 		modelStats := stats.RunDurationByModel[model]
 		addRunDuration(&modelStats, durationMS)
 		stats.RunDurationByModel[model] = modelStats
+		modelDurations[model] = append(modelDurations[model], durationMS)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	stats.RunDuration.P95MS = percentile95MS(allDurations)
+	for provider, durations := range providerDurations {
+		providerStats := stats.RunDurationByProvider[provider]
+		providerStats.P95MS = percentile95MS(durations)
+		stats.RunDurationByProvider[provider] = providerStats
+	}
+	for model, durations := range modelDurations {
+		modelStats := stats.RunDurationByModel[model]
+		modelStats.P95MS = percentile95MS(durations)
+		stats.RunDurationByModel[model] = modelStats
+	}
+	return nil
 }
 
 func addRunDuration(stats *RunDurationStats, durationMS int64) {
@@ -1809,6 +1830,22 @@ func addRunDuration(stats *RunDurationStats, durationMS int64) {
 	if durationMS > stats.MaxMS {
 		stats.MaxMS = durationMS
 	}
+}
+
+func percentile95MS(durations []int64) int64 {
+	if len(durations) == 0 {
+		return 0
+	}
+	values := append([]int64(nil), durations...)
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	index := (95*len(values) + 99) / 100
+	if index < 1 {
+		index = 1
+	}
+	if index > len(values) {
+		index = len(values)
+	}
+	return values[index-1]
 }
 
 func normalizeSession(sess *Session) {

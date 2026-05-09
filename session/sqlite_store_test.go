@@ -144,14 +144,26 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if stats.RunUsage.InputTokens != 16 || stats.RunUsage.OutputTokens != 9 || stats.RunUsage.TotalTokens != 25 || stats.RunUsage.ReasoningTokens != 3 {
 		t.Fatalf("run usage stats가 이상해요: %+v", stats.RunUsage)
 	}
-	if stats.RunDuration.Count != 2 || stats.RunDuration.SumMS != 4000 || stats.RunDuration.AvgMS != 2000 || stats.RunDuration.MaxMS != 2500 {
+	if stats.RunDuration.Count != 2 || stats.RunDuration.SumMS != 4000 || stats.RunDuration.AvgMS != 2000 || stats.RunDuration.MaxMS != 2500 || stats.RunDuration.P95MS != 2500 {
 		t.Fatalf("run duration stats가 이상해요: %+v", stats.RunDuration)
 	}
-	if stats.RunDurationByProvider["copilot"].SumMS != 1500 || stats.RunDurationByProvider["openai"].SumMS != 2500 || stats.RunDurationByModel["gpt-5-mini"].SumMS != 4000 {
+	if stats.RunDurationByProvider["copilot"].P95MS != 1500 || stats.RunDurationByProvider["openai"].P95MS != 2500 || stats.RunDurationByModel["gpt-5-mini"].P95MS != 2500 {
 		t.Fatalf("grouped run duration stats가 이상해요: provider=%+v model=%+v", stats.RunDurationByProvider, stats.RunDurationByModel)
 	}
 	if stats.RunUsageByProvider["copilot"].TotalTokens != 18 || stats.RunUsageByProvider["openai"].TotalTokens != 7 || stats.RunUsageByModel["gpt-5-mini"].TotalTokens != 25 {
 		t.Fatalf("grouped run usage stats가 이상해요: provider=%+v model=%+v", stats.RunUsageByProvider, stats.RunUsageByModel)
+	}
+}
+
+func TestPercentile95MSUsesNearestRank(t *testing.T) {
+	if got := percentile95MS([]int64{300, 100, 200, 1000, 400}); got != 1000 {
+		t.Fatalf("p95 = %d", got)
+	}
+	if got := percentile95MS([]int64{100, 200}); got != 200 {
+		t.Fatalf("two-sample p95 = %d", got)
+	}
+	if got := percentile95MS(nil); got != 0 {
+		t.Fatalf("empty p95 = %d", got)
 	}
 }
 

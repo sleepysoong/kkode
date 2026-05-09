@@ -163,6 +163,7 @@ type RunDurationStats struct {
 	SumMS int64
 	AvgMS int64
 	MaxMS int64
+	P95MS int64
 }
 
 // StatsStore는 dashboard/API adapter가 여러 목록 API를 반복 호출하지 않게 exact count를 제공해요.
