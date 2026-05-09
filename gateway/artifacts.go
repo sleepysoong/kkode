@@ -258,11 +258,11 @@ func validateArtifactDTO(dto ArtifactDTO) error {
 			return fmt.Errorf("artifact id는 영문/숫자/._- 문자만 쓸 수 있어요")
 		}
 	}
-	if dto.RunID != "" && !validRunMetadataKey(dto.RunID) {
-		return fmt.Errorf("artifact run_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if err := validateOptionalIDFilter("artifact run_id", dto.RunID, maxRunIDBytes); err != nil {
+		return err
 	}
-	if dto.TurnID != "" && !validRunMetadataKey(dto.TurnID) {
-		return fmt.Errorf("artifact turn_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if err := validateOptionalIDFilter("artifact turn_id", dto.TurnID, maxRunIDBytes); err != nil {
+		return err
 	}
 	if dto.Kind == "" {
 		return fmt.Errorf("artifact kind가 필요해요")
@@ -289,14 +289,19 @@ func validateArtifactDTO(dto ArtifactDTO) error {
 }
 
 func validateArtifactFilters(runID string, turnID string, kind string) error {
-	if runID != "" && !validRunMetadataKey(runID) {
-		return fmt.Errorf("run_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if err := validateOptionalIDFilter("run_id", runID, maxRunIDBytes); err != nil {
+		return err
 	}
-	if turnID != "" && !validRunMetadataKey(turnID) {
-		return fmt.Errorf("turn_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if err := validateOptionalIDFilter("turn_id", turnID, maxRunIDBytes); err != nil {
+		return err
 	}
-	if kind != "" && !validRunMetadataKey(kind) {
-		return fmt.Errorf("kind는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if kind != "" {
+		if len(kind) > maxArtifactKindBytes {
+			return fmt.Errorf("kind는 %d byte 이하여야 해요", maxArtifactKindBytes)
+		}
+		if !validRunMetadataKey(kind) {
+			return fmt.Errorf("kind는 영문/숫자/._- 문자만 쓸 수 있어요")
+		}
 	}
 	return nil
 }

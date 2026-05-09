@@ -68,6 +68,10 @@ func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
+	if err := validateOptionalIDFilter("turn_id", turnID, maxRunIDBytes); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint_list", err.Error())
+		return
+	}
 	query := session.CheckpointQuery{SessionID: sessionID, TurnID: turnID}
 	totalCheckpoints := 0
 	if counter, ok := store.(session.CheckpointCounter); ok {

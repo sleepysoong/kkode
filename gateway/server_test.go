@@ -5421,7 +5421,7 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if listed.TotalCheckpoints != 1 || listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("checkpoint turn_id metadata가 이상해요: %+v", listed)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc", "turn_id=" + strings.Repeat("x", maxRunIDBytes+1), "turn_id=bad/id"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
@@ -5433,6 +5433,9 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 		}
 		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("checkpoint list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "turn_id") && !strings.Contains(rec.Body.String(), "turn_id") {
+			t.Fatalf("checkpoint list turn_id 오류는 turn_id를 설명해야 해요: query=%s body=%s", query, rec.Body.String())
 		}
 	}
 
@@ -5497,6 +5500,24 @@ func TestGatewayCreatesListsReadsAndDeletesArtifacts(t *testing.T) {
 	}
 	if len(listed.Artifacts) != 1 || listed.Artifacts[0].ID != "artifact_1" || listed.TotalArtifacts != 1 || listed.Limit != 1 {
 		t.Fatalf("artifact 목록이 이상해요: %+v", listed)
+	}
+	for _, tc := range []struct {
+		query string
+		want  string
+	}{
+		{query: "run_id=" + strings.Repeat("x", maxRunIDBytes+1), want: "run_id"},
+		{query: "run_id=bad/id", want: "run_id"},
+		{query: "turn_id=" + strings.Repeat("x", maxRunIDBytes+1), want: "turn_id"},
+		{query: "turn_id=bad/id", want: "turn_id"},
+		{query: "kind=" + strings.Repeat("x", maxArtifactKindBytes+1), want: "kind"},
+		{query: "kind=bad/kind", want: "kind"},
+	} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/artifacts?"+tc.query, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("잘못된 artifact list filter는 400이어야 해요: query=%s status=%d body=%s", tc.query, rec.Code, rec.Body.String())
+		}
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/artifact_1?max_content_bytes=4", nil)
