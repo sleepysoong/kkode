@@ -144,9 +144,11 @@ type StoreStats struct {
 	Sessions              int
 	Turns                 int
 	Events                int
+	EventsByType          map[string]int
 	RunEvents             int
 	RunEventsByType       map[string]int
 	Todos                 int
+	TodosByStatus         map[string]int
 	Checkpoints           int
 	Artifacts             int
 	Runs                  map[string]int

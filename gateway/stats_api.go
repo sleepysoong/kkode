@@ -12,9 +12,11 @@ type StatsResponse struct {
 	Sessions              int                            `json:"sessions"`
 	Turns                 int                            `json:"turns"`
 	Events                int                            `json:"events"`
+	EventsByType          map[string]int                 `json:"events_by_type"`
 	RunEvents             int                            `json:"run_events"`
 	RunEventsByType       map[string]int                 `json:"run_events_by_type"`
 	Todos                 int                            `json:"todos"`
+	TodosByStatus         map[string]int                 `json:"todos_by_status"`
 	Checkpoints           int                            `json:"checkpoints"`
 	Artifacts             int                            `json:"artifacts"`
 	TotalRuns             int                            `json:"total_runs"`
@@ -61,9 +63,11 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		Sessions:              stats.Sessions,
 		Turns:                 stats.Turns,
 		Events:                stats.Events,
+		EventsByType:          cloneIntMap(stats.EventsByType),
 		RunEvents:             stats.RunEvents,
 		RunEventsByType:       cloneIntMap(stats.RunEventsByType),
 		Todos:                 stats.Todos,
+		TodosByStatus:         cloneIntMap(stats.TodosByStatus),
 		Checkpoints:           stats.Checkpoints,
 		Artifacts:             stats.Artifacts,
 		TotalRuns:             sumIntMap(stats.Runs),

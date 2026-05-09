@@ -2988,7 +2988,7 @@ components:
           description: nearest-rank 방식으로 계산한 run duration 95 percentile millisecond예요.
     StatsResponse:
       type: object
-      required: [sessions, turns, events, run_events, run_events_by_type, todos, checkpoints, artifacts, total_runs, runs, run_duration, run_duration_by_provider, run_duration_by_model, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources]
+      required: [sessions, turns, events, events_by_type, run_events, run_events_by_type, todos, todos_by_status, checkpoints, artifacts, total_runs, runs, run_duration, run_duration_by_provider, run_duration_by_model, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources]
       properties:
         sessions:
           type: integer
@@ -2996,6 +2996,11 @@ components:
           type: integer
         events:
           type: integer
+        events_by_type:
+          type: object
+          description: session event type별 row count예요.
+          additionalProperties:
+            type: integer
         run_events:
           type: integer
           description: durable background run event replay row count예요.
@@ -3006,6 +3011,11 @@ components:
             type: integer
         todos:
           type: integer
+        todos_by_status:
+          type: object
+          description: todo status별 row count예요.
+          additionalProperties:
+            type: integer
         checkpoints:
           type: integer
         artifacts:
