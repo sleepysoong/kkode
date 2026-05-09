@@ -28,6 +28,7 @@ type Resource struct {
 
 type ResourceQuery struct {
 	Kind    ResourceKind
+	Name    string
 	Enabled *bool
 	Limit   int
 	Offset  int

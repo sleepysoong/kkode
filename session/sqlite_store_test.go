@@ -362,6 +362,13 @@ func TestResourceStorePersistsManifests(t *testing.T) {
 	if len(items) != 1 || items[0].ID != saved.ID {
 		t.Fatalf("resource list가 이상해요: %+v", items)
 	}
+	byName, err := store.ListResources(ctx, ResourceQuery{Kind: ResourceMCPServer, Name: "fs", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byName) != 1 || byName[0].ID != saved.ID {
+		t.Fatalf("resource name list가 이상해요: %+v", byName)
+	}
 	second, err := store.SaveResource(ctx, Resource{Kind: ResourceMCPServer, Name: "ctx", Enabled: enabled, Config: []byte(`{"url":"https://example.test/mcp"}`)})
 	if err != nil {
 		t.Fatal(err)

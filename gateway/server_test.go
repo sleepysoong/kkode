@@ -2811,7 +2811,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?limit=1", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?name=planner&limit=1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -2823,6 +2823,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if len(listed.Resources) != 1 {
 		t.Fatalf("subagent 목록이 이상해요: %+v", listed)
+	}
+	if listed.Resources[0].Name != "planner" {
+		t.Fatalf("subagent name filter가 이상해요: %+v", listed)
 	}
 	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
 		t.Fatalf("resource list metadata가 이상해요: %+v", listed)
@@ -2857,6 +2860,12 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("resource list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
 		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?name="+strings.Repeat("x", maxResourceNameBytes+1), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "resource name") {
+		t.Fatalf("긴 resource name filter는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/mcp/servers/%20"+created.ID+"%20", nil)

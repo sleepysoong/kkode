@@ -1267,6 +1267,7 @@ paths:
       operationId: getMcpServers
       summary: MCP server manifest 목록을 반환해요.
       parameters:
+        - $ref: '#/components/parameters/ResourceName'
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -1494,6 +1495,7 @@ paths:
       operationId: getSkills
       summary: skill manifest 목록을 반환해요.
       parameters:
+        - $ref: '#/components/parameters/ResourceName'
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -1597,6 +1599,7 @@ paths:
       operationId: getSubagents
       summary: subagent manifest 목록을 반환해요.
       parameters:
+        - $ref: '#/components/parameters/ResourceName'
         - $ref: '#/components/parameters/Enabled'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -2447,6 +2450,13 @@ components:
       required: true
       schema:
         type: string
+    ResourceName:
+      in: query
+      name: name
+      schema:
+        type: string
+        maxLength: 256
+      description: manifest 이름과 정확히 일치하는 resource만 반환해요.
     Enabled:
       in: query
       name: enabled

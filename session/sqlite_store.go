@@ -1549,6 +1549,10 @@ func (s *SQLiteStore) ListResources(ctx context.Context, q ResourceQuery) ([]Res
 		where = append(where, `kind = ?`)
 		args = append(args, string(q.Kind))
 	}
+	if q.Name != "" {
+		where = append(where, `name = ?`)
+		args = append(args, q.Name)
+	}
 	if q.Enabled != nil {
 		where = append(where, `enabled = ?`)
 		args = append(args, boolInt(*q.Enabled))
