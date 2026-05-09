@@ -2152,6 +2152,18 @@ paths:
             type: string
             maxLength: 128
         - in: query
+          name: provider
+          schema:
+            type: string
+            maxLength: 128
+          description: request 안의 run을 provider 값으로 좁혀요.
+        - in: query
+          name: model
+          schema:
+            type: string
+            maxLength: 128
+          description: request 안의 run을 model 값으로 좁혀요.
+        - in: query
           name: limit
           schema:
             type: integer

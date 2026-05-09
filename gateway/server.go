@@ -286,6 +286,10 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
 		return
 	}
+	provider, model, ok := queryRunProviderModel(w, r, "invalid_request_runs")
+	if !ok {
+		return
+	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_request_runs")
 	if !ok {
 		return
@@ -294,7 +298,7 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: limit + 1, Offset: offset})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{Provider: provider, Model: model, RequestID: requestID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
@@ -1414,14 +1418,8 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
 		return
 	}
-	provider := strings.TrimSpace(r.URL.Query().Get("provider"))
-	model := strings.TrimSpace(r.URL.Query().Get("model"))
-	if len(provider) > maxRunProviderModelBytes {
-		writeError(w, r, http.StatusBadRequest, "invalid_run_list", fmt.Sprintf("provider는 %d byte 이하여야 해요", maxRunProviderModelBytes))
-		return
-	}
-	if len(model) > maxRunProviderModelBytes {
-		writeError(w, r, http.StatusBadRequest, "invalid_run_list", fmt.Sprintf("model은 %d byte 이하여야 해요", maxRunProviderModelBytes))
+	provider, model, ok := queryRunProviderModel(w, r, "invalid_run_list")
+	if !ok {
 		return
 	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_run_list")
@@ -1439,6 +1437,20 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	runs, returned, truncated := trimRuns(runs, limit)
 	writeJSON(w, RunListResponse{Runs: runs, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+}
+
+func queryRunProviderModel(w http.ResponseWriter, r *http.Request, code string) (string, string, bool) {
+	provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+	model := strings.TrimSpace(r.URL.Query().Get("model"))
+	if len(provider) > maxRunProviderModelBytes {
+		writeError(w, r, http.StatusBadRequest, code, fmt.Sprintf("provider는 %d byte 이하여야 해요", maxRunProviderModelBytes))
+		return "", "", false
+	}
+	if len(model) > maxRunProviderModelBytes {
+		writeError(w, r, http.StatusBadRequest, code, fmt.Sprintf("model은 %d byte 이하여야 해요", maxRunProviderModelBytes))
+		return "", "", false
+	}
+	return provider, model, true
 }
 
 func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {

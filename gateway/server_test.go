@@ -1265,13 +1265,13 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?limit=7&offset=3", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?provider=copilot&model=gpt-5-mini&limit=7&offset=3", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.Limit != 8 || query.Offset != 3 {
+	if query.RequestID != "req_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.Limit != 8 || query.Offset != 3 {
 		t.Fatalf("request correlation query가 이상해요: %+v", query)
 	}
 	var body RequestCorrelationResponse
@@ -1296,6 +1296,20 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 		}
 		if strings.Contains(queryString, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("request run offset 오류는 offset을 설명해야 해요: query=%s body=%s", queryString, rec.Body.String())
+		}
+	}
+	for _, tc := range []struct {
+		queryString string
+		want        string
+	}{
+		{queryString: "provider=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "provider"},
+		{queryString: "model=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "model"},
+	} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?"+tc.queryString, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Fatalf("긴 request run query는 400이어야 해요: query=%s status=%d body=%s", tc.queryString, rec.Code, rec.Body.String())
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+strings.Repeat("x", maxRequestIDBytes+1)+"/runs", nil)
