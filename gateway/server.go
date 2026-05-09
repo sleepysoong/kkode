@@ -356,7 +356,7 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{RequestID: requestID, Limit: 200})
+	runs, err := s.listRequestCorrelationRuns(r.Context(), requestID)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
@@ -372,6 +372,22 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	}
 	events, truncated, nextAfterSeq := trimRunEvents(events, limit)
 	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq})
+}
+
+func (s *Server) listRequestCorrelationRuns(ctx context.Context, requestID string) ([]RunDTO, error) {
+	const batchSize = 200
+	var out []RunDTO
+	for offset := 0; ; {
+		runs, err := s.cfg.RunLister(ctx, RunQuery{RequestID: requestID, Limit: batchSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, runs...)
+		if len(runs) < batchSize {
+			return out, nil
+		}
+		offset += len(runs)
+	}
 }
 
 func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int, afterSeq int, eventType string) ([]RunEventDTO, error) {

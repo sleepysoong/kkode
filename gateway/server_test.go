@@ -1462,6 +1462,56 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}
 }
 
+func TestGatewayRequestCorrelationEventsPagesRuns(t *testing.T) {
+	store := openTestStore(t)
+	var queries []RunQuery
+	srv, err := New(Config{
+		Store: store,
+		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
+			queries = append(queries, q)
+			if q.RequestID != "req_many" || q.Limit != 200 {
+				t.Fatalf("request event run query가 이상해요: %+v", q)
+			}
+			if q.Offset == 0 {
+				runs := make([]RunDTO, 200)
+				for i := range runs {
+					runs[i] = RunDTO{ID: fmt.Sprintf("run_%03d", i), Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}
+				}
+				return runs, nil
+			}
+			if q.Offset == 200 {
+				return []RunDTO{{ID: "run_200", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
+			}
+			return nil, nil
+		},
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
+			if runID != "run_200" {
+				return nil, nil
+			}
+			return []RunEventDTO{{Seq: 1, At: time.Unix(1, 0).UTC(), Type: "custom.event", Run: RunDTO{ID: runID, Status: "completed"}}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_many/events?limit=1&type=custom.event", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if len(queries) != 2 || queries[0].Offset != 0 || queries[1].Offset != 200 {
+		t.Fatalf("request event replay는 run pages를 이어서 읽어야 해요: %+v", queries)
+	}
+	var body RequestCorrelationEventsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Events) != 1 || body.Events[0].Run.ID != "run_200" {
+		t.Fatalf("second run page event가 빠졌어요: %+v", body)
+	}
+}
+
 func TestGatewayStreamsRequestCorrelationEvents(t *testing.T) {
 	store := openTestStore(t)
 	bus := NewRunEventBus()
