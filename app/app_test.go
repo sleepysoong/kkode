@@ -695,6 +695,12 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("표준 file_read tool은 노출해야해요")
 	}
+	if _, ok := handlers["file_delete"]; !ok {
+		t.Fatal("표준 file_delete tool은 agent surface에 노출해야 해요")
+	}
+	if _, ok := handlers["file_move"]; !ok {
+		t.Fatal("표준 file_move tool은 agent surface에 노출해야 해요")
+	}
 	if _, ok := handlers["lsp_symbols"]; !ok {
 		t.Fatal("agent run에도 codeintel lsp_symbols tool을 노출해야 해요")
 	}
@@ -722,13 +728,16 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 		t.Fatal("기본 agent surface에는 web_fetch도 붙어야 해요")
 	}
 
-	ag, err = NewAgent(fakeProvider{}, ws, AgentOptions{Model: "fake", EnabledTools: []string{"file_read", "shell_run", "lsp_symbols", "mcp_call"}, DisabledTools: []string{"shell_run"}, MCPServers: map[string]llm.MCPServer{"serena": {Kind: llm.MCPStdio, Command: "serena"}}})
+	ag, err = NewAgent(fakeProvider{}, ws, AgentOptions{Model: "fake", EnabledTools: []string{"file_read", "file_move", "shell_run", "lsp_symbols", "mcp_call"}, DisabledTools: []string{"shell_run"}, MCPServers: map[string]llm.MCPServer{"serena": {Kind: llm.MCPStdio, Command: "serena"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	req, handlers = ag.Prepare("읽기만 해요")
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("enabled_tools에 포함된 tool은 노출해야 해요")
+	}
+	if _, ok := handlers["file_move"]; !ok {
+		t.Fatal("enabled_tools에 포함된 file mutation tool은 노출해야 해요")
 	}
 	if _, ok := handlers["lsp_symbols"]; !ok {
 		t.Fatal("enabled_tools에 포함된 lsp tool은 노출해야 해요")
@@ -739,7 +748,7 @@ func TestNewAgentUsesStandardToolsOnly(t *testing.T) {
 	if _, ok := handlers["shell_run"]; ok {
 		t.Fatal("disabled_tools는 enabled_tools보다 우선해서 tool을 숨겨야 해요")
 	}
-	if len(req.Tools) != 3 || req.Tools[0].Name != "file_read" || req.Tools[1].Name != "lsp_symbols" || req.Tools[2].Name != "mcp_call" {
+	if len(req.Tools) != 4 || req.Tools[0].Name != "file_read" || req.Tools[1].Name != "file_move" || req.Tools[2].Name != "lsp_symbols" || req.Tools[3].Name != "mcp_call" {
 		t.Fatalf("요청 tool 정의도 필터링해야 해요: %+v", req.Tools)
 	}
 }
