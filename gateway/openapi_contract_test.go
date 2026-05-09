@@ -415,7 +415,7 @@ func TestOpenAPIContainsRunStartManifestFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	for _, field := range []string{"working_directory:", "mcp_servers:", "skills:", "subagents:", "enabled_tools:", "disabled_tools:", "context_blocks:"} {
+	for _, field := range []string{"working_directory:", "max_output_tokens:", "mcp_servers:", "skills:", "subagents:", "enabled_tools:", "disabled_tools:", "context_blocks:"} {
 		if !strings.Contains(text, field) {
 			t.Fatalf("RunStartRequest OpenAPI schema에 %s 필드가 필요해요", field)
 		}

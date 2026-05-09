@@ -2605,6 +2605,8 @@ components:
           type: integer
         max_run_preview_bytes:
           type: integer
+        max_run_output_tokens:
+          type: integer
         max_provider_test_preview_bytes:
           type: integer
         max_provider_test_result_bytes:
@@ -4156,6 +4158,11 @@ components:
           minimum: 0
           default: 65536
           description: /runs/preview에서 provider body/raw/context preview에 적용할 최대 byte 수예요. 실제 run 실행 payload는 바꾸지 않아요.
+        max_output_tokens:
+          type: integer
+          minimum: 0
+          maximum: 32768
+          description: 이번 run의 provider 출력 token 상한이에요. 0이면 provider/default 값을 사용해요.
     RunValidateResponse:
       type: object
       required: [ok]
@@ -4206,6 +4213,9 @@ components:
           type: string
         working_directory:
           type: string
+        max_output_tokens:
+          type: integer
+          description: 실행 당시 provider 출력 token 상한이에요.
         mcp_servers:
           type: array
           items:
@@ -5010,6 +5020,9 @@ components:
           type: string
         working_directory:
           type: string
+        max_output_tokens:
+          type: integer
+          description: 실행 당시 provider 출력 token 상한이에요.
         mcp_servers:
           type: array
           items:

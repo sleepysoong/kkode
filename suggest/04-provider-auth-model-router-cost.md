@@ -171,6 +171,8 @@ func (p *ChatCompatProvider) Generate(ctx context.Context, req llm.Request) (*ll
 
 OpenCode Go는 5시간/주간/월간 limit를 dollar value로 설명해요. Claude Agent SDK는 result에 token usage/cost를 포함한다고 문서화해요. Codex/Copilot subscription은 일반 API billing과 다르게 다뤄야해요.
 
+현재 gateway run 요청은 `max_output_tokens`를 받아 provider request, run record, retry에 보존하고 `/capabilities.limits.max_run_output_tokens`로 상한을 노출해요. 남은 작업은 실제 usage ledger와 session/day/provider scope별 누적 budget decision이에요.
+
 ```go
 type Budget struct {
     SessionMaxUSD float64

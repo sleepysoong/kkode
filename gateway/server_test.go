@@ -804,7 +804,7 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":" sess_1 ","prompt":"go test","provider":" openai ","model":" gpt-5-mini ","metadata":{"source":"panel"," trace-id ":" abc ","empty":" "},"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs", bytes.NewBufferString(`{"session_id":" sess_1 ","prompt":"go test","provider":" openai ","model":" gpt-5-mini ","max_output_tokens":512,"metadata":{"source":"panel"," trace-id ":" abc ","empty":" "},"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"]}`))
 	req.Header.Set(RequestIDHeader, "req_run")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -818,10 +818,10 @@ func TestGatewayRunStarterBoundary(t *testing.T) {
 	if run.ID != "run_test" || run.Status != "queued" || run.Metadata[RequestIDMetadataKey] != "req_run" || run.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata[RequestIDMetadataKey] != "req_run" || started.Metadata[DefaultMCPMetadataKey] != "context7,serena" || started.Metadata["source"] != "panel" || started.Metadata["trace-id"] != "abc" || started.Metadata[" trace-id "] != "" || started.Metadata["empty"] != "" {
 		t.Fatalf("unexpected run: %+v", run)
 	}
-	if started.SessionID != "sess_1" || started.Provider != "openai" || started.Model != "gpt-5-mini" || len(started.MCPServers) != 1 || started.MCPServers[0] != "mcp_1" || len(started.Skills) != 1 || started.Skills[0] != "skill_1" || len(started.Subagents) != 1 || started.Subagents[0] != "agent_1" {
+	if started.SessionID != "sess_1" || started.Provider != "openai" || started.Model != "gpt-5-mini" || started.MaxOutputTokens != 512 || len(started.MCPServers) != 1 || started.MCPServers[0] != "mcp_1" || len(started.Skills) != 1 || started.Skills[0] != "skill_1" || len(started.Subagents) != 1 || started.Subagents[0] != "agent_1" {
 		t.Fatalf("run starter resource ids must be normalized: %+v", started)
 	}
-	if validated.SessionID != "sess_1" || validated.Metadata[RequestIDMetadataKey] != "req_run" || validated.Metadata[DefaultMCPMetadataKey] != "context7,serena" || len(validated.MCPServers) != 1 || validated.MCPServers[0] != "mcp_1" {
+	if validated.SessionID != "sess_1" || validated.MaxOutputTokens != 512 || validated.Metadata[RequestIDMetadataKey] != "req_run" || validated.Metadata[DefaultMCPMetadataKey] != "context7,serena" || len(validated.MCPServers) != 1 || validated.MCPServers[0] != "mcp_1" {
 		t.Fatalf("run validator는 enqueue 전에 같은 request metadata를 받아야 해요: %+v", validated)
 	}
 }
@@ -1686,7 +1686,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.RunMaxIterations != 8 || caps.Limits.RunWebMaxBytes != 1<<20 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxMCPProbeNameBytes != maxMCPProbeNameBytes || caps.Limits.MaxMCPProbeURIBytes != maxMCPProbeURIBytes || caps.Limits.MaxMCPProbeArgumentBytes != maxMCPProbeArgumentsBytes || caps.Limits.MaxMCPProbeOutputBytes != maxMCPProbeOutputBytes || caps.Limits.MaxFileContentBytes != maxFileContentBytes || caps.Limits.MaxSkillPreviewBytes != maxSkillPreviewBytes || caps.Limits.MaxSubagentPreviewBytes != maxSubagentPreviewPromptBytes || caps.Limits.MaxPromptTextBytes != maxPromptTextBytes || caps.Limits.MaxTranscriptMarkdownBytes != maxTranscriptMarkdownBytes || caps.Limits.MaxGitDiffBytes != maxGitDiffBytes || caps.Limits.MaxRunPreviewBytes != MaxRunPreviewBytes || caps.Limits.MaxProviderTestPreviewBytes != MaxProviderTestPreviewBytes || caps.Limits.MaxProviderTestResultBytes != MaxProviderTestResultBytes || caps.Limits.MaxProviderTestOutputTokens != MaxProviderTestOutputTokens || caps.Limits.MaxProviderTestTimeoutMS != MaxProviderTestTimeoutMS || caps.Limits.MaxHTTPJSONResponseBytes != httpjson.MaxResponseBytes || caps.Limits.MaxWorkspaceFileReadBytes != workspace.MaxFileReadBytes || caps.Limits.MaxWorkspaceFileWriteBytes != workspace.MaxFileWriteBytes || caps.Limits.MaxWorkspaceListEntries != workspace.MaxListEntries || caps.Limits.MaxWorkspaceGlobMatches != workspace.MaxGlobMatches || caps.Limits.MaxWorkspaceGrepMatches != workspace.MaxGrepMatches || caps.Limits.MaxWorkspacePatchBytes != workspace.MaxPatchBytes || caps.Limits.MaxLSPFormatInputBytes != maxLSPFormatInputBytes || caps.Limits.MaxLSPFormatPreviewBytes != maxLSPFormatPreviewBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks || caps.Limits.MaxRequestIDBytes != maxRequestIDBytes || caps.Limits.MaxIdempotencyKeyBytes != maxIdempotencyKeyBytes || caps.Limits.MaxToolCallNameBytes != maxToolCallNameBytes || caps.Limits.MaxToolCallIDBytes != maxToolCallIDBytes || caps.Limits.MaxToolCallArgumentBytes != maxToolCallArgumentsBytes || caps.Limits.MaxToolCallOutputBytes != maxToolCallOutputBytes || caps.Limits.MaxToolCallWebBytes != maxToolCallWebBytes || caps.Limits.MaxShellTimeoutMS != workspace.MaxCommandTimeout.Milliseconds() || caps.Limits.MaxShellOutputBytes != workspace.MaxCommandOutputBytes || caps.Limits.MaxShellStderrBytes != workspace.MaxCommandStderrBytes {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.RunMaxIterations != 8 || caps.Limits.RunWebMaxBytes != 1<<20 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxMCPProbeNameBytes != maxMCPProbeNameBytes || caps.Limits.MaxMCPProbeURIBytes != maxMCPProbeURIBytes || caps.Limits.MaxMCPProbeArgumentBytes != maxMCPProbeArgumentsBytes || caps.Limits.MaxMCPProbeOutputBytes != maxMCPProbeOutputBytes || caps.Limits.MaxFileContentBytes != maxFileContentBytes || caps.Limits.MaxSkillPreviewBytes != maxSkillPreviewBytes || caps.Limits.MaxSubagentPreviewBytes != maxSubagentPreviewPromptBytes || caps.Limits.MaxPromptTextBytes != maxPromptTextBytes || caps.Limits.MaxTranscriptMarkdownBytes != maxTranscriptMarkdownBytes || caps.Limits.MaxGitDiffBytes != maxGitDiffBytes || caps.Limits.MaxRunPreviewBytes != MaxRunPreviewBytes || caps.Limits.MaxRunOutputTokens != MaxRunOutputTokens || caps.Limits.MaxProviderTestPreviewBytes != MaxProviderTestPreviewBytes || caps.Limits.MaxProviderTestResultBytes != MaxProviderTestResultBytes || caps.Limits.MaxProviderTestOutputTokens != MaxProviderTestOutputTokens || caps.Limits.MaxProviderTestTimeoutMS != MaxProviderTestTimeoutMS || caps.Limits.MaxHTTPJSONResponseBytes != httpjson.MaxResponseBytes || caps.Limits.MaxWorkspaceFileReadBytes != workspace.MaxFileReadBytes || caps.Limits.MaxWorkspaceFileWriteBytes != workspace.MaxFileWriteBytes || caps.Limits.MaxWorkspaceListEntries != workspace.MaxListEntries || caps.Limits.MaxWorkspaceGlobMatches != workspace.MaxGlobMatches || caps.Limits.MaxWorkspaceGrepMatches != workspace.MaxGrepMatches || caps.Limits.MaxWorkspacePatchBytes != workspace.MaxPatchBytes || caps.Limits.MaxLSPFormatInputBytes != maxLSPFormatInputBytes || caps.Limits.MaxLSPFormatPreviewBytes != maxLSPFormatPreviewBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks || caps.Limits.MaxRequestIDBytes != maxRequestIDBytes || caps.Limits.MaxIdempotencyKeyBytes != maxIdempotencyKeyBytes || caps.Limits.MaxToolCallNameBytes != maxToolCallNameBytes || caps.Limits.MaxToolCallIDBytes != maxToolCallIDBytes || caps.Limits.MaxToolCallArgumentBytes != maxToolCallArgumentsBytes || caps.Limits.MaxToolCallOutputBytes != maxToolCallOutputBytes || caps.Limits.MaxToolCallWebBytes != maxToolCallWebBytes || caps.Limits.MaxShellTimeoutMS != workspace.MaxCommandTimeout.Milliseconds() || caps.Limits.MaxShellOutputBytes != workspace.MaxCommandOutputBytes || caps.Limits.MaxShellStderrBytes != workspace.MaxCommandStderrBytes {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	capKeys := map[string]bool{}
@@ -2088,7 +2088,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":" `+sess.ID+` ","prompt":"미리보기","provider":" openai ","model":" gpt-5-mini ","preview_stream":true,"max_preview_bytes":123,"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"],"enabled_tools":[" file_read ","file_read"],"disabled_tools":[" shell_run "],"context_blocks":["token=ghp_123456789012345678901234567890123456 패널 context"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":" `+sess.ID+` ","prompt":"미리보기","provider":" openai ","model":" gpt-5-mini ","preview_stream":true,"max_preview_bytes":123,"max_output_tokens":456,"mcp_servers":[" mcp_1 ","","mcp_1"],"skills":[" skill_1 ","skill_1"],"subagents":[" agent_1 ","agent_1"],"enabled_tools":[" file_read ","file_read"],"disabled_tools":[" shell_run "],"context_blocks":["token=ghp_123456789012345678901234567890123456 패널 context"]}`))
 	req.Header.Set(RequestIDHeader, "req_preview")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -2099,7 +2099,7 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.SessionID != sess.ID || gotReq.Provider != "openai" || gotReq.Model != "gpt-5-mini" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || gotReq.Metadata[DefaultMCPMetadataKey] != "context7" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || len(gotReq.MCPServers) != 1 || gotReq.MCPServers[0] != "mcp_1" || len(gotReq.Skills) != 1 || gotReq.Skills[0] != "skill_1" || len(gotReq.Subagents) != 1 || gotReq.Subagents[0] != "agent_1" || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
+	if preview.SessionID != sess.ID || preview.BaseRequestTools[0] != "mcp" || len(preview.ContextBlocks) != 1 || preview.ContextBlocks[0] != "선택 context예요" || gotReq.SessionID != sess.ID || gotReq.Provider != "openai" || gotReq.Model != "gpt-5-mini" || gotReq.Metadata[RequestIDMetadataKey] != "req_preview" || gotReq.Metadata[DefaultMCPMetadataKey] != "context7" || !gotReq.PreviewStream || gotReq.MaxPreviewBytes != 123 || gotReq.MaxOutputTokens != 456 || len(gotReq.MCPServers) != 1 || gotReq.MCPServers[0] != "mcp_1" || len(gotReq.Skills) != 1 || gotReq.Skills[0] != "skill_1" || len(gotReq.Subagents) != 1 || gotReq.Subagents[0] != "agent_1" || len(gotReq.EnabledTools) != 1 || gotReq.EnabledTools[0] != "file_read" || len(gotReq.DisabledTools) != 1 || gotReq.DisabledTools[0] != "shell_run" || len(gotReq.ContextBlocks) != 1 || strings.Contains(gotReq.ContextBlocks[0], "ghp_") || !strings.Contains(gotReq.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("run preview 응답/요청이 이상해요: preview=%+v req=%+v", preview, gotReq)
 	}
 
@@ -2115,6 +2115,13 @@ func TestGatewayPreviewsRunAssembly(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_preview_bytes") {
 		t.Fatalf("large max_preview_bytes는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runs/preview", strings.NewReader(`{"session_id":"`+sess.ID+`","prompt":"미리보기","max_output_tokens":`+strconv.Itoa(MaxRunOutputTokens+1)+`}`))
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_output_tokens") {
+		t.Fatalf("large max_output_tokens는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -3580,7 +3587,7 @@ func waitForRunEventSubscription(t *testing.T, bus *RunEventBus, runID string) {
 
 func TestGatewayRetriesRun(t *testing.T) {
 	store := openTestStore(t)
-	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Provider: "copilot", Model: "gpt-5-mini", MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, ContextBlocks: []string{"adapter context"}, Metadata: map[string]string{"source": "discord"}}
+	original := RunDTO{ID: "run_old", SessionID: "sess_1", Status: "failed", Prompt: "go test", Provider: "copilot", Model: "gpt-5-mini", MaxOutputTokens: 333, MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, ContextBlocks: []string{"adapter context"}, Metadata: map[string]string{"source": "discord"}}
 	var retryReq RunStartRequest
 	srv, err := New(Config{
 		Store:             store,
@@ -3611,7 +3618,7 @@ func TestGatewayRetriesRun(t *testing.T) {
 	if retried.ID != "run_new" || retryReq.Metadata["retried_from"] != "run_old" || retryReq.Metadata["source"] != "discord" || retryReq.Metadata[RequestIDMetadataKey] != "req_retry" || retryReq.Metadata[DefaultMCPMetadataKey] != "context7" {
 		t.Fatalf("retry run이 이상해요: run=%+v req=%+v", retried, retryReq)
 	}
-	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" || len(retryReq.ContextBlocks) != 1 || retryReq.ContextBlocks[0] != "adapter context" {
+	if retryReq.Provider != "copilot" || retryReq.Model != "gpt-5-mini" || retryReq.MaxOutputTokens != 333 || len(retryReq.MCPServers) != 1 || retryReq.MCPServers[0] != "mcp_1" || len(retryReq.Skills) != 1 || retryReq.Skills[0] != "skill_1" || len(retryReq.Subagents) != 1 || retryReq.Subagents[0] != "agent_1" || len(retryReq.ContextBlocks) != 1 || retryReq.ContextBlocks[0] != "adapter context" {
 		t.Fatalf("retry가 실행 옵션을 보존해야 해요: %+v", retryReq)
 	}
 }

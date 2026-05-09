@@ -275,7 +275,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if providerHandle.Close != nil {
 			defer providerHandle.Close()
 		}
-		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: effectiveProviderOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: effectiveProviderOptions.MCPServers, Observer: runEventTraceObserver()})
+		ag, err := app.NewAgent(providerHandle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: effectiveProviderOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(providerHandle.BaseRequest, llm.Request{Metadata: req.Metadata, MaxOutputTokens: req.MaxOutputTokens}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: effectiveProviderOptions.MCPServers, Observer: runEventTraceObserver()})
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +286,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if runID == "" {
 			runID = session.NewID("run")
 		}
-		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, WorkingDirectory: req.WorkingDirectory, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, WorkingDirectory: req.WorkingDirectory, MaxOutputTokens: req.MaxOutputTokens, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
 		}
@@ -376,7 +376,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if model == "" && handle.Provider != nil {
 			model = app.DefaultModel(handle.Provider.Name())
 		}
-		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: effectiveProviderOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: effectiveProviderOptions.MCPServers})
+		ag, err := app.NewAgent(handle.Provider, ws, app.AgentOptions{Model: model, ContextBlocks: effectiveProviderOptions.ContextBlocks, BaseRequest: app.MergeBaseRequest(handle.BaseRequest, llm.Request{Metadata: req.Metadata, MaxOutputTokens: req.MaxOutputTokens}), MaxIterations: opts.MaxIterations, NoWeb: opts.NoWeb, WebMaxBytes: opts.WebMaxBytes, EnabledTools: req.EnabledTools, DisabledTools: req.DisabledTools, MCPServers: effectiveProviderOptions.MCPServers})
 		if err != nil {
 			return nil, err
 		}

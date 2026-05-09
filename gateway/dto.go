@@ -174,6 +174,7 @@ type RunStartRequest struct {
 	PreviewStream bool `json:"preview_stream,omitempty"`
 	// MaxPreviewBytes는 /runs/preview에서 body/raw/context preview 최대 byte 수를 조절해요.
 	MaxPreviewBytes int    `json:"max_preview_bytes,omitempty"`
+	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
 	RunID           string `json:"-"`
 }
 
@@ -188,6 +189,7 @@ type RunDTO struct {
 	Model     string `json:"model,omitempty"`
 	// WorkingDirectory는 실행 당시 적용한 project root 기준 작업 subdir 힌트예요.
 	WorkingDirectory string   `json:"working_directory,omitempty"`
+	MaxOutputTokens  int      `json:"max_output_tokens,omitempty"`
 	MCPServers       []string `json:"mcp_servers,omitempty"`
 	Skills           []string `json:"skills,omitempty"`
 	Subagents        []string `json:"subagents,omitempty"`
@@ -364,6 +366,7 @@ type ProviderTestRequest struct {
 
 const (
 	MaxRunPreviewBytes          = 8 << 20
+	MaxRunOutputTokens          = 32768
 	MaxProviderTestPreviewBytes = 8 << 20
 	MaxProviderTestResultBytes  = 8 << 20
 	MaxProviderTestOutputTokens = 8192
@@ -506,6 +509,7 @@ type LimitDTO struct {
 	MaxTranscriptMarkdownBytes  int   `json:"max_transcript_markdown_bytes,omitempty"`
 	MaxGitDiffBytes             int   `json:"max_git_diff_bytes,omitempty"`
 	MaxRunPreviewBytes          int   `json:"max_run_preview_bytes,omitempty"`
+	MaxRunOutputTokens          int   `json:"max_run_output_tokens,omitempty"`
 	MaxProviderTestPreviewBytes int   `json:"max_provider_test_preview_bytes,omitempty"`
 	MaxProviderTestResultBytes  int   `json:"max_provider_test_result_bytes,omitempty"`
 	MaxProviderTestOutputTokens int   `json:"max_provider_test_output_tokens,omitempty"`

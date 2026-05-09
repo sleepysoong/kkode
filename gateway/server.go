@@ -766,6 +766,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxTranscriptMarkdownBytes:  maxTranscriptMarkdownBytes,
 		MaxGitDiffBytes:             maxGitDiffBytes,
 		MaxRunPreviewBytes:          MaxRunPreviewBytes,
+		MaxRunOutputTokens:          MaxRunOutputTokens,
 		MaxProviderTestPreviewBytes: MaxProviderTestPreviewBytes,
 		MaxProviderTestResultBytes:  MaxProviderTestResultBytes,
 		MaxProviderTestOutputTokens: MaxProviderTestOutputTokens,
@@ -1556,6 +1557,12 @@ func validateRunStartRequest(req RunStartRequest) error {
 	if req.MaxPreviewBytes > MaxRunPreviewBytes {
 		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", MaxRunPreviewBytes)
 	}
+	if req.MaxOutputTokens < 0 {
+		return errors.New("max_output_tokens는 0 이상이어야 해요")
+	}
+	if req.MaxOutputTokens > MaxRunOutputTokens {
+		return fmt.Errorf("max_output_tokens는 %d 이하여야 해요", MaxRunOutputTokens)
+	}
 	if err := validateRunRequestShape(req); err != nil {
 		return err
 	}
@@ -1608,7 +1615,7 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 	metadata["retried_from"] = original.ID
 	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
 	metadata = withDefaultMCPMetadata(metadata, s.cfg.DefaultMCPServers)
-	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, WorkingDirectory: original.WorkingDirectory, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), EnabledTools: cloneStringSlice(original.EnabledTools), DisabledTools: cloneStringSlice(original.DisabledTools), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
+	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, WorkingDirectory: original.WorkingDirectory, MaxOutputTokens: original.MaxOutputTokens, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), EnabledTools: cloneStringSlice(original.EnabledTools), DisabledTools: cloneStringSlice(original.DisabledTools), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
 	req = sanitizeRunStartRequest(req)
 	if err := validateRunStartRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())

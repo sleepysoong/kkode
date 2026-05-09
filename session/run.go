@@ -17,6 +17,7 @@ type Run struct {
 	Model     string `json:"model,omitempty"`
 	// WorkingDirectory는 project root 기준 subdir scoped instruction 힌트예요.
 	WorkingDirectory string   `json:"working_directory,omitempty"`
+	MaxOutputTokens  int      `json:"max_output_tokens,omitempty"`
 	MCPServers       []string `json:"mcp_servers,omitempty"`
 	Skills           []string `json:"skills,omitempty"`
 	Subagents        []string `json:"subagents,omitempty"`
