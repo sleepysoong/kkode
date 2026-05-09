@@ -40,6 +40,7 @@ type Run struct {
 
 type RunQuery struct {
 	SessionID      string
+	TurnID         string
 	Status         string
 	Provider       string
 	Model          string

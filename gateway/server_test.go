@@ -1195,13 +1195,13 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&provider=copilot&model=gpt-5-mini&limit=5&offset=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&provider=copilot&model=gpt-5-mini&turn_id=turn_filter&limit=5&offset=10", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.Limit != 6 || query.Offset != 10 {
+	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.TurnID != "turn_filter" || query.Limit != 6 || query.Offset != 10 {
 		t.Fatalf("run query가 이상해요: %+v", query)
 	}
 	var body RunListResponse
@@ -1294,13 +1294,13 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?provider=copilot&model=gpt-5-mini&limit=7&offset=3", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?provider=copilot&model=gpt-5-mini&turn_id=turn_filter&limit=7&offset=3", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.Limit != 8 || query.Offset != 3 {
+	if query.RequestID != "req_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.TurnID != "turn_filter" || query.Limit != 8 || query.Offset != 3 {
 		t.Fatalf("request correlation query가 이상해요: %+v", query)
 	}
 	var body RequestCorrelationResponse

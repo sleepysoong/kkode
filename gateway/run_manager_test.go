@@ -41,6 +41,13 @@ func TestAsyncRunManagerStartsAndCompletesRun(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != run.ID || listed[0].TurnID != "turn_1" {
 		t.Fatalf("run 목록이 이상해요: %+v", listed)
 	}
+	byTurn, err := manager.List(context.Background(), RunQuery{TurnID: "turn_1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byTurn) != 1 || byTurn[0].ID != run.ID || byTurn[0].TurnID != "turn_1" {
+		t.Fatalf("turn_id run 목록이 이상해요: %+v", byTurn)
+	}
 }
 
 func TestAsyncRunManagerPreservesRequestIDWhenStarterReturnsMetadata(t *testing.T) {

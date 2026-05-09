@@ -290,6 +290,7 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 	if !ok {
 		return
 	}
+	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_request_runs")
 	if !ok {
 		return
@@ -298,7 +299,7 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{Provider: provider, Model: model, RequestID: requestID, Limit: limit + 1, Offset: offset})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{TurnID: turnID, Provider: provider, Model: model, RequestID: requestID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return
@@ -1445,6 +1446,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
 		return
 	}
+	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
 	provider, model, ok := queryRunProviderModel(w, r, "invalid_run_list")
 	if !ok {
 		return
@@ -1457,7 +1459,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey, Limit: limit + 1, Offset: offset})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), TurnID: turnID, Status: r.URL.Query().Get("status"), Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return

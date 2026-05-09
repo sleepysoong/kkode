@@ -15,6 +15,7 @@ import (
 // RunQuery는 외부 adapter가 background run 목록을 좁혀 볼 때 쓰는 조건이에요.
 type RunQuery struct {
 	SessionID      string
+	TurnID         string
 	Status         string
 	Provider       string
 	Model          string
@@ -336,7 +337,7 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 		limit = 50
 	}
 	if m.runStore != nil {
-		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, Provider: q.Provider, Model: q.Model, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey, Limit: limit, Offset: q.Offset})
+		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, TurnID: q.TurnID, Status: q.Status, Provider: q.Provider, Model: q.Model, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey, Limit: limit, Offset: q.Offset})
 		if err != nil {
 			return nil, err
 		}
@@ -373,6 +374,9 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 
 func runMatchesQuery(run RunDTO, q RunQuery) bool {
 	if q.SessionID != "" && run.SessionID != q.SessionID {
+		return false
+	}
+	if q.TurnID != "" && run.TurnID != q.TurnID {
 		return false
 	}
 	if q.Status != "" && run.Status != q.Status {

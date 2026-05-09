@@ -125,6 +125,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		`ALTER TABLE runs ADD COLUMN context_blocks_json BLOB NOT NULL DEFAULT '[]';`,
 		`ALTER TABLE runs ADD COLUMN usage_json BLOB NOT NULL DEFAULT '{}';`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_session_updated ON runs(session_id, updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_runs_turn_updated ON runs(turn_id, updated_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_status_updated ON runs(status, updated_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_request_id_updated ON runs(json_extract(CAST(metadata_json AS TEXT), '$.request_id'), updated_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_idempotency_key_updated ON runs(json_extract(CAST(metadata_json AS TEXT), '$.idempotency_key'), updated_at);`,
@@ -1296,6 +1297,10 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 	if q.SessionID != "" {
 		where = append(where, `session_id = ?`)
 		args = append(args, q.SessionID)
+	}
+	if q.TurnID != "" {
+		where = append(where, `turn_id = ?`)
+		args = append(args, q.TurnID)
 	}
 	if q.Status != "" {
 		where = append(where, `status = ?`)

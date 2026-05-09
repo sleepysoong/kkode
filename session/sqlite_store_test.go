@@ -487,6 +487,14 @@ func TestRunStorePersistsBackgroundRuns(t *testing.T) {
 	if len(byProviderModel) != 1 || byProviderModel[0].ID != "run_1" {
 		t.Fatalf("provider/model run list가 이상해요: %+v", byProviderModel)
 	}
+	byTurnID, err := store.ListRuns(ctx, RunQuery{SessionID: sess.ID, TurnID: "turn_1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byTurnID) != 1 || byTurnID[0].ID != "run_1" || byTurnID[0].TurnID != "turn_1" {
+		t.Fatalf("turn_id run list가 이상해요: %+v", byTurnID)
+	}
+	assertSQLiteIndexExists(t, store, "runs", "idx_runs_turn_updated")
 	assertSQLiteIndexExists(t, store, "runs", "idx_runs_request_id_updated")
 	saved.Metadata["idempotency_key"] = "idem_store"
 	if _, err := store.SaveRun(ctx, saved); err != nil {

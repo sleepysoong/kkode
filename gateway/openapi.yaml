@@ -2052,6 +2052,11 @@ paths:
           schema:
             type: string
         - in: query
+          name: turn_id
+          schema:
+            type: string
+          description: run이 연결된 turn_id 값으로 좁혀요.
+        - in: query
           name: status
           schema:
             type: string
@@ -2201,6 +2206,11 @@ paths:
             type: string
             maxLength: 128
           description: request 안의 run을 model 값으로 좁혀요.
+        - in: query
+          name: turn_id
+          schema:
+            type: string
+          description: request 안의 run을 turn_id 값으로 좁혀요.
         - in: query
           name: limit
           schema:
