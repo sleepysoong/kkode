@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sleepysoong/kkode/llm"
 )
@@ -114,10 +115,11 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}}); err != nil {
+	startedAt := time.Unix(100, 0).UTC()
+	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", StartedAt: startedAt, EndedAt: startedAt.Add(1500 * time.Millisecond), Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, Run{ID: "run_stats_openai", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "openai", Model: "gpt-5-mini", Usage: llm.Usage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}); err != nil {
+	if _, err := store.SaveRun(ctx, Run{ID: "run_stats_openai", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "openai", Model: "gpt-5-mini", StartedAt: startedAt, EndedAt: startedAt.Add(2500 * time.Millisecond), Usage: llm.Usage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(ctx, Checkpoint{ID: "cp_stats", SessionID: sess.ID, TurnID: turn.ID}); err != nil {
@@ -141,6 +143,9 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	}
 	if stats.RunUsage.InputTokens != 16 || stats.RunUsage.OutputTokens != 9 || stats.RunUsage.TotalTokens != 25 || stats.RunUsage.ReasoningTokens != 3 {
 		t.Fatalf("run usage stats가 이상해요: %+v", stats.RunUsage)
+	}
+	if stats.RunDuration.Count != 2 || stats.RunDuration.SumMS != 4000 || stats.RunDuration.AvgMS != 2000 || stats.RunDuration.MaxMS != 2500 {
+		t.Fatalf("run duration stats가 이상해요: %+v", stats.RunDuration)
 	}
 	if stats.RunUsageByProvider["copilot"].TotalTokens != 18 || stats.RunUsageByProvider["openai"].TotalTokens != 7 || stats.RunUsageByModel["gpt-5-mini"].TotalTokens != 25 {
 		t.Fatalf("grouped run usage stats가 이상해요: provider=%+v model=%+v", stats.RunUsageByProvider, stats.RunUsageByModel)

@@ -17,11 +17,20 @@ type StatsResponse struct {
 	Artifacts          int                 `json:"artifacts"`
 	TotalRuns          int                 `json:"total_runs"`
 	Runs               map[string]int      `json:"runs"`
+	RunDuration        RunDurationStatsDTO `json:"run_duration"`
 	RunUsage           UsageDTO            `json:"run_usage"`
 	RunUsageByProvider map[string]UsageDTO `json:"run_usage_by_provider"`
 	RunUsageByModel    map[string]UsageDTO `json:"run_usage_by_model"`
 	TotalResources     int                 `json:"total_resources"`
 	Resources          map[string]int      `json:"resources"`
+}
+
+// RunDurationStatsDTO는 완료된 run timestamp에서 계산한 latency aggregate예요.
+type RunDurationStatsDTO struct {
+	Count int   `json:"count"`
+	SumMS int64 `json:"sum_ms"`
+	AvgMS int64 `json:"avg_ms"`
+	MaxMS int64 `json:"max_ms"`
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -52,12 +61,17 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		Artifacts:          stats.Artifacts,
 		TotalRuns:          sumIntMap(stats.Runs),
 		Runs:               cloneIntMap(stats.Runs),
+		RunDuration:        runDurationStatsDTOFromSession(stats.RunDuration),
 		RunUsage:           usageDTOFromLLM(stats.RunUsage),
 		RunUsageByProvider: usageDTOMapFromLLM(stats.RunUsageByProvider),
 		RunUsageByModel:    usageDTOMapFromLLM(stats.RunUsageByModel),
 		TotalResources:     sumIntMap(stats.Resources),
 		Resources:          cloneIntMap(stats.Resources),
 	}
+}
+
+func runDurationStatsDTOFromSession(stats session.RunDurationStats) RunDurationStatsDTO {
+	return RunDurationStatsDTO{Count: stats.Count, SumMS: stats.SumMS, AvgMS: stats.AvgMS, MaxMS: stats.MaxMS}
 }
 
 func usageDTOFromLLM(usage llm.Usage) UsageDTO {

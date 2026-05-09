@@ -148,10 +148,19 @@ type StoreStats struct {
 	Checkpoints        int
 	Artifacts          int
 	Runs               map[string]int
+	RunDuration        RunDurationStats
 	RunUsage           llm.Usage
 	RunUsageByProvider map[string]llm.Usage
 	RunUsageByModel    map[string]llm.Usage
 	Resources          map[string]int
+}
+
+// RunDurationStats는 완료된 run timestamp에서 계산한 latency 집계예요.
+type RunDurationStats struct {
+	Count int
+	SumMS int64
+	AvgMS int64
+	MaxMS int64
 }
 
 // StatsStore는 dashboard/API adapter가 여러 목록 API를 반복 호출하지 않게 exact count를 제공해요.

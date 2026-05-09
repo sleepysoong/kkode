@@ -2963,9 +2963,28 @@ components:
           additionalProperties: true
         auth_status:
           type: string
+    RunDurationStats:
+      type: object
+      required: [count, sum_ms, avg_ms, max_ms]
+      properties:
+        count:
+          type: integer
+          description: 시작/종료 timestamp가 모두 있고 종료가 시작 이후인 run 개수예요.
+        sum_ms:
+          type: integer
+          format: int64
+          description: 집계된 run duration 합계 millisecond예요.
+        avg_ms:
+          type: integer
+          format: int64
+          description: 집계된 run duration 평균 millisecond예요.
+        max_ms:
+          type: integer
+          format: int64
+          description: 집계된 run duration 최대 millisecond예요.
     StatsResponse:
       type: object
-      required: [sessions, turns, events, todos, checkpoints, artifacts, total_runs, runs, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources]
+      required: [sessions, turns, events, todos, checkpoints, artifacts, total_runs, runs, run_duration, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources]
       properties:
         sessions:
           type: integer
@@ -2986,6 +3005,8 @@ components:
           type: object
           additionalProperties:
             type: integer
+        run_duration:
+          $ref: '#/components/schemas/RunDurationStats'
         run_usage:
           $ref: '#/components/schemas/Usage'
         run_usage_by_provider:
