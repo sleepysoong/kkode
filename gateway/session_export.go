@@ -585,14 +585,11 @@ func sanitizeImportedSession(sess session.Session, now time.Time) session.Sessio
 }
 
 func validateImportedSession(sess session.Session) error {
-	if sess.ID == "" {
-		return fmt.Errorf("raw_session.id가 필요해요")
-	}
-	if len(sess.ID) > maxSessionIDBytes {
-		return fmt.Errorf("session id는 %d byte 이하여야 해요", maxSessionIDBytes)
-	}
-	if !validRunMetadataKey(sess.ID) {
-		return fmt.Errorf("session id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if err := validateSessionIDText(sess.ID); err != nil {
+		if sess.ID == "" {
+			return fmt.Errorf("raw_session.id가 필요해요")
+		}
+		return err
 	}
 	if sess.ProjectRoot == "" || sess.ProviderName == "" || sess.Model == "" {
 		return fmt.Errorf("raw_session project_root, provider_name, model이 필요해요")
@@ -628,6 +625,19 @@ func validateImportedSession(sess session.Session) error {
 		if _, err := todoFromDTO(TodoDTO{ID: todo.ID, Content: todo.Content, Status: string(todo.Status), Priority: todo.Priority, UpdatedAt: todo.UpdatedAt}, time.Now().UTC()); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateSessionIDText(id string) error {
+	if id == "" {
+		return fmt.Errorf("session id가 필요해요")
+	}
+	if len(id) > maxSessionIDBytes {
+		return fmt.Errorf("session id는 %d byte 이하여야 해요", maxSessionIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return fmt.Errorf("session id는 영문/숫자/._- 문자만 쓸 수 있어요")
 	}
 	return nil
 }

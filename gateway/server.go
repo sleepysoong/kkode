@@ -832,6 +832,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		RunTimeoutSeconds:           durationSeconds(cfg.RunTimeout),
 		RunMaxIterations:            cfg.RunMaxIterations,
 		RunWebMaxBytes:              cfg.RunWebMaxBytes,
+		MaxSessionIDBytes:           maxSessionIDBytes,
 		MaxProjectRootBytes:         maxProjectRootBytes,
 		MaxMCPHTTPResponseBytes:     maxMCPHTTPResponseBytes,
 		MaxMCPProbeNameBytes:        maxMCPProbeNameBytes,
@@ -1097,6 +1098,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		return
 	}
 	sessionID := parts[1]
+	if err := validateSessionIDText(sessionID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_session", err.Error())
+		return
+	}
 	if len(parts) == 2 && r.Method == http.MethodGet {
 		s.getSession(w, r, sessionID)
 		return
