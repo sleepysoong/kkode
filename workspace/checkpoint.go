@@ -33,6 +33,13 @@ type FileCheckpointEntry struct {
 	ContentBase64 string `json:"content_base64,omitempty"`
 }
 
+type FileCheckpointSummary struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	Entries   int       `json:"entries"`
+	Paths     []string  `json:"paths"`
+}
+
 func (w *Workspace) CreateCheckpoint(paths []string) (FileCheckpoint, error) {
 	cp, err := w.SnapshotPaths(paths)
 	if err != nil {
@@ -87,7 +94,7 @@ func (w *Workspace) SaveCheckpoint(cp FileCheckpoint) error {
 	return os.WriteFile(filepath.Join(dir, cp.ID+".json"), data, 0o644)
 }
 
-func (w *Workspace) RestoreCheckpoint(id string) (FileCheckpoint, error) {
+func (w *Workspace) LoadCheckpoint(id string) (FileCheckpoint, error) {
 	id = strings.TrimSpace(id)
 	if !safeCheckpointID(id) {
 		return FileCheckpoint{}, fmt.Errorf("invalid checkpoint id: %s", id)
@@ -110,12 +117,73 @@ func (w *Workspace) RestoreCheckpoint(id string) (FileCheckpoint, error) {
 	if cp.Version != 1 {
 		return FileCheckpoint{}, fmt.Errorf("unsupported checkpoint version: %d", cp.Version)
 	}
+	return cp, nil
+}
+
+func (w *Workspace) ListCheckpoints() ([]FileCheckpointSummary, error) {
+	dir, err := w.Resolve(CheckpointDir)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FileCheckpointSummary, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		cp, err := w.LoadCheckpoint(id)
+		if err != nil {
+			continue
+		}
+		out = append(out, checkpointSummary(cp))
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
+func (w *Workspace) DeleteCheckpoint(id string) error {
+	id = strings.TrimSpace(id)
+	if !safeCheckpointID(id) {
+		return fmt.Errorf("invalid checkpoint id: %s", id)
+	}
+	path, err := w.Resolve(filepath.ToSlash(filepath.Join(CheckpointDir, id+".json")))
+	if err != nil {
+		return err
+	}
+	return os.Remove(path)
+}
+
+func (w *Workspace) RestoreCheckpoint(id string) (FileCheckpoint, error) {
+	cp, err := w.LoadCheckpoint(id)
+	if err != nil {
+		return FileCheckpoint{}, err
+	}
 	for _, entry := range cp.Entries {
 		if err := w.restoreCheckpointEntry(entry); err != nil {
 			return FileCheckpoint{}, err
 		}
 	}
 	return cp, nil
+}
+
+func checkpointSummary(cp FileCheckpoint) FileCheckpointSummary {
+	paths := make([]string, 0, len(cp.Entries))
+	for _, entry := range cp.Entries {
+		paths = append(paths, entry.Path)
+	}
+	return FileCheckpointSummary{ID: cp.ID, CreatedAt: cp.CreatedAt, Entries: len(cp.Entries), Paths: paths}
 }
 
 func (w *Workspace) snapshotPath(rel string, cp *FileCheckpoint, seen map[string]bool, totalBytes *int) error {

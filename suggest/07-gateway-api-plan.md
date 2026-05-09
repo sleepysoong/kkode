@@ -386,6 +386,9 @@ POST /api/v1/files/delete
 POST /api/v1/files/move
 POST /api/v1/files/patch
 POST /api/v1/files/restore
+GET  /api/v1/files/checkpoints
+GET  /api/v1/files/checkpoints/{checkpoint_id}
+DELETE /api/v1/files/checkpoints/{checkpoint_id}
 GET  /api/v1/files/glob?project_root=/repo&pattern=**/*.go
 GET  /api/v1/files/grep?project_root=/repo&pattern=TODO&path_glob=**/*.go
 ```
@@ -544,6 +547,9 @@ Run metadata에 다음을 저장해요.
 - `POST /api/v1/files/move`
 - `POST /api/v1/files/patch`
 - `POST /api/v1/files/restore`
+- `GET /api/v1/files/checkpoints`
+- `GET /api/v1/files/checkpoints/{checkpoint_id}`
+- `DELETE /api/v1/files/checkpoints/{checkpoint_id}`
 - `GET /artifacts`
 - `GET /todos`
 

@@ -219,6 +219,24 @@ func TestWorkspaceCheckpointRestoresMutations(t *testing.T) {
 	if matches, err := w.Glob(".kkode/**/*"); err != nil || len(matches) != 0 {
 		t.Fatalf("checkpoint internals should stay out of glob: matches=%v err=%v", matches, err)
 	}
+	listed, err := w.ListCheckpoints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != cp.ID || listed[0].Entries != 2 || len(listed[0].Paths) != 2 {
+		t.Fatalf("checkpoint list=%+v", listed)
+	}
+	loaded, err := w.LoadCheckpoint(cp.ID)
+	if err != nil || loaded.ID != cp.ID || len(loaded.Entries) != 2 {
+		t.Fatalf("loaded checkpoint=%+v err=%v", loaded, err)
+	}
+	if err := w.DeleteCheckpoint(cp.ID); err != nil {
+		t.Fatal(err)
+	}
+	listed, err = w.ListCheckpoints()
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("checkpoint delete should remove snapshot: listed=%+v err=%v", listed, err)
+	}
 }
 
 func TestWorkspaceDeleteAndMovePath(t *testing.T) {

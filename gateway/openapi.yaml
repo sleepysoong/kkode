@@ -441,6 +441,80 @@ paths:
                 $ref: '#/components/schemas/FileRestoreResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/files/checkpoints:
+    get:
+      operationId: getFilesCheckpoints
+      summary: workspace file checkpoint 목록을 반환해요.
+      description: 파일 쓰기/delete/move/patch 전 생성된 checkpoint metadata를 반환해요. 파일 내용 snapshot은 응답하지 않아요.
+      parameters:
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: file checkpoint 목록이에요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCheckpointListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/files/checkpoints/{checkpoint_id}:
+    get:
+      operationId: getFilesCheckpointsByCheckpointId
+      summary: workspace file checkpoint metadata를 반환해요.
+      parameters:
+        - in: path
+          name: checkpoint_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: file checkpoint metadata예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCheckpointListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteFilesCheckpointsByCheckpointId
+      summary: workspace file checkpoint snapshot을 삭제해요.
+      parameters:
+        - in: path
+          name: checkpoint_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: project_root
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: file checkpoint delete 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCheckpointDeleteResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/git/status:
     get:
       operationId: getGitStatus
@@ -3001,6 +3075,51 @@ components:
           type: boolean
         entries:
           type: integer
+    FileCheckpointListResponse:
+      type: object
+      required: [project_root, checkpoints]
+      properties:
+        project_root:
+          type: string
+        checkpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileCheckpoint'
+        total_checkpoints:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        next_offset:
+          type: integer
+        result_truncated:
+          type: boolean
+    FileCheckpoint:
+      type: object
+      required: [id, created_at, entries]
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        entries:
+          type: integer
+        paths:
+          type: array
+          items:
+            type: string
+    FileCheckpointDeleteResponse:
+      type: object
+      required: [project_root, checkpoint_id, deleted]
+      properties:
+        project_root:
+          type: string
+        checkpoint_id:
+          type: string
+        deleted:
+          type: boolean
     FileWriteRequest:
       type: object
       required: [project_root, path, content]

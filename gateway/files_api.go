@@ -132,6 +132,29 @@ type FileRestoreResponse struct {
 	Entries      int    `json:"entries,omitempty"`
 }
 
+type FileCheckpointListResponse struct {
+	ProjectRoot      string              `json:"project_root"`
+	Checkpoints      []FileCheckpointDTO `json:"checkpoints"`
+	TotalCheckpoints int                 `json:"total_checkpoints,omitempty"`
+	Limit            int                 `json:"limit,omitempty"`
+	Offset           int                 `json:"offset,omitempty"`
+	NextOffset       int                 `json:"next_offset,omitempty"`
+	ResultTruncated  bool                `json:"result_truncated,omitempty"`
+}
+
+type FileCheckpointDTO struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	Entries   int       `json:"entries"`
+	Paths     []string  `json:"paths,omitempty"`
+}
+
+type FileCheckpointDeleteResponse struct {
+	ProjectRoot  string `json:"project_root"`
+	CheckpointID string `json:"checkpoint_id"`
+	Deleted      bool   `json:"deleted"`
+}
+
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		s.listFiles(w, r)
@@ -165,6 +188,18 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		s.restoreFileCheckpoint(w, r)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "checkpoints" && r.Method == http.MethodGet {
+		s.listFileCheckpoints(w, r)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "checkpoints" && r.Method == http.MethodGet {
+		s.getFileCheckpoint(w, r, parts[2])
+		return
+	}
+	if len(parts) == 3 && parts[1] == "checkpoints" && r.Method == http.MethodDelete {
+		s.deleteFileCheckpoint(w, r, parts[2])
+		return
+	}
 	if len(parts) == 1 {
 		writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodGet)
 		return
@@ -183,7 +218,14 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		case "delete", "move", "restore":
 			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodPost)
 			return
+		case "checkpoints":
+			writeMethodNotAllowed(w, r, "지원하지 않는 files checkpoint method예요", http.MethodGet)
+			return
 		}
+	}
+	if len(parts) == 3 && parts[1] == "checkpoints" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 files checkpoint method예요", http.MethodGet, http.MethodDelete)
+		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "files endpoint를 찾을 수 없어요")
 }
@@ -439,6 +481,75 @@ func (s *Server) restoreFileCheckpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, FileRestoreResponse{ProjectRoot: projectRoot, CheckpointID: cp.ID, Restored: true, Entries: len(cp.Entries)})
+}
+
+func (s *Server) listFileCheckpoints(w http.ResponseWriter, r *http.Request) {
+	ws, projectRoot, ok := workspaceFromQuery(w, r)
+	if !ok {
+		return
+	}
+	limit, ok := queryLimitParam(w, r, "limit", 50, 500, "invalid_file_checkpoint_list")
+	if !ok {
+		return
+	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_file_checkpoint_list")
+	if !ok {
+		return
+	}
+	items, err := ws.ListCheckpoints()
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "list_file_checkpoints_failed", err.Error())
+		return
+	}
+	total := len(items)
+	page, returned, truncated := pageSlice(items, limit, offset)
+	writeJSON(w, FileCheckpointListResponse{ProjectRoot: projectRoot, Checkpoints: fileCheckpointDTOs(page), TotalCheckpoints: total, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+}
+
+func (s *Server) getFileCheckpoint(w http.ResponseWriter, r *http.Request, checkpointID string) {
+	ws, projectRoot, ok := workspaceFromQuery(w, r)
+	if !ok {
+		return
+	}
+	cp, err := ws.LoadCheckpoint(strings.TrimSpace(checkpointID))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "file_checkpoint_not_found", err.Error())
+		return
+	}
+	writeJSON(w, FileCheckpointListResponse{ProjectRoot: projectRoot, Checkpoints: []FileCheckpointDTO{fileCheckpointDTO(workspace.FileCheckpointSummary{ID: cp.ID, CreatedAt: cp.CreatedAt, Entries: len(cp.Entries), Paths: fileCheckpointPaths(cp)})}, TotalCheckpoints: 1, Limit: 1})
+}
+
+func (s *Server) deleteFileCheckpoint(w http.ResponseWriter, r *http.Request, checkpointID string) {
+	ws, projectRoot, ok := workspaceFromQuery(w, r)
+	if !ok {
+		return
+	}
+	checkpointID = strings.TrimSpace(checkpointID)
+	if err := ws.DeleteCheckpoint(checkpointID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "delete_file_checkpoint_failed", err.Error())
+		return
+	}
+	writeJSON(w, FileCheckpointDeleteResponse{ProjectRoot: projectRoot, CheckpointID: checkpointID, Deleted: true})
+}
+
+func fileCheckpointDTOs(items []workspace.FileCheckpointSummary) []FileCheckpointDTO {
+	out := make([]FileCheckpointDTO, 0, len(items))
+	for _, item := range items {
+		out = append(out, fileCheckpointDTO(item))
+	}
+	return out
+}
+
+func fileCheckpointDTO(item workspace.FileCheckpointSummary) FileCheckpointDTO {
+	return FileCheckpointDTO{ID: item.ID, CreatedAt: item.CreatedAt, Entries: item.Entries, Paths: item.Paths}
+}
+
+func fileCheckpointPaths(cp workspace.FileCheckpoint) []string {
+	paths := make([]string, 0, len(cp.Entries))
+	for _, entry := range cp.Entries {
+		paths = append(paths, entry.Path)
+	}
+	return paths
 }
 
 func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {

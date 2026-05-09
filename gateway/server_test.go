@@ -92,12 +92,13 @@ func TestGatewayAPIIndex(t *testing.T) {
 		operations[op.Name] = op
 	}
 	for name, want := range map[string]APIIndexOperationDTO{
-		"session_create": {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
-		"file_write":     {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
-		"file_move":      {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
-		"file_restore":   {Name: "file_restore", Method: "POST", Path: "/api/v1/files/restore"},
-		"run_cancel":     {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
-		"lsp_hover":      {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
+		"session_create":         {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
+		"file_write":             {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
+		"file_move":              {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
+		"file_restore":           {Name: "file_restore", Method: "POST", Path: "/api/v1/files/restore"},
+		"file_checkpoint_delete": {Name: "file_checkpoint_delete", Method: "DELETE", Path: "/api/v1/files/checkpoints/{checkpoint_id}"},
+		"run_cancel":             {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
+		"lsp_hover":              {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
 	} {
 		if operations[name] != want {
 			t.Fatalf("API index operation %s = %+v, want %+v", name, operations[name], want)
@@ -5837,6 +5838,46 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	data, err = os.ReadFile(filepath.Join(root, "docs", "moved.md"))
 	if err != nil || string(data) != "new" {
 		t.Fatalf("file restore 결과가 이상해요: content=%q err=%v", data, err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints?project_root="+url.QueryEscape(root)+"&limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("checkpoint list status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var checkpointList FileCheckpointListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpointList); err != nil {
+		t.Fatal(err)
+	}
+	if len(checkpointList.Checkpoints) != 1 || checkpointList.TotalCheckpoints == 0 || checkpointList.Limit != 1 || checkpointList.Checkpoints[0].ID == "" || checkpointList.Checkpoints[0].Entries == 0 {
+		t.Fatalf("file checkpoint list가 이상해요: %+v", checkpointList)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints/"+deleted.CheckpointID+"?project_root="+url.QueryEscape(root), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("checkpoint detail status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	checkpointList = FileCheckpointListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpointList); err != nil {
+		t.Fatal(err)
+	}
+	if len(checkpointList.Checkpoints) != 1 || checkpointList.Checkpoints[0].ID != deleted.CheckpointID || len(checkpointList.Checkpoints[0].Paths) == 0 {
+		t.Fatalf("file checkpoint detail이 이상해요: %+v", checkpointList)
+	}
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/files/checkpoints/"+deleted.CheckpointID+"?project_root="+url.QueryEscape(root), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("checkpoint delete status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var checkpointDelete FileCheckpointDeleteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpointDelete); err != nil {
+		t.Fatal(err)
+	}
+	if !checkpointDelete.Deleted || checkpointDelete.ProjectRoot != root || checkpointDelete.CheckpointID != deleted.CheckpointID {
+		t.Fatalf("file checkpoint delete가 이상해요: %+v", checkpointDelete)
 	}
 
 	body = `{"project_root":"` + root + `","path":"docs"}`

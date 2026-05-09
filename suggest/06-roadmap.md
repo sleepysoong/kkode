@@ -66,7 +66,7 @@
 ### 작업
 
 - file edit tool 실행 전 snapshot 저장은 구현됐고 유지해요.
-- file checkpoint restore tool/API는 구현됐고, list/cleanup/retention을 보강해요.
+- file checkpoint restore/list/detail/delete tool/API는 구현됐고, retention 정책을 보강해요.
 - `kkode undo`, `kkode redo`, `kkode rewind`를 추가해요.
 - bash command 변경은 추적 한계를 명확히 표시해요.
 
