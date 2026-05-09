@@ -338,28 +338,40 @@ func scanGoIdentifierAt(root string, relPath string, line int, column int) (stri
 }
 
 func limitLSPSymbols(items []LSPSymbolDTO, limit int) ([]LSPSymbolDTO, bool) {
-	if limit <= 0 || len(items) <= limit {
+	if limit <= 0 {
+		return []LSPSymbolDTO{}, false
+	}
+	if len(items) <= limit {
 		return items, false
 	}
 	return items[:limit], true
 }
 
 func limitLSPReferences(items []LSPReferenceDTO, limit int) ([]LSPReferenceDTO, bool) {
-	if limit <= 0 || len(items) <= limit {
+	if limit <= 0 {
+		return []LSPReferenceDTO{}, false
+	}
+	if len(items) <= limit {
 		return items, false
 	}
 	return items[:limit], true
 }
 
 func limitLSPRenameEdits(items []LSPRenameEditDTO, limit int) ([]LSPRenameEditDTO, bool) {
-	if limit <= 0 || len(items) <= limit {
+	if limit <= 0 {
+		return []LSPRenameEditDTO{}, false
+	}
+	if len(items) <= limit {
 		return items, false
 	}
 	return items[:limit], true
 }
 
 func limitLSPDiagnostics(items []LSPDiagnosticDTO, limit int) ([]LSPDiagnosticDTO, bool) {
-	if limit <= 0 || len(items) <= limit {
+	if limit <= 0 {
+		return []LSPDiagnosticDTO{}, false
+	}
+	if len(items) <= limit {
 		return items, false
 	}
 	return items[:limit], true

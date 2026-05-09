@@ -3048,6 +3048,19 @@ func (r *Runner) Run() {}
 	if len(symbols.Symbols) != 1 || symbols.Limit != 1 || !symbols.ResultTruncated {
 		t.Fatalf("LSP symbol limit metadata가 이상해요: %+v", symbols)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run&limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	symbols = LSPSymbolListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &symbols); err != nil {
+		t.Fatal(err)
+	}
+	if len(symbols.Symbols) != 0 || symbols.Limit != 0 || symbols.ResultTruncated {
+		t.Fatalf("LSP symbol zero-limit metadata가 이상해요: %+v", symbols)
+	}
 	for _, query := range []string{"limit=-1", "limit=abc", "query=" + strings.Repeat("x", maxLSPQueryTextBytes+1)} {
 		target := "/api/v1/lsp/symbols?project_root=" + root + "&query=run&" + query
 		if strings.HasPrefix(query, "query=") {
@@ -3097,6 +3110,19 @@ func (r *Runner) Run() {}
 	}
 	if len(documentSymbols.Symbols) != 1 || documentSymbols.Limit != 1 || !documentSymbols.ResultTruncated {
 		t.Fatalf("document symbol limit metadata가 이상해요: %+v", documentSymbols)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/document-symbols?project_root="+root+"&path=main.go&limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	documentSymbols = LSPSymbolListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &documentSymbols); err != nil {
+		t.Fatal(err)
+	}
+	if len(documentSymbols.Symbols) != 0 || documentSymbols.Limit != 0 || documentSymbols.ResultTruncated {
+		t.Fatalf("document symbol zero-limit metadata가 이상해요: %+v", documentSymbols)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc", "path=" + strings.Repeat("x", maxLSPPathBytes+1) + ".go"} {
 		target := "/api/v1/lsp/document-symbols?project_root=" + root + "&path=main.go&" + query
@@ -3172,6 +3198,19 @@ func main() {
 	if defs.Limit != 50 || defs.ResultTruncated {
 		t.Fatalf("definition limit metadata가 이상해요: %+v", defs)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/definitions?project_root="+root+"&symbol=Runner&limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	defs = LSPLocationListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &defs); err != nil {
+		t.Fatal(err)
+	}
+	if len(defs.Locations) != 0 || defs.Limit != 0 || defs.ResultTruncated {
+		t.Fatalf("definition zero-limit metadata가 이상해요: %+v", defs)
+	}
 	for _, query := range []string{"limit=-1", "limit=abc", "symbol=" + strings.Repeat("x", maxLSPQueryTextBytes+1)} {
 		target := "/api/v1/lsp/definitions?project_root=" + root + "&symbol=Runner&" + query
 		if strings.HasPrefix(query, "symbol=") {
@@ -3215,6 +3254,19 @@ func main() {
 	}
 	if refs.Limit != 20 || refs.ResultTruncated {
 		t.Fatalf("reference limit metadata가 이상해요: %+v", refs)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/references?project_root="+root+"&symbol=Runner&limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	zeroRefs := LSPReferenceListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &zeroRefs); err != nil {
+		t.Fatal(err)
+	}
+	if len(zeroRefs.References) != 0 || zeroRefs.Limit != 0 || zeroRefs.ResultTruncated {
+		t.Fatalf("reference zero-limit metadata가 이상해요: %+v", zeroRefs)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/references?project_root="+root+"&symbol=Runner&"+query, nil)
@@ -3274,6 +3326,19 @@ func main() {
 	}
 	if rename.Symbol != "Run" || rename.NewName != "Execute" || len(rename.Edits) < 2 || rename.Limit != 20 {
 		t.Fatalf("rename preview 결과가 이상해요: %+v", rename)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/rename-preview?project_root="+root+"&path=main.go&line=11&column=4&new_name=Execute&limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	rename = LSPRenamePreviewResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &rename); err != nil {
+		t.Fatal(err)
+	}
+	if rename.Symbol != "Run" || rename.NewName != "Execute" || len(rename.Edits) != 0 || rename.Limit != 0 || rename.ResultTruncated {
+		t.Fatalf("rename preview zero-limit metadata가 이상해요: %+v", rename)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc", "new_name=" + strings.Repeat("x", maxLSPQueryTextBytes+1)} {
 		target := "/api/v1/lsp/rename-preview?project_root=" + root + "&path=main.go&line=11&column=4&new_name=Execute&" + query
@@ -3375,6 +3440,19 @@ func Broken( {
 	}
 	if diagnostics.Limit != 200 || diagnostics.ResultTruncated {
 		t.Fatalf("diagnostics limit metadata가 이상해요: %+v", diagnostics)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/diagnostics?project_root="+root+"&path=broken.go&limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	diagnostics = LSPDiagnosticListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics.Diagnostics) != 0 || diagnostics.Limit != 0 || diagnostics.ResultTruncated {
+		t.Fatalf("diagnostics zero-limit metadata가 이상해요: %+v", diagnostics)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/diagnostics?project_root="+root+"&path=broken.go&"+query, nil)
