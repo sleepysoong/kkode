@@ -1261,6 +1261,8 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
       responses:
         '204':
           description: 삭제됐어요.
@@ -2740,6 +2742,8 @@ components:
         max_resource_id_bytes:
           type: integer
         max_artifact_id_bytes:
+          type: integer
+        max_todo_id_bytes:
           type: integer
         max_skill_preview_bytes:
           type: integer

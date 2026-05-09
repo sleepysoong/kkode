@@ -515,6 +515,7 @@ type LimitDTO struct {
 	MaxCheckpointIDBytes        int   `json:"max_checkpoint_id_bytes,omitempty"`
 	MaxResourceIDBytes          int   `json:"max_resource_id_bytes,omitempty"`
 	MaxArtifactIDBytes          int   `json:"max_artifact_id_bytes,omitempty"`
+	MaxTodoIDBytes              int   `json:"max_todo_id_bytes,omitempty"`
 	MaxSkillPreviewBytes        int   `json:"max_skill_preview_bytes,omitempty"`
 	MaxSubagentPreviewBytes     int   `json:"max_subagent_preview_prompt_bytes,omitempty"`
 	MaxPromptTemplateNameBytes  int   `json:"max_prompt_template_name_bytes,omitempty"`

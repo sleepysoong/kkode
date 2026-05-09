@@ -108,8 +108,8 @@ func (s *Server) upsertSessionTodo(w http.ResponseWriter, r *http.Request, sessi
 
 func (s *Server) deleteSessionTodo(w http.ResponseWriter, r *http.Request, sessionID string, todoID string) {
 	todoID = strings.TrimSpace(todoID)
-	if todoID == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_todo", "todo id가 필요해요")
+	if err := validateTodoIDText(todoID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_todo", err.Error())
 		return
 	}
 	sess, err := s.cfg.Store.LoadSession(r.Context(), sessionID)
@@ -220,17 +220,27 @@ func todoFromDTO(dto TodoDTO, now time.Time) (session.Todo, error) {
 	if id == "" {
 		id = session.NewID("todo")
 	}
-	if len(id) > maxTodoIDBytes {
-		return session.Todo{}, fmt.Errorf("todo id는 %d byte 이하여야 해요", maxTodoIDBytes)
-	}
-	if !validRunMetadataKey(id) {
-		return session.Todo{}, fmt.Errorf("todo id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	if err := validateTodoIDText(id); err != nil {
+		return session.Todo{}, err
 	}
 	priority := strings.TrimSpace(dto.Priority)
 	if len(priority) > maxTodoPriorityBytes {
 		return session.Todo{}, fmt.Errorf("todo priority는 %d byte 이하여야 해요", maxTodoPriorityBytes)
 	}
 	return session.Todo{ID: id, Content: content, Status: status, Priority: priority, UpdatedAt: updatedAt.UTC()}, nil
+}
+
+func validateTodoIDText(id string) error {
+	if id == "" {
+		return fmt.Errorf("todo id가 필요해요")
+	}
+	if len(id) > maxTodoIDBytes {
+		return fmt.Errorf("todo id는 %d byte 이하여야 해요", maxTodoIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return fmt.Errorf("todo id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	return nil
 }
 
 func validTodoStatus(status session.TodoStatus) bool {

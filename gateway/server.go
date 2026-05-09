@@ -845,6 +845,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxCheckpointIDBytes:        maxCheckpointIDBytes,
 		MaxResourceIDBytes:          maxResourceIDBytes,
 		MaxArtifactIDBytes:          maxArtifactIDBytes,
+		MaxTodoIDBytes:              maxTodoIDBytes,
 		MaxSkillPreviewBytes:        maxSkillPreviewBytes,
 		MaxSubagentPreviewBytes:     maxSubagentPreviewPromptBytes,
 		MaxPromptTemplateNameBytes:  maxPromptTemplateNameBytes,
