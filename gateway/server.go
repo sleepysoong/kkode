@@ -696,6 +696,10 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []st
 		return
 	}
 	providerFilter := strings.TrimSpace(r.URL.Query().Get("provider"))
+	if len(providerFilter) > maxRunProviderModelBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_model_list", fmt.Sprintf("provider는 %d byte 이하여야 해요", maxRunProviderModelBytes))
+		return
+	}
 	out := []ModelDTO{}
 	for _, provider := range providersForDiscovery(s.cfg.Providers) {
 		if providerFilter != "" && !providerMatches(provider, providerFilter) {

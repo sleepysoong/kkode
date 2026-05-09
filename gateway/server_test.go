@@ -2420,8 +2420,12 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	if len(page.Models) != 1 || page.Models[0].ID != "gpt-5-mini" || page.TotalModels != 2 || page.Limit != 1 || page.Offset != 0 || page.NextOffset != 1 || !page.ResultTruncated {
 		t.Fatalf("model page가 이상해요: %+v", page)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai&"+query, nil)
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc", "provider=" + strings.Repeat("x", maxRunProviderModelBytes+1)} {
+		target := "/api/v1/models?provider=openai&" + query
+		if strings.HasPrefix(query, "provider=") {
+			target = "/api/v1/models?" + query
+		}
+		req = httptest.NewRequest(http.MethodGet, target, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -2432,6 +2436,9 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 		}
 		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("model list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "provider") && !strings.Contains(rec.Body.String(), "provider") {
+			t.Fatalf("model list provider 오류는 provider를 설명해야 해요: query=%s body=%s", query, rec.Body.String())
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/models?provider=openai-compatible", nil)
