@@ -3098,12 +3098,17 @@ func (r *Runner) Run() {}
 	if len(documentSymbols.Symbols) != 1 || documentSymbols.Limit != 1 || !documentSymbols.ResultTruncated {
 		t.Fatalf("document symbol limit metadata가 이상해요: %+v", documentSymbols)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc"} {
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/document-symbols?project_root="+root+"&path=main.go&"+query, nil)
+	for _, query := range []string{"limit=-1", "limit=abc", "path=" + strings.Repeat("x", maxLSPPathBytes+1) + ".go"} {
+		target := "/api/v1/lsp/document-symbols?project_root=" + root + "&path=main.go&" + query
+		if strings.HasPrefix(query, "path=") {
+			target = "/api/v1/lsp/document-symbols?project_root=" + root + "&" + query
+		}
+		req = httptest.NewRequest(http.MethodGet, target, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 document symbol limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 document symbol query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -3310,6 +3315,12 @@ func main() {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "max_bytes") {
 		t.Fatalf("잘못된 LSP format max_bytes는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/format-preview?project_root="+root+"&path="+strings.Repeat("x", maxLSPPathBytes+1)+".go", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "path") {
+		t.Fatalf("긴 LSP format path는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	largePath := filepath.Join(root, "large.go")

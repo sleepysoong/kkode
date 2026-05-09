@@ -21,6 +21,7 @@ import (
 const defaultLSPFormatPreviewBytes = 1 << 20
 const maxLSPFormatPreviewBytes = 8 << 20
 const maxLSPFormatInputBytes = 8 << 20
+const maxLSPPathBytes = 4096
 const maxLSPQueryTextBytes = 256
 
 var errLSPFileTooLarge = errors.New("LSP Go file is too large")
@@ -737,6 +738,10 @@ func normalizeProjectRoot(root string) (string, error) {
 }
 
 func resolveRelativeGoFile(absRoot string, relPath string) (string, error) {
+	relPath = strings.TrimSpace(relPath)
+	if len(relPath) > maxLSPPathBytes {
+		return "", fmt.Errorf("path는 %d byte 이하여야 해요", maxLSPPathBytes)
+	}
 	if filepath.IsAbs(relPath) {
 		return "", fmt.Errorf("path는 project_root 기준 상대 경로여야 해요: %s", relPath)
 	}
