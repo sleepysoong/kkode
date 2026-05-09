@@ -62,6 +62,9 @@ func TestWorkspaceListAndGlobUseBoundedEnvelope(t *testing.T) {
 	if len(listed) != MaxListEntries {
 		t.Fatalf("list should cap at %d entries, got %d", MaxListEntries, len(listed))
 	}
+	if listed[0] != "entry-00000.txt" || listed[len(listed)-1] != fmt.Sprintf("entry-%05d.txt", MaxListEntries-1) {
+		t.Fatalf("list should return deterministic lexical order, got first=%q last=%q", listed[0], listed[len(listed)-1])
+	}
 	matches, err := w.Glob("*.txt")
 	if err != nil {
 		t.Fatal(err)

@@ -312,14 +312,12 @@ func (w *Workspace) List(rel string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := os.Open(path)
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
-	defer dir.Close()
-	entries, err := dir.ReadDir(MaxListEntries)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
+	if len(entries) > MaxListEntries {
+		entries = entries[:MaxListEntries]
 	}
 	out := make([]string, 0, len(entries))
 	for _, entry := range entries {
