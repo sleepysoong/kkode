@@ -292,6 +292,10 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
+	if err := validateOptionalIDFilter("turn_id", turnID, maxRunIDBytes); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_runs", err.Error())
+		return
+	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_request_runs")
 	if !ok {
 		return
@@ -1491,6 +1495,10 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
+	if err := validateOptionalIDFilter("turn_id", turnID, maxRunIDBytes); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
+		return
+	}
 	provider, model, ok := queryRunProviderModel(w, r, "invalid_run_list")
 	if !ok {
 		return
@@ -1508,7 +1516,12 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	query := RunQuery{SessionID: r.URL.Query().Get("session_id"), TurnID: turnID, Status: status, Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey}
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	if err := validateOptionalIDFilter("session_id", sessionID, maxSessionIDBytes); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
+		return
+	}
+	query := RunQuery{SessionID: sessionID, TurnID: turnID, Status: status, Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey}
 	totalRuns, ok := s.countRuns(w, r, query, "count_runs_failed")
 	if !ok {
 		return
@@ -1549,6 +1562,20 @@ func queryRunProviderModel(w http.ResponseWriter, r *http.Request, code string) 
 		return "", "", false
 	}
 	return provider, model, true
+}
+
+func validateOptionalIDFilter(label string, value string, maxBytes int) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if len(value) > maxBytes {
+		return fmt.Errorf("%s는 %d byte 이하여야 해요", label, maxBytes)
+	}
+	if !validRunMetadataKey(value) {
+		return fmt.Errorf("%s는 영문/숫자/._- 문자만 쓸 수 있어요", label)
+	}
+	return nil
 }
 
 func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {

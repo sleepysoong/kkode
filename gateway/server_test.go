@@ -1198,13 +1198,13 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&provider=copilot&model=gpt-5-mini&turn_id=turn_filter&limit=5&offset=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?session_id=+sess_filter+&request_id=req_filter&idempotency_key=idem_filter&provider=copilot&model=gpt-5-mini&turn_id=turn_filter&limit=5&offset=10", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.TurnID != "turn_filter" || query.Limit != 6 || query.Offset != 10 {
+	if query.SessionID != "sess_filter" || query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.TurnID != "turn_filter" || query.Limit != 6 || query.Offset != 10 {
 		t.Fatalf("run query가 이상해요: %+v", query)
 	}
 	var body RunListResponse
@@ -1242,6 +1242,10 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 		{queryString: "idempotency_key=" + strings.Repeat("x", maxIdempotencyKeyBytes+1), want: "idempotency_key"},
 		{queryString: "provider=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "provider"},
 		{queryString: "model=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "model"},
+		{queryString: "session_id=" + strings.Repeat("x", maxSessionIDBytes+1), want: "session_id"},
+		{queryString: "session_id=bad/id", want: "session_id"},
+		{queryString: "turn_id=" + strings.Repeat("x", maxRunIDBytes+1), want: "turn_id"},
+		{queryString: "turn_id=bad/id", want: "turn_id"},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs?"+tc.queryString, nil)
 		rec = httptest.NewRecorder()
@@ -1351,6 +1355,8 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 	}{
 		{queryString: "provider=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "provider"},
 		{queryString: "model=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "model"},
+		{queryString: "turn_id=" + strings.Repeat("x", maxRunIDBytes+1), want: "turn_id"},
+		{queryString: "turn_id=bad/id", want: "turn_id"},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/runs?"+tc.queryString, nil)
 		rec = httptest.NewRecorder()
