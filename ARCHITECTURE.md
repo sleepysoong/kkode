@@ -655,6 +655,8 @@ POST /api/v1/runs/{run_id}/retry
 
 Legacy `workspace_*` tool surface도 `workspace_list`, `workspace_glob`, `workspace_search`의 `limit`과 `[result_truncated]` marker를 지원해서 오래된 caller가 표준 `file_*` surface로 완전히 이동하기 전에도 큰 text list를 bounded output으로 다루게 해요.
 
+Live MCP catalog API는 probe 결과를 page로 자르기 전에 전체 항목 수를 알고 있으므로 `/api/v1/mcp/servers/{id}/tools`, `/resources`, `/prompts` 응답에 각각 `total_tools`, `total_resources`, `total_prompts`도 함께 내려요. 외부 adapter는 이 값과 `limit`, `offset`, `next_offset`, `result_truncated`를 같이 써서 큰 MCP tool/resource/prompt 선택 UI의 총량과 다음 page를 추론 없이 표시할 수 있어요.
+
 Session checkpoint 목록 API는 `turn_id`, `limit`, `offset` query와 `total_checkpoints` 응답값을 제공해서 외부 adapter가 session 전체 checkpoint를 스캔하지 않고 turn-scoped restore/debug view를 만들게 해요.
 
 파일 쓰기 전용 API와 표준 `file_write`/`file_edit`/`file_delete`/`file_move`/`file_apply_patch` tool은 실행 전에 `.kkode/checkpoints` file snapshot을 만들고 `checkpoint_id`를 반환해요. `POST /api/v1/files/restore`와 `file_restore_checkpoint` tool은 같은 checkpoint payload를 복구해서 외부 adapter가 권한 프롬프트 없이도 undo UI를 붙일 수 있게 해요. `GET /api/v1/files/checkpoints` 계열은 snapshot 원문 content 없이 id, 생성 시각, entry 수, path metadata만 노출하고 `path`, `limit`, `offset`으로 특정 파일의 checkpoint history만 page처럼 좁히며, delete/prune endpoint와 `file_prune_checkpoints` tool로 오래된 file checkpoint를 정리해요.
