@@ -659,10 +659,10 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		{Kind: llm.ToolFunction, Name: "workspace_apply_patch", Description: "apply_patch 형식의 patch를 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
 		{Kind: llm.ToolFunction, Name: "workspace_restore_checkpoint", Description: "workspace file checkpoint를 복구해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"checkpoint_id": stringSchema()}, []string{"checkpoint_id"})},
 		{Kind: llm.ToolFunction, Name: "workspace_prune_checkpoints", Description: "최신 workspace file checkpoint만 남기고 오래된 snapshot을 삭제해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"keep_latest": nonNegativeIntegerSchema()}, []string{"keep_latest"})},
-		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
-		{Kind: llm.ToolFunction, Name: "workspace_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema()}, []string{"pattern"})},
+		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "workspace_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_grep", Description: "workspace 파일들에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema()}, []string{"pattern"})},
-		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "workspace 파일들에서 literal 문자열을 검색하고 파일 경로만 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"needle": stringSchema()}, []string{"needle"})},
+		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "workspace 파일들에서 literal 문자열을 검색하고 파일 경로만 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"needle": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"needle"})},
 		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "workspace에서 명령을 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": nonNegativeIntegerSchema()}, []string{"command"})},
 	}
 	handlers = llm.ToolRegistry{
@@ -766,16 +766,32 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 			return string(b), nil
 		}),
 		"workspace_list": llm.JSONToolHandler(func(ctx context.Context, in struct {
-			Path string `json:"path"`
+			Path  string `json:"path"`
+			Limit int    `json:"limit"`
 		}) (string, error) {
 			xs, err := w.List(in.Path)
-			return strings.Join(xs, "\n"), err
+			if err != nil {
+				return "", err
+			}
+			xs, truncated, err := limitWorkspaceStringList(xs, in.Limit, MaxListEntries, "limit")
+			if err != nil {
+				return "", err
+			}
+			return joinWorkspaceStringList(xs, truncated), nil
 		}),
 		"workspace_glob": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Pattern string `json:"pattern"`
+			Limit   int    `json:"limit"`
 		}) (string, error) {
 			xs, err := w.Glob(in.Pattern)
-			return strings.Join(xs, "\n"), err
+			if err != nil {
+				return "", err
+			}
+			xs, truncated, err := limitWorkspaceStringList(xs, in.Limit, MaxGlobMatches, "limit")
+			if err != nil {
+				return "", err
+			}
+			return joinWorkspaceStringList(xs, truncated), nil
 		}),
 		"workspace_grep": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Pattern       string `json:"pattern"`
@@ -793,9 +809,17 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		}),
 		"workspace_search": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Needle string `json:"needle"`
+			Limit  int    `json:"limit"`
 		}) (string, error) {
 			xs, err := w.Search(in.Needle)
-			return strings.Join(xs, "\n"), err
+			if err != nil {
+				return "", err
+			}
+			xs, truncated, err := limitWorkspaceStringList(xs, in.Limit, MaxGrepMatches, "limit")
+			if err != nil {
+				return "", err
+			}
+			return joinWorkspaceStringList(xs, truncated), nil
 		}),
 		"workspace_run_command": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Command   string   `json:"command"`
@@ -811,6 +835,28 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		}),
 	}
 	return defs, handlers
+}
+
+func limitWorkspaceStringList(items []string, limit int, maxLimit int, label string) ([]string, bool, error) {
+	if limit < 0 {
+		return nil, false, fmt.Errorf("%s must be >= 0", label)
+	}
+	if limit > maxLimit {
+		return nil, false, fmt.Errorf("%s must be <= %d", label, maxLimit)
+	}
+	if limit == 0 || len(items) <= limit {
+		return items, false, nil
+	}
+	return items[:limit], true, nil
+}
+
+func joinWorkspaceStringList(items []string, truncated bool) string {
+	if !truncated {
+		return strings.Join(items, "\n")
+	}
+	out := append([]string{}, items...)
+	out = append(out, "[result_truncated]")
+	return strings.Join(out, "\n")
 }
 
 type patchOp struct {

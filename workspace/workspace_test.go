@@ -83,6 +83,9 @@ func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 	if err := w.WriteFile("b.txt", "tool text"); err != nil {
 		t.Fatal(err)
 	}
+	if err := w.WriteFile("c.txt", "tool text"); err != nil {
+		t.Fatal(err)
+	}
 	defs, handlers := w.Tools()
 	if !hasWorkspaceTool(defs, "workspace_prune_checkpoints") {
 		t.Fatalf("workspace_prune_checkpoints가 tool 목록에 필요해요: %+v", defs)
@@ -90,6 +93,27 @@ func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 	res, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_read_file", CallID: "1", Arguments: []byte(`{"path":"b.txt"}`)})
 	if err != nil || res.Output != "tool text" {
 		t.Fatalf("res=%#v err=%v", res, err)
+	}
+	res, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_list", CallID: "list", Arguments: []byte(`{"path":".","limit":1}`)})
+	if err != nil || !strings.Contains(res.Output, "[result_truncated]") {
+		t.Fatalf("workspace_list limit metadata가 필요해요: res=%#v err=%v", res, err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_list", CallID: "list-negative", Arguments: []byte(`{"path":".","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative workspace_list limit은 거부해야 해요: %v", err)
+	}
+	res, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_glob", CallID: "glob", Arguments: []byte(`{"pattern":"*.txt","limit":1}`)})
+	if err != nil || !strings.Contains(res.Output, "[result_truncated]") {
+		t.Fatalf("workspace_glob limit metadata가 필요해요: res=%#v err=%v", res, err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_glob", CallID: "glob-negative", Arguments: []byte(`{"pattern":"*.txt","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative workspace_glob limit은 거부해야 해요: %v", err)
+	}
+	res, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_search", CallID: "search", Arguments: []byte(`{"needle":"tool","limit":1}`)})
+	if err != nil || !strings.Contains(res.Output, "[result_truncated]") {
+		t.Fatalf("workspace_search limit metadata가 필요해요: res=%#v err=%v", res, err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_search", CallID: "search-negative", Arguments: []byte(`{"needle":"tool","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative workspace_search limit은 거부해야 해요: %v", err)
 	}
 	out, err := w.Run(context.Background(), "echo", "ok")
 	if err != nil || out != "ok\n" {
