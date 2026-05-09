@@ -155,6 +155,8 @@ type StoreStats struct {
 	Checkpoints           int
 	Artifacts             int
 	ArtifactsByKind       map[string]int
+	ArtifactBytes         int64
+	ArtifactBytesByKind   map[string]int64
 	Runs                  map[string]int
 	RunDuration           RunDurationStats
 	RunDurationByProvider map[string]RunDurationStats

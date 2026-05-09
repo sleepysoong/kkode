@@ -23,6 +23,8 @@ type StatsResponse struct {
 	Checkpoints           int                            `json:"checkpoints"`
 	Artifacts             int                            `json:"artifacts"`
 	ArtifactsByKind       map[string]int                 `json:"artifacts_by_kind"`
+	ArtifactBytes         int64                          `json:"artifact_bytes"`
+	ArtifactBytesByKind   map[string]int64               `json:"artifact_bytes_by_kind"`
 	TotalRuns             int                            `json:"total_runs"`
 	Runs                  map[string]int                 `json:"runs"`
 	RunDuration           RunDurationStatsDTO            `json:"run_duration"`
@@ -78,6 +80,8 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		Checkpoints:           stats.Checkpoints,
 		Artifacts:             stats.Artifacts,
 		ArtifactsByKind:       cloneIntMap(stats.ArtifactsByKind),
+		ArtifactBytes:         stats.ArtifactBytes,
+		ArtifactBytesByKind:   cloneInt64Map(stats.ArtifactBytesByKind),
 		TotalRuns:             sumIntMap(stats.Runs),
 		Runs:                  cloneIntMap(stats.Runs),
 		RunDuration:           runDurationStatsDTOFromSession(stats.RunDuration),
@@ -134,6 +138,17 @@ func cloneIntMap(in map[string]int) map[string]int {
 		return nil
 	}
 	out := make(map[string]int, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneInt64Map(in map[string]int64) map[string]int64 {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]int64, len(in))
 	for key, value := range in {
 		out[key] = value
 	}

@@ -139,7 +139,7 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Sessions != 1 || stats.SessionsByProvider["openai"] != 1 || stats.SessionsByModel["gpt-5-mini"] != 1 || stats.SessionsByMode[string(AgentModeBuild)] != 1 || stats.Turns != 1 || stats.Events != 1 || stats.EventsByType["turn.completed"] != 1 || stats.RunEvents != 1 || stats.RunEventsByType["run.completed"] != 1 || stats.Todos != 1 || stats.TodosByStatus[string(TodoPending)] != 1 || stats.Checkpoints != 1 || stats.Artifacts != 1 || stats.ArtifactsByKind["tool_output"] != 1 {
+	if stats.Sessions != 1 || stats.SessionsByProvider["openai"] != 1 || stats.SessionsByModel["gpt-5-mini"] != 1 || stats.SessionsByMode[string(AgentModeBuild)] != 1 || stats.Turns != 1 || stats.Events != 1 || stats.EventsByType["turn.completed"] != 1 || stats.RunEvents != 1 || stats.RunEventsByType["run.completed"] != 1 || stats.Todos != 1 || stats.TodosByStatus[string(TodoPending)] != 1 || stats.Checkpoints != 1 || stats.Artifacts != 1 || stats.ArtifactsByKind["tool_output"] != 1 || stats.ArtifactBytes != 13 || stats.ArtifactBytesByKind["tool_output"] != 13 {
 		t.Fatalf("기본 stats가 이상해요: %+v", stats)
 	}
 	if stats.Runs["completed"] != 2 || stats.Resources[string(ResourceSkill)] != 1 {

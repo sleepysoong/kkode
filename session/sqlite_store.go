@@ -545,7 +545,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
+	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, ArtifactBytesByKind: map[string]int64{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -585,6 +585,12 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		return stats, err
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM artifacts GROUP BY kind`, stats.ArtifactsByKind); err != nil {
+		return stats, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(content_json)), 0) FROM artifacts`).Scan(&stats.ArtifactBytes); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedInt64(ctx, s.db, `SELECT kind, COALESCE(SUM(LENGTH(content_json)), 0) FROM artifacts GROUP BY kind`, stats.ArtifactBytesByKind); err != nil {
 		return stats, err
 	}
 	if err := loadRunDurationStats(ctx, s.db, &stats); err != nil {
@@ -1788,6 +1794,23 @@ func scanGroupedUsage(ctx context.Context, db *sql.DB, query string, out map[str
 			return err
 		}
 		out[key] = usage
+	}
+	return rows.Err()
+}
+
+func scanGroupedInt64(ctx context.Context, db *sql.DB, query string, out map[string]int64) error {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var value int64
+		if err := rows.Scan(&key, &value); err != nil {
+			return err
+		}
+		out[key] = value
 	}
 	return rows.Err()
 }
