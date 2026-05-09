@@ -65,6 +65,10 @@ func TestMCPToolsCallsConfiguredHTTPServer(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "max_output_bytes") {
 		t.Fatalf("negative MCP max_output_bytes는 거부해야 해요: %v", err)
 	}
+	_, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "mcp_call", Arguments: []byte(fmt.Sprintf(`{"server":"context7","tool":"echo","max_output_bytes":%d}`, maxMCPResponseBytes+1))})
+	if err == nil || !strings.Contains(err.Error(), "max_output_bytes") {
+		t.Fatalf("oversized MCP max_output_bytes는 거부해야 해요: %v", err)
+	}
 }
 
 func TestMCPToolsRejectsUnknownServer(t *testing.T) {

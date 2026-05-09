@@ -62,6 +62,9 @@ func MCPTools(servers map[string]llm.MCPServer) ([]llm.Tool, llm.ToolRegistry) {
 			if in.MaxOutputBytes < 0 {
 				return "", fmt.Errorf("max_output_bytes must be >= 0")
 			}
+			if in.MaxOutputBytes > maxMCPResponseBytes {
+				return "", fmt.Errorf("max_output_bytes must be <= %d", maxMCPResponseBytes)
+			}
 			result, err := CallMCPTool(ctx, server, in.Tool, in.Arguments)
 			if err != nil {
 				return "", err
