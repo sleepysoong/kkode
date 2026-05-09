@@ -1274,6 +1274,14 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 		where = append(where, `status = ?`)
 		args = append(args, q.Status)
 	}
+	if q.Provider != "" {
+		where = append(where, `provider = ?`)
+		args = append(args, q.Provider)
+	}
+	if q.Model != "" {
+		where = append(where, `model = ?`)
+		args = append(args, q.Model)
+	}
 	if q.RequestID != "" {
 		where = append(where, `json_extract(CAST(metadata_json AS TEXT), '$.request_id') = ?`)
 		args = append(args, q.RequestID)

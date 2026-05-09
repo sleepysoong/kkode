@@ -1166,13 +1166,13 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&limit=5&offset=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs?request_id=req_filter&idempotency_key=idem_filter&provider=copilot&model=gpt-5-mini&limit=5&offset=10", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Limit != 6 || query.Offset != 10 {
+	if query.RequestID != "req_filter" || query.IdempotencyKey != "idem_filter" || query.Provider != "copilot" || query.Model != "gpt-5-mini" || query.Limit != 6 || query.Offset != 10 {
 		t.Fatalf("run query가 이상해요: %+v", query)
 	}
 	var body RunListResponse
@@ -1205,6 +1205,8 @@ func TestGatewayListsRunsByRequestID(t *testing.T) {
 	}{
 		{queryString: "request_id=" + strings.Repeat("x", maxRequestIDBytes+1), want: "request_id"},
 		{queryString: "idempotency_key=" + strings.Repeat("x", maxIdempotencyKeyBytes+1), want: "idempotency_key"},
+		{queryString: "provider=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "provider"},
+		{queryString: "model=" + strings.Repeat("x", maxRunProviderModelBytes+1), want: "model"},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs?"+tc.queryString, nil)
 		rec = httptest.NewRecorder()

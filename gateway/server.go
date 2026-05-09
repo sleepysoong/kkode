@@ -1414,6 +1414,16 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_run_list", err.Error())
 		return
 	}
+	provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+	model := strings.TrimSpace(r.URL.Query().Get("model"))
+	if len(provider) > maxRunProviderModelBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", fmt.Sprintf("provider는 %d byte 이하여야 해요", maxRunProviderModelBytes))
+		return
+	}
+	if len(model) > maxRunProviderModelBytes {
+		writeError(w, r, http.StatusBadRequest, "invalid_run_list", fmt.Sprintf("model은 %d byte 이하여야 해요", maxRunProviderModelBytes))
+		return
+	}
 	limit, ok := queryLimitParam(w, r, "limit", 50, 200, "invalid_run_list")
 	if !ok {
 		return
@@ -1422,7 +1432,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), RequestID: requestID, IdempotencyKey: idempotencyKey, Limit: limit + 1, Offset: offset})
+	runs, err := s.cfg.RunLister(r.Context(), RunQuery{SessionID: r.URL.Query().Get("session_id"), Status: r.URL.Query().Get("status"), Provider: provider, Model: model, RequestID: requestID, IdempotencyKey: idempotencyKey, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_runs_failed", err.Error())
 		return

@@ -547,6 +547,8 @@ func (s *Server) Handler() http.Handler
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request)
 ```
 
+`RunQuery`는 `session_id`, `status`, `provider`, `model`, `request_id`, `idempotency_key`, `limit`, `offset`을 받아 외부 adapter가 run dashboard에서 본 provider/model bucket을 그대로 목록 조회로 좁힐 수 있게 해요.
+
 현재 endpoint는 다음과 같아요.
 
 ```text

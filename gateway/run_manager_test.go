@@ -78,6 +78,27 @@ func TestAsyncRunManagerListsRunsByRequestID(t *testing.T) {
 	}
 }
 
+func TestAsyncRunManagerListsRunsByProviderAndModel(t *testing.T) {
+	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Provider: req.Provider, Model: req.Model}, nil
+	})
+	first, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "one", Provider: "copilot", Model: "gpt-5-mini"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Start(context.Background(), RunStartRequest{SessionID: "sess_1", Prompt: "two", Provider: "openai", Model: "gpt-5-mini"}); err != nil {
+		t.Fatal(err)
+	}
+	waitForRunStatus(t, manager, first.ID, "completed")
+	listed, err := manager.List(context.Background(), RunQuery{Provider: "copilot", Model: "gpt-5-mini", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != first.ID || listed[0].Provider != "copilot" || listed[0].Model != "gpt-5-mini" {
+		t.Fatalf("provider/model run 목록이 이상해요: %+v", listed)
+	}
+}
+
 func TestAsyncRunManagerListsRunsByIdempotencyKey(t *testing.T) {
 	manager := NewAsyncRunManager(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", Metadata: req.Metadata}, nil

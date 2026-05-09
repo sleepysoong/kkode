@@ -41,6 +41,8 @@ type Run struct {
 type RunQuery struct {
 	SessionID      string
 	Status         string
+	Provider       string
+	Model          string
 	RequestID      string
 	IdempotencyKey string
 	Limit          int

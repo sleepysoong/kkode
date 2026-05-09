@@ -2018,6 +2018,18 @@ paths:
           schema:
             type: string
         - in: query
+          name: provider
+          schema:
+            type: string
+            maxLength: 128
+          description: run provider 값으로 좁혀요.
+        - in: query
+          name: model
+          schema:
+            type: string
+            maxLength: 128
+          description: run model 값으로 좁혀요.
+        - in: query
           name: request_id
           schema:
             type: string

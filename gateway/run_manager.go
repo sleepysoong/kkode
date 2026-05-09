@@ -16,6 +16,8 @@ import (
 type RunQuery struct {
 	SessionID      string
 	Status         string
+	Provider       string
+	Model          string
 	RequestID      string
 	IdempotencyKey string
 	Limit          int
@@ -334,7 +336,7 @@ func (m *AsyncRunManager) List(ctx context.Context, q RunQuery) ([]RunDTO, error
 		limit = 50
 	}
 	if m.runStore != nil {
-		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey, Limit: limit, Offset: q.Offset})
+		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Status: q.Status, Provider: q.Provider, Model: q.Model, RequestID: q.RequestID, IdempotencyKey: q.IdempotencyKey, Limit: limit, Offset: q.Offset})
 		if err != nil {
 			return nil, err
 		}
@@ -374,6 +376,12 @@ func runMatchesQuery(run RunDTO, q RunQuery) bool {
 		return false
 	}
 	if q.Status != "" && run.Status != q.Status {
+		return false
+	}
+	if q.Provider != "" && run.Provider != q.Provider {
+		return false
+	}
+	if q.Model != "" && run.Model != q.Model {
 		return false
 	}
 	if q.RequestID != "" && run.Metadata[RequestIDMetadataKey] != q.RequestID {
