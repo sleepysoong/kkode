@@ -516,6 +516,20 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 		t.Fatalf("event list metadata가 이상해요: %+v", events)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?type=tool.output&limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	events = EventListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events.Events) != 1 || events.Events[0].Seq != 2 || events.Events[0].Type != "tool.output" || events.ResultTruncated {
+		t.Fatalf("event type filter가 이상해요: %+v", events)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?after_seq=-1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

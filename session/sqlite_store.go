@@ -723,8 +723,13 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, q EventQuery) ([]EventReco
 	if afterOrdinal < 0 {
 		afterOrdinal = 0
 	}
-	query := `SELECT ordinal, id, turn_id, at, type, tool, payload_json, error FROM events WHERE session_id = ? AND ordinal >= ? ORDER BY ordinal`
+	query := `SELECT ordinal, id, turn_id, at, type, tool, payload_json, error FROM events WHERE session_id = ? AND ordinal >= ?`
 	args := []any{q.SessionID, afterOrdinal}
+	if q.Type != "" {
+		query += ` AND type = ?`
+		args = append(args, q.Type)
+	}
+	query += ` ORDER BY ordinal`
 	if q.Limit > 0 {
 		query += ` LIMIT ?`
 		args = append(args, q.Limit)

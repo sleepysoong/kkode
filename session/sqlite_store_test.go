@@ -249,12 +249,16 @@ func TestSQLiteTimelineStoreListsTurnsAndEventsWithoutFullSession(t *testing.T) 
 	ctx := context.Background()
 	store := openSQLiteForTest(t)
 	sess := NewSession("/repo", "openai", "gpt-5-mini", "agent", AgentModeBuild)
-	for _, prompt := range []string{"첫 번째", "두 번째", "세 번째"} {
+	for i, prompt := range []string{"첫 번째", "두 번째", "세 번째"} {
 		turn := NewTurn(prompt, llm.Request{Model: "gpt-5-mini", Messages: []llm.Message{llm.UserText(prompt)}})
 		turn.Response = &llm.Response{ID: prompt, Text: prompt}
 		turn.EndedAt = turn.StartedAt
 		sess.AppendTurn(turn)
-		sess.AppendEvent(Event{ID: NewID("ev"), SessionID: sess.ID, TurnID: turn.ID, Type: "turn.completed"})
+		eventType := "turn.completed"
+		if i == 1 {
+			eventType = "tool.output"
+		}
+		sess.AppendEvent(Event{ID: NewID("ev"), SessionID: sess.ID, TurnID: turn.ID, Type: eventType})
 	}
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
@@ -282,6 +286,13 @@ func TestSQLiteTimelineStoreListsTurnsAndEventsWithoutFullSession(t *testing.T) 
 	}
 	if len(events) != 1 || events[0].Seq != 3 || events[0].Event.TurnID != sess.Turns[2].ID {
 		t.Fatalf("timeline events가 이상해요: %+v", events)
+	}
+	events, err = store.ListEvents(ctx, EventQuery{SessionID: sess.ID, Type: "tool.output", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Seq != 2 || events[0].Event.Type != "tool.output" {
+		t.Fatalf("timeline event type filter가 이상해요: %+v", events)
 	}
 
 	if _, err := store.ListTurns(ctx, TurnQuery{SessionID: "missing", Limit: 1}); err == nil {

@@ -947,6 +947,11 @@ paths:
             default: 500
             maximum: 5000
         - in: query
+          name: type
+          schema:
+            type: string
+          description: session event type 값으로 좁혀요.
+        - in: query
           name: stream
           schema:
             type: boolean

@@ -102,6 +102,7 @@ type CheckpointQuery struct {
 type EventQuery struct {
 	SessionID string
 	AfterSeq  int
+	Type      string
 	Limit     int
 }
 

@@ -1186,13 +1186,14 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 	if !ok {
 		return
 	}
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
 	stream, ok := queryWantsSSE(w, r, "invalid_session_events")
 	if !ok {
 		return
 	}
 	var events []EventDTO
 	if timeline, ok := s.cfg.Store.(session.TimelineStore); ok {
-		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Limit: limit + 1})
+		records, err := timeline.ListEvents(r.Context(), session.EventQuery{SessionID: sessionID, AfterSeq: afterSeq, Type: eventType, Limit: limit + 1})
 		if err != nil {
 			writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
 			return
@@ -1211,6 +1212,9 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 		for i, ev := range sess.Events {
 			seq := i + 1
 			if seq <= afterSeq {
+				continue
+			}
+			if eventType != "" && ev.Type != eventType {
 				continue
 			}
 			events = append(events, toEventDTO(seq, ev))
