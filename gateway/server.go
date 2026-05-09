@@ -833,6 +833,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		RunMaxIterations:            cfg.RunMaxIterations,
 		RunWebMaxBytes:              cfg.RunWebMaxBytes,
 		MaxSessionIDBytes:           maxSessionIDBytes,
+		MaxTurnIDBytes:              maxRunIDBytes,
 		MaxProjectRootBytes:         maxProjectRootBytes,
 		MaxMCPHTTPResponseBytes:     maxMCPHTTPResponseBytes,
 		MaxMCPProbeNameBytes:        maxMCPProbeNameBytes,
@@ -1397,6 +1398,11 @@ func (s *Server) listSessionTurnsFromTimeline(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) getSessionTurnFromTimeline(w http.ResponseWriter, r *http.Request, timeline session.TimelineStore, sessionID string, turnID string) {
+	turnID = strings.TrimSpace(turnID)
+	if err := validateTurnIDText(turnID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_session_turns", err.Error())
+		return
+	}
 	record, err := timeline.LoadTurn(r.Context(), sessionID, turnID)
 	if err != nil {
 		code := "session_not_found"
@@ -1434,6 +1440,11 @@ func (s *Server) listSessionTurns(w http.ResponseWriter, r *http.Request, sess *
 }
 
 func (s *Server) getSessionTurn(w http.ResponseWriter, r *http.Request, sess *session.Session, turnID string) {
+	turnID = strings.TrimSpace(turnID)
+	if err := validateTurnIDText(turnID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_session_turns", err.Error())
+		return
+	}
 	for i, turn := range sess.Turns {
 		if turn.ID == turnID {
 			writeJSON(w, toTurnDTO(sess.ID, i+1, turn))
@@ -1441,6 +1452,13 @@ func (s *Server) getSessionTurn(w http.ResponseWriter, r *http.Request, sess *se
 		}
 	}
 	writeError(w, r, http.StatusNotFound, "turn_not_found", "turn을 찾을 수 없어요")
+}
+
+func validateTurnIDText(id string) error {
+	if id == "" {
+		return fmt.Errorf("turn_id가 필요해요")
+	}
+	return validateOptionalIDFilter("turn_id", id, maxRunIDBytes)
 }
 
 func (s *Server) writeSSEEvents(w http.ResponseWriter, r *http.Request, events []EventDTO) {
