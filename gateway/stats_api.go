@@ -10,6 +10,9 @@ import (
 // StatsResponse는 외부 dashboard adapter가 gateway 저장소 상태를 한 번에 그릴 때 쓰는 응답이에요.
 type StatsResponse struct {
 	Sessions              int                            `json:"sessions"`
+	SessionsByProvider    map[string]int                 `json:"sessions_by_provider"`
+	SessionsByModel       map[string]int                 `json:"sessions_by_model"`
+	SessionsByMode        map[string]int                 `json:"sessions_by_mode"`
 	Turns                 int                            `json:"turns"`
 	Events                int                            `json:"events"`
 	EventsByType          map[string]int                 `json:"events_by_type"`
@@ -19,6 +22,7 @@ type StatsResponse struct {
 	TodosByStatus         map[string]int                 `json:"todos_by_status"`
 	Checkpoints           int                            `json:"checkpoints"`
 	Artifacts             int                            `json:"artifacts"`
+	ArtifactsByKind       map[string]int                 `json:"artifacts_by_kind"`
 	TotalRuns             int                            `json:"total_runs"`
 	Runs                  map[string]int                 `json:"runs"`
 	RunDuration           RunDurationStatsDTO            `json:"run_duration"`
@@ -61,6 +65,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []str
 func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 	return StatsResponse{
 		Sessions:              stats.Sessions,
+		SessionsByProvider:    cloneIntMap(stats.SessionsByProvider),
+		SessionsByModel:       cloneIntMap(stats.SessionsByModel),
+		SessionsByMode:        cloneIntMap(stats.SessionsByMode),
 		Turns:                 stats.Turns,
 		Events:                stats.Events,
 		EventsByType:          cloneIntMap(stats.EventsByType),
@@ -70,6 +77,7 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		TodosByStatus:         cloneIntMap(stats.TodosByStatus),
 		Checkpoints:           stats.Checkpoints,
 		Artifacts:             stats.Artifacts,
+		ArtifactsByKind:       cloneIntMap(stats.ArtifactsByKind),
 		TotalRuns:             sumIntMap(stats.Runs),
 		Runs:                  cloneIntMap(stats.Runs),
 		RunDuration:           runDurationStatsDTOFromSession(stats.RunDuration),

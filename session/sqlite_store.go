@@ -545,7 +545,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
+	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -566,6 +566,15 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 	if err := scanGroupedCounts(ctx, s.db, `SELECT status, COUNT(1) FROM runs GROUP BY status`, stats.Runs); err != nil {
 		return stats, err
 	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT provider_name, COUNT(1) FROM sessions GROUP BY provider_name`, stats.SessionsByProvider); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT model, COUNT(1) FROM sessions GROUP BY model`, stats.SessionsByModel); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT mode, COUNT(1) FROM sessions GROUP BY mode`, stats.SessionsByMode); err != nil {
+		return stats, err
+	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT type, COUNT(1) FROM events GROUP BY type`, stats.EventsByType); err != nil {
 		return stats, err
 	}
@@ -573,6 +582,9 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		return stats, err
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT status, COUNT(1) FROM todos GROUP BY status`, stats.TodosByStatus); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM artifacts GROUP BY kind`, stats.ArtifactsByKind); err != nil {
 		return stats, err
 	}
 	if err := loadRunDurationStats(ctx, s.db, &stats); err != nil {

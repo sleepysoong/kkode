@@ -142,6 +142,9 @@ type TurnEventStore interface {
 // StoreStats는 운영 패널에서 한 번에 보여줄 저장소 규모와 상태 카운트예요.
 type StoreStats struct {
 	Sessions              int
+	SessionsByProvider    map[string]int
+	SessionsByModel       map[string]int
+	SessionsByMode        map[string]int
 	Turns                 int
 	Events                int
 	EventsByType          map[string]int
@@ -151,6 +154,7 @@ type StoreStats struct {
 	TodosByStatus         map[string]int
 	Checkpoints           int
 	Artifacts             int
+	ArtifactsByKind       map[string]int
 	Runs                  map[string]int
 	RunDuration           RunDurationStats
 	RunDurationByProvider map[string]RunDurationStats
