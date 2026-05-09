@@ -34,6 +34,7 @@ type MCPToolDTO struct {
 type MCPToolListResponse struct {
 	Server          ResourceDTO  `json:"server"`
 	Tools           []MCPToolDTO `json:"tools"`
+	TotalTools      int          `json:"total_tools,omitempty"`
 	Limit           int          `json:"limit,omitempty"`
 	Offset          int          `json:"offset,omitempty"`
 	NextOffset      int          `json:"next_offset,omitempty"`
@@ -51,6 +52,7 @@ type MCPResourceDTO struct {
 type MCPResourceListResponse struct {
 	Server          ResourceDTO      `json:"server"`
 	Resources       []MCPResourceDTO `json:"resources"`
+	TotalResources  int              `json:"total_resources,omitempty"`
 	Limit           int              `json:"limit,omitempty"`
 	Offset          int              `json:"offset,omitempty"`
 	NextOffset      int              `json:"next_offset,omitempty"`
@@ -89,6 +91,7 @@ type MCPPromptArgumentDTO struct {
 type MCPPromptListResponse struct {
 	Server          ResourceDTO    `json:"server"`
 	Prompts         []MCPPromptDTO `json:"prompts"`
+	TotalPrompts    int            `json:"total_prompts,omitempty"`
 	Limit           int            `json:"limit,omitempty"`
 	Offset          int            `json:"offset,omitempty"`
 	NextOffset      int            `json:"next_offset,omitempty"`
@@ -231,24 +234,27 @@ func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, 
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
+			totalTools := len(tools)
 			tools, returned, truncated := pageSlice(tools, limit, offset)
-			writeJSON(w, MCPToolListResponse{Server: publicResourceDTO(resource), Tools: tools, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+			writeJSON(w, MCPToolListResponse{Server: publicResourceDTO(resource), Tools: tools, TotalTools: totalTools, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 		case "resources":
 			resources, err := probeMCPResources(r.Context(), resource)
 			if err != nil {
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
+			totalResources := len(resources)
 			resources, returned, truncated := pageSlice(resources, limit, offset)
-			writeJSON(w, MCPResourceListResponse{Server: publicResourceDTO(resource), Resources: resources, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+			writeJSON(w, MCPResourceListResponse{Server: publicResourceDTO(resource), Resources: resources, TotalResources: totalResources, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 		case "prompts":
 			prompts, err := probeMCPPrompts(r.Context(), resource)
 			if err != nil {
 				writeError(w, r, http.StatusBadGateway, "mcp_probe_failed", err.Error())
 				return
 			}
+			totalPrompts := len(prompts)
 			prompts, returned, truncated := pageSlice(prompts, limit, offset)
-			writeJSON(w, MCPPromptListResponse{Server: publicResourceDTO(resource), Prompts: prompts, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+			writeJSON(w, MCPPromptListResponse{Server: publicResourceDTO(resource), Prompts: prompts, TotalPrompts: totalPrompts, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 		}
 	})
 }

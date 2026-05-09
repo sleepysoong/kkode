@@ -4541,6 +4541,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPTool'
+        total_tools:
+          type: integer
         limit:
           type: integer
         offset:
@@ -4585,6 +4587,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPResource'
+        total_resources:
+          type: integer
         limit:
           type: integer
         offset:
@@ -4644,6 +4648,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MCPPrompt'
+        total_prompts:
+          type: integer
         limit:
           type: integer
         offset:

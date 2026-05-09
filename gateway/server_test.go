@@ -3809,7 +3809,7 @@ while True:
 	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "echo" || tools.Tools[0].Category != "mcp" || tools.Tools[0].OutputFormat != "json" || tools.Tools[0].Effects[0] != "mcp" || tools.Tools[0].ExampleArguments["text"] != "value" || tools.Tools[0].ExampleArguments["repeat"] != float64(1) {
 		t.Fatalf("MCP tools/list 결과가 이상해요: %+v", tools)
 	}
-	if tools.Limit != 1 || tools.NextOffset != 1 || !tools.ResultTruncated {
+	if tools.TotalTools != 2 || tools.Limit != 1 || tools.NextOffset != 1 || !tools.ResultTruncated {
 		t.Fatalf("MCP tools/list page metadata가 이상해요: %+v", tools)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
@@ -3875,7 +3875,7 @@ func TestGatewayProbesHTTPMCPServerTools(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &tools); err != nil {
 		t.Fatal(err)
 	}
-	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.Tools[0].Name != "http_echo" || tools.Tools[0].Category != "mcp" || tools.Tools[0].ExampleArguments["text"] != "value" {
+	if tools.Server.ID != resource.ID || len(tools.Tools) != 1 || tools.TotalTools != 1 || tools.Tools[0].Name != "http_echo" || tools.Tools[0].Category != "mcp" || tools.Tools[0].ExampleArguments["text"] != "value" {
 		t.Fatalf("HTTP MCP tools/list 결과가 이상해요: %+v", tools)
 	}
 	if tools.Server.Config["headers"].(map[string]any)["X-Test-Token"] != "[REDACTED]" {
@@ -3936,7 +3936,7 @@ while True:
 	if resources.Server.ID != resource.ID || len(resources.Resources) != 1 || resources.Resources[0].URI != "file:///README.md" || resources.Resources[0].MimeType != "text/markdown" {
 		t.Fatalf("MCP resources/list 결과가 이상해요: %+v", resources)
 	}
-	if resources.Limit != 1 || resources.NextOffset != 1 || !resources.ResultTruncated {
+	if resources.TotalResources != 2 || resources.Limit != 1 || resources.NextOffset != 1 || !resources.ResultTruncated {
 		t.Fatalf("MCP resources/list page metadata가 이상해요: %+v", resources)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
@@ -3964,7 +3964,7 @@ while True:
 	if err := json.Unmarshal(rec.Body.Bytes(), &prompts); err != nil {
 		t.Fatal(err)
 	}
-	if prompts.Server.ID != resource.ID || len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "summarize" || prompts.Limit != 1 || prompts.Offset != 1 || prompts.NextOffset != 0 || prompts.ResultTruncated {
+	if prompts.Server.ID != resource.ID || len(prompts.Prompts) != 1 || prompts.TotalPrompts != 2 || prompts.Prompts[0].Name != "summarize" || prompts.Limit != 1 || prompts.Offset != 1 || prompts.NextOffset != 0 || prompts.ResultTruncated {
 		t.Fatalf("MCP prompts/list 결과가 이상해요: %+v", prompts)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
