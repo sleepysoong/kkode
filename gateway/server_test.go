@@ -95,6 +95,7 @@ func TestGatewayAPIIndex(t *testing.T) {
 		"session_create": {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
 		"file_write":     {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
 		"file_move":      {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
+		"file_restore":   {Name: "file_restore", Method: "POST", Path: "/api/v1/files/restore"},
 		"run_cancel":     {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
 		"lsp_hover":      {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
 	} {
@@ -4303,7 +4304,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "file_delete") || !hasTool(listed.Tools, "file_move") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
+	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "file_delete") || !hasTool(listed.Tools, "file_move") || !hasTool(listed.Tools, "file_restore_checkpoint") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
 		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
 	}
 	if listed.TotalTools != len(listed.Tools) || listed.Limit != len(listed.Tools) || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
@@ -4322,7 +4323,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if findTool(listed.Tools, "file_write").Category != "file" || findTool(listed.Tools, "file_write").Effects[0] != "write" || findTool(listed.Tools, "shell_run").Effects[0] != "execute" || findTool(listed.Tools, "web_fetch").OutputFormat != "json" {
 		t.Fatalf("tool별 category/effects/output_format discovery가 필요해요: %+v", listed.Tools)
 	}
-	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_delete").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_move").ExampleArguments["source"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
+	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_delete").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_move").ExampleArguments["source"] == "" || findTool(listed.Tools, "file_restore_checkpoint").ExampleArguments["checkpoint_id"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
 		t.Fatalf("adapter form 생성을 위한 tool 예제가 필요해요: %+v", listed.Tools)
 	}
 
@@ -4493,8 +4494,28 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if called.CallID != "delete_1" || called.Tool != "file_delete" || called.Error != "" {
 		t.Fatalf("file_delete tool call 응답이 이상해요: %+v", called)
 	}
+	deleteCheckpoint := checkpointIDFromToolOutput(t, called.Output)
 	if _, err := os.Stat(filepath.Join(root, "notes", "moved.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("file_delete가 실행되지 않았어요: %v", err)
+	}
+	body = `{"project_root":"` + root + `","tool":"file_restore_checkpoint","arguments":{"checkpoint_id":"` + deleteCheckpoint + `"},"call_id":"restore_1"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("file_restore_checkpoint status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	called = ToolCallResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.CallID != "restore_1" || called.Tool != "file_restore_checkpoint" || called.Error != "" {
+		t.Fatalf("file_restore_checkpoint tool call 응답이 이상해요: %+v", called)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "notes", "moved.md"))
+	if err != nil || string(data) != "hello" {
+		t.Fatalf("file_restore_checkpoint가 실행되지 않았어요: data=%q err=%v", data, err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "notes", "todo.md"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
@@ -4743,6 +4764,21 @@ func findTool(tools []ToolDTO, name string) ToolDTO {
 		}
 	}
 	return ToolDTO{}
+}
+
+func checkpointIDFromToolOutput(t *testing.T, output string) string {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "checkpoint_id:") {
+			id := strings.TrimSpace(strings.TrimPrefix(line, "checkpoint_id:"))
+			if id != "" {
+				return id
+			}
+		}
+	}
+	t.Fatalf("tool output did not include checkpoint_id: %q", output)
+	return ""
 }
 
 func TestGatewayMutatesSessionTodos(t *testing.T) {
@@ -5737,7 +5773,7 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &content); err != nil {
 		t.Fatal(err)
 	}
-	if content.ProjectRoot != root || content.Path != "docs/b.md" {
+	if content.ProjectRoot != root || content.Path != "docs/b.md" || content.CheckpointID == "" {
 		t.Fatalf("file write 응답은 canonical project/path를 반환해야 해요: %+v", content)
 	}
 
@@ -5753,7 +5789,7 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &moved); err != nil {
 		t.Fatal(err)
 	}
-	if !moved.Moved || moved.ProjectRoot != root || moved.Source != "docs/b.md" || moved.Destination != "docs/moved.md" {
+	if !moved.Moved || moved.ProjectRoot != root || moved.Source != "docs/b.md" || moved.Destination != "docs/moved.md" || moved.CheckpointID == "" {
 		t.Fatalf("file move 응답이 이상해요: %+v", moved)
 	}
 	if _, err := os.Stat(filepath.Join(root, "docs", "b.md")); !errors.Is(err, os.ErrNotExist) {
@@ -5776,11 +5812,31 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &deleted); err != nil {
 		t.Fatal(err)
 	}
-	if !deleted.Deleted || deleted.ProjectRoot != root || deleted.Path != "docs/moved.md" {
+	if !deleted.Deleted || deleted.ProjectRoot != root || deleted.Path != "docs/moved.md" || deleted.CheckpointID == "" {
 		t.Fatalf("file delete 응답이 이상해요: %+v", deleted)
 	}
 	if _, err := os.Stat(filepath.Join(root, "docs", "moved.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("file delete는 파일을 지워야 해요: %v", err)
+	}
+
+	body = `{"project_root":"` + root + `","checkpoint_id":"` + deleted.CheckpointID + `"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/restore", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var restored FileRestoreResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &restored); err != nil {
+		t.Fatal(err)
+	}
+	if !restored.Restored || restored.ProjectRoot != root || restored.CheckpointID != deleted.CheckpointID || restored.Entries == 0 {
+		t.Fatalf("file restore 응답이 이상해요: %+v", restored)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "docs", "moved.md"))
+	if err != nil || string(data) != "new" {
+		t.Fatalf("file restore 결과가 이상해요: content=%q err=%v", data, err)
 	}
 
 	body = `{"project_root":"` + root + `","path":"docs"}`
@@ -6033,8 +6089,23 @@ func TestGatewayFilesAPIAppliesPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.Applied || resp.PatchBytes != len(patch) || string(updated) != "one\npatched\nthree\n" {
+	if !resp.Applied || resp.PatchBytes != len(patch) || resp.CheckpointID == "" || string(updated) != "one\npatched\nthree\n" {
 		t.Fatalf("patch 적용이 이상해요: resp=%+v content=%q", resp, updated)
+	}
+	restoreBody, err := json.Marshal(FileRestoreRequest{ProjectRoot: root, CheckpointID: resp.CheckpointID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/restore", bytes.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("restore status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	updated, err = os.ReadFile(filepath.Join(root, "src", "a.txt"))
+	if err != nil || string(updated) != "one\ntwo\nthree\n" {
+		t.Fatalf("patch restore 결과가 이상해요: content=%q err=%v", updated, err)
 	}
 }
 

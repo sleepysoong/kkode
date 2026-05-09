@@ -405,7 +405,7 @@ paths:
     post:
       operationId: postFilesPatch
       summary: apply_patch 형식 patch를 workspace에 적용해요.
-      description: 권한 프롬프트 없이 project_root 기준으로 즉시 적용해요.
+      description: 권한 프롬프트 없이 project_root 기준으로 즉시 적용하고, 적용 전 file checkpoint를 남겨요.
       requestBody:
         required: true
         content:
@@ -419,6 +419,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FilePatchResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/files/restore:
+    post:
+      operationId: postFilesRestore
+      summary: file checkpoint를 workspace에 복구해요.
+      description: `/api/v1/files/*` 쓰기 응답이나 `file_*` tool output의 checkpoint_id를 받아 해당 snapshot을 복구해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileRestoreRequest'
+      responses:
+        '200':
+          description: file checkpoint restore 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileRestoreResponse'
         '400':
           $ref: '#/components/responses/Error'
   /api/v1/git/status:
@@ -2816,6 +2836,9 @@ components:
         content:
           type: string
           description: max_bytes가 있으면 UTF-8 문자 경계를 보존해서 잘린 파일 내용이에요.
+        checkpoint_id:
+          type: string
+          description: 쓰기 응답이면 변경 전 file checkpoint id예요.
         content_bytes:
           type: integer
           description: 응답 content의 byte 수예요.
@@ -2914,6 +2937,9 @@ components:
           type: string
         deleted:
           type: boolean
+        checkpoint_id:
+          type: string
+          description: 삭제 전 file checkpoint id예요.
     FileMoveRequest:
       type: object
       required: [project_root, source, destination]
@@ -2939,6 +2965,9 @@ components:
           type: string
         moved:
           type: boolean
+        checkpoint_id:
+          type: string
+          description: 이동 전 source/destination file checkpoint id예요.
     FilePatchResponse:
       type: object
       required: [project_root, applied]
@@ -2948,6 +2977,29 @@ components:
         applied:
           type: boolean
         patch_bytes:
+          type: integer
+        checkpoint_id:
+          type: string
+          description: patch 적용 전 file checkpoint id예요.
+    FileRestoreRequest:
+      type: object
+      required: [project_root, checkpoint_id]
+      properties:
+        project_root:
+          type: string
+        checkpoint_id:
+          type: string
+    FileRestoreResponse:
+      type: object
+      required: [project_root, checkpoint_id, restored]
+      properties:
+        project_root:
+          type: string
+        checkpoint_id:
+          type: string
+        restored:
+          type: boolean
+        entries:
           type: integer
     FileWriteRequest:
       type: object

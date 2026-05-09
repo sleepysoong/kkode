@@ -48,6 +48,7 @@ file_edit(path, old, new, expected_replacements?)
 file_write(path, content)
 file_delete(path, recursive?)
 file_move(source, destination, overwrite?)
+file_restore_checkpoint(checkpoint_id)
 workspace_run_command(command, args, timeout_ms?, env?)
 workspace_diagnostics(path?)
 workspace_lsp(operation, path, line, character, query?)
@@ -237,7 +238,7 @@ type FileSnapshot struct {
 }
 ```
 
-`file_apply_patch`, `file_edit`, `file_write`, `file_delete`, `file_move`는 실행 전후 snapshot을 남겨야해요.
+`file_apply_patch`, `file_edit`, `file_write`, `file_delete`, `file_move`는 실행 전 snapshot을 남기고 `file_restore_checkpoint`로 복구해야해요.
 
 CLI는 이렇게 가요.
 

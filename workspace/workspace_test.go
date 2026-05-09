@@ -81,7 +81,7 @@ func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	defs, handlers := w.Tools()
-	if len(defs) != 11 {
+	if len(defs) != 12 {
 		t.Fatalf("defs=%d", len(defs))
 	}
 	res, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_read_file", CallID: "1", Arguments: []byte(`{"path":"b.txt"}`)})
@@ -177,6 +177,47 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	}
 	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "8", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
 		t.Fatalf("missing command should remain a tool error: %v", err)
+	}
+}
+
+func TestWorkspaceCheckpointRestoresMutations(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("docs/a.txt", "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := w.CreateCheckpoint([]string{"docs/a.txt", "new.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cp.Entries) != 2 {
+		t.Fatalf("checkpoint entries=%+v", cp.Entries)
+	}
+	if err := w.WriteFile("docs/a.txt", "beta"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("new.txt", "created"); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := w.RestoreCheckpoint(cp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.ID != cp.ID {
+		t.Fatalf("restored checkpoint id=%s want %s", restored.ID, cp.ID)
+	}
+	got, err := w.ReadFile("docs/a.txt")
+	if err != nil || got != "alpha" {
+		t.Fatalf("restored content=%q err=%v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("restore should remove paths that were absent in checkpoint: %v", err)
+	}
+	if matches, err := w.Glob(".kkode/**/*"); err != nil || len(matches) != 0 {
+		t.Fatalf("checkpoint internals should stay out of glob: matches=%v err=%v", matches, err)
 	}
 }
 

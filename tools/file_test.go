@@ -47,11 +47,20 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	if err != nil || !strings.Contains(moved, "two patched") {
 		t.Fatalf("moved=%q err=%v", moved, err)
 	}
-	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_delete", CallID: "6", Arguments: []byte(`{"path":"archive/a.txt"}`)}); err != nil {
+	deleteResult, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_delete", CallID: "6", Arguments: []byte(`{"path":"archive/a.txt"}`)})
+	if err != nil {
 		t.Fatal(err)
 	}
+	deleteCheckpoint := checkpointIDFromToolOutput(t, deleteResult.Output)
 	if _, err := ws.ReadFile("archive/a.txt"); err == nil {
 		t.Fatal("file_delete should remove the file")
+	}
+	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_restore_checkpoint", CallID: "restore", Arguments: []byte(`{"checkpoint_id":"` + deleteCheckpoint + `"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := ws.ReadFile("archive/a.txt")
+	if err != nil || !strings.Contains(restored, "two patched") {
+		t.Fatalf("restore should recover deleted file: %q err=%v", restored, err)
 	}
 	shell, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "7", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
 	if err != nil {
@@ -67,6 +76,21 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "8", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
 		t.Fatalf("missing shell command should remain a tool error: %v", err)
 	}
+}
+
+func checkpointIDFromToolOutput(t *testing.T, output string) string {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "checkpoint_id:") {
+			id := strings.TrimSpace(strings.TrimPrefix(line, "checkpoint_id:"))
+			if id != "" {
+				return id
+			}
+		}
+	}
+	t.Fatalf("tool output did not include checkpoint_id: %q", output)
+	return ""
 }
 
 func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {

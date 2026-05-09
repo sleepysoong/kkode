@@ -445,7 +445,7 @@ func toolMetadata(name string) toolMetadataDTO {
 	switch strings.TrimSpace(name) {
 	case "file_read", "file_list", "file_glob", "file_grep":
 		return toolMetadataDTO{Category: "file", Effects: []string{"read"}, OutputFormat: toolOutputFormat(name)}
-	case "file_write", "file_edit", "file_apply_patch", "file_delete", "file_move":
+	case "file_write", "file_edit", "file_apply_patch", "file_delete", "file_move", "file_restore_checkpoint":
 		return toolMetadataDTO{Category: "file", Effects: []string{"write"}, OutputFormat: "text"}
 	case "shell_run":
 		return toolMetadataDTO{Category: "shell", Effects: []string{"execute"}, OutputFormat: "json"}
@@ -481,6 +481,8 @@ func toolExampleArguments(name string) map[string]any {
 		return map[string]any{"path": "README.md", "old": "기존 문장", "new": "새 문장", "expected_replacements": 1}
 	case "file_apply_patch":
 		return map[string]any{"patch_text": "*** Begin Patch\n*** Update File: README.md\n@@\n-기존 문장\n+새 문장\n*** End Patch\n"}
+	case "file_restore_checkpoint":
+		return map[string]any{"checkpoint_id": "ws_20260509T120000Z_0000000000000000"}
 	case "file_list":
 		return map[string]any{"path": "."}
 	case "file_glob":

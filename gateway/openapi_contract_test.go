@@ -346,6 +346,8 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "FileDeleteResponse", dto: FileDeleteResponse{}},
 		{schema: "FileMoveRequest", dto: FileMoveRequest{}},
 		{schema: "FileMoveResponse", dto: FileMoveResponse{}},
+		{schema: "FileRestoreRequest", dto: FileRestoreRequest{}},
+		{schema: "FileRestoreResponse", dto: FileRestoreResponse{}},
 		{schema: "FileWriteRequest", dto: FileWriteRequest{}},
 		{schema: "LSPSymbolListResponse", dto: LSPSymbolListResponse{}},
 		{schema: "LSPLocationListResponse", dto: LSPLocationListResponse{}},

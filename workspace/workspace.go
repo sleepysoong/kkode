@@ -78,6 +78,7 @@ type SearchMatch struct {
 var defaultWalkSkipDirs = map[string]struct{}{
 	".cache":       {},
 	".git":         {},
+	".kkode":       {},
 	".next":        {},
 	".serena":      {},
 	".turbo":       {},
@@ -593,6 +594,25 @@ func (w *Workspace) ApplyPatch(patchText string) error {
 	return nil
 }
 
+func (w *Workspace) PatchPaths(patchText string) ([]string, error) {
+	if len(patchText) > MaxPatchBytes {
+		return nil, fmt.Errorf("patch_text must be <= %d bytes", MaxPatchBytes)
+	}
+	ops, err := parsePatch(patchText)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(ops))
+	seen := map[string]bool{}
+	for _, op := range ops {
+		if !seen[op.path] {
+			seen[op.path] = true
+			paths = append(paths, op.path)
+		}
+	}
+	return paths, nil
+}
+
 type patchPlan struct {
 	absPath string
 	content string
@@ -639,6 +659,7 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		{Kind: llm.ToolFunction, Name: "workspace_move_path", Description: "workspace 안의 파일이나 디렉터리를 이동하거나 이름을 바꿔요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"source": stringSchema(), "destination": stringSchema(), "overwrite": booleanSchema()}, []string{"source", "destination"})},
 		{Kind: llm.ToolFunction, Name: "workspace_replace_in_file", Description: "파일 안의 텍스트를 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": nonNegativeIntegerSchema()}, []string{"path", "old", "new"})},
 		{Kind: llm.ToolFunction, Name: "workspace_apply_patch", Description: "apply_patch 형식의 patch를 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
+		{Kind: llm.ToolFunction, Name: "workspace_restore_checkpoint", Description: "workspace file checkpoint를 복구해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"checkpoint_id": stringSchema()}, []string{"checkpoint_id"})},
 		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "workspace_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_grep", Description: "workspace 파일들에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema()}, []string{"pattern"})},
@@ -658,29 +679,42 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 			Path    string `json:"path"`
 			Content string `json:"content"`
 		}) (string, error) {
+			cp, err := w.CreateCheckpoint([]string{in.Path})
+			if err != nil {
+				return "", err
+			}
 			if err := w.WriteFile(in.Path, in.Content); err != nil {
 				return "", err
 			}
-			return "파일을 썼어요: " + in.Path, nil
+			return "파일을 썼어요: " + in.Path + "\ncheckpoint_id: " + cp.ID, nil
 		}),
 		"workspace_delete_path": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path      string `json:"path"`
 			Recursive bool   `json:"recursive"`
 		}) (string, error) {
+			cp, err := w.CreateCheckpoint([]string{in.Path})
+			if err != nil {
+				return "", err
+			}
 			if err := w.DeletePath(in.Path, in.Recursive); err != nil {
 				return "", err
 			}
-			return "경로를 삭제했어요: " + in.Path, nil
+			return "경로를 삭제했어요: " + in.Path + "\ncheckpoint_id: " + cp.ID, nil
 		}),
 		"workspace_move_path": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Source      string `json:"source"`
 			Destination string `json:"destination"`
 			Overwrite   bool   `json:"overwrite"`
 		}) (string, error) {
+			paths := []string{in.Source, in.Destination}
+			cp, err := w.CreateCheckpoint(paths)
+			if err != nil {
+				return "", err
+			}
 			if err := w.MovePath(in.Source, in.Destination, in.Overwrite); err != nil {
 				return "", err
 			}
-			return "경로를 이동했어요: " + in.Source + " -> " + in.Destination, nil
+			return "경로를 이동했어요: " + in.Source + " -> " + in.Destination + "\ncheckpoint_id: " + cp.ID, nil
 		}),
 		"workspace_replace_in_file": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path                 string `json:"path"`
@@ -688,18 +722,39 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 			New                  string `json:"new"`
 			ExpectedReplacements int    `json:"expected_replacements"`
 		}) (string, error) {
+			cp, err := w.CreateCheckpoint([]string{in.Path})
+			if err != nil {
+				return "", err
+			}
 			if err := w.EditFile(in.Path, in.Old, in.New, in.ExpectedReplacements); err != nil {
 				return "", err
 			}
-			return "파일 텍스트를 교체했어요: " + in.Path, nil
+			return "파일 텍스트를 교체했어요: " + in.Path + "\ncheckpoint_id: " + cp.ID, nil
 		}),
 		"workspace_apply_patch": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			PatchText string `json:"patch_text"`
 		}) (string, error) {
+			paths, err := w.PatchPaths(in.PatchText)
+			if err != nil {
+				return "", err
+			}
+			cp, err := w.CreateCheckpoint(paths)
+			if err != nil {
+				return "", err
+			}
 			if err := w.ApplyPatch(in.PatchText); err != nil {
 				return "", err
 			}
-			return "patch를 적용했어요", nil
+			return "patch를 적용했어요\ncheckpoint_id: " + cp.ID, nil
+		}),
+		"workspace_restore_checkpoint": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			CheckpointID string `json:"checkpoint_id"`
+		}) (string, error) {
+			cp, err := w.RestoreCheckpoint(in.CheckpointID)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("checkpoint를 복구했어요: %s (%d entries)", cp.ID, len(cp.Entries)), nil
 		}),
 		"workspace_list": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path string `json:"path"`

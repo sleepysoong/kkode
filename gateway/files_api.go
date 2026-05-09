@@ -39,6 +39,7 @@ type FileContentResponse struct {
 	ProjectRoot      string `json:"project_root"`
 	Path             string `json:"path"`
 	Content          string `json:"content"`
+	CheckpointID     string `json:"checkpoint_id,omitempty"`
 	ContentBytes     int    `json:"content_bytes,omitempty"`
 	FileBytes        int64  `json:"file_bytes,omitempty"`
 	ContentTruncated bool   `json:"content_truncated,omitempty"`
@@ -86,9 +87,10 @@ type FileDeleteRequest struct {
 }
 
 type FileDeleteResponse struct {
-	ProjectRoot string `json:"project_root"`
-	Path        string `json:"path"`
-	Deleted     bool   `json:"deleted"`
+	ProjectRoot  string `json:"project_root"`
+	Path         string `json:"path"`
+	Deleted      bool   `json:"deleted"`
+	CheckpointID string `json:"checkpoint_id,omitempty"`
 }
 
 type FileMoveRequest struct {
@@ -99,10 +101,11 @@ type FileMoveRequest struct {
 }
 
 type FileMoveResponse struct {
-	ProjectRoot string `json:"project_root"`
-	Source      string `json:"source"`
-	Destination string `json:"destination"`
-	Moved       bool   `json:"moved"`
+	ProjectRoot  string `json:"project_root"`
+	Source       string `json:"source"`
+	Destination  string `json:"destination"`
+	Moved        bool   `json:"moved"`
+	CheckpointID string `json:"checkpoint_id,omitempty"`
 }
 
 type FilePatchRequest struct {
@@ -111,9 +114,22 @@ type FilePatchRequest struct {
 }
 
 type FilePatchResponse struct {
-	ProjectRoot string `json:"project_root"`
-	Applied     bool   `json:"applied"`
-	PatchBytes  int    `json:"patch_bytes,omitempty"`
+	ProjectRoot  string `json:"project_root"`
+	Applied      bool   `json:"applied"`
+	PatchBytes   int    `json:"patch_bytes,omitempty"`
+	CheckpointID string `json:"checkpoint_id,omitempty"`
+}
+
+type FileRestoreRequest struct {
+	ProjectRoot  string `json:"project_root"`
+	CheckpointID string `json:"checkpoint_id"`
+}
+
+type FileRestoreResponse struct {
+	ProjectRoot  string `json:"project_root"`
+	CheckpointID string `json:"checkpoint_id"`
+	Restored     bool   `json:"restored"`
+	Entries      int    `json:"entries,omitempty"`
 }
 
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -145,6 +161,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		s.moveFilePath(w, r)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "restore" && r.Method == http.MethodPost {
+		s.restoreFileCheckpoint(w, r)
+		return
+	}
 	if len(parts) == 1 {
 		writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodGet)
 		return
@@ -160,7 +180,7 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		case "patch":
 			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodPost)
 			return
-		case "delete", "move":
+		case "delete", "move", "restore":
 			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodPost)
 			return
 		}
@@ -301,11 +321,16 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
 		return
 	}
+	cp, err := ws.CreateCheckpoint([]string{req.Path})
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "file_checkpoint_failed", err.Error())
+		return
+	}
 	if err := ws.WriteFile(req.Path, req.Content); err != nil {
 		writeError(w, r, http.StatusBadRequest, "write_file_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content, ContentBytes: len(req.Content), FileBytes: int64(len(req.Content))})
+	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content, CheckpointID: cp.ID, ContentBytes: len(req.Content), FileBytes: int64(len(req.Content))})
 }
 
 func (s *Server) deleteFilePath(w http.ResponseWriter, r *http.Request) {
@@ -321,11 +346,16 @@ func (s *Server) deleteFilePath(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
 		return
 	}
+	cp, err := ws.CreateCheckpoint([]string{req.Path})
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "file_checkpoint_failed", err.Error())
+		return
+	}
 	if err := ws.DeletePath(req.Path, req.Recursive); err != nil {
 		writeError(w, r, http.StatusBadRequest, "delete_file_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileDeleteResponse{ProjectRoot: projectRoot, Path: req.Path, Deleted: true})
+	writeJSON(w, FileDeleteResponse{ProjectRoot: projectRoot, Path: req.Path, Deleted: true, CheckpointID: cp.ID})
 }
 
 func (s *Server) moveFilePath(w http.ResponseWriter, r *http.Request) {
@@ -342,11 +372,16 @@ func (s *Server) moveFilePath(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
 		return
 	}
+	cp, err := ws.CreateCheckpoint([]string{req.Source, req.Destination})
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "file_checkpoint_failed", err.Error())
+		return
+	}
 	if err := ws.MovePath(req.Source, req.Destination, req.Overwrite); err != nil {
 		writeError(w, r, http.StatusBadRequest, "move_file_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileMoveResponse{ProjectRoot: projectRoot, Source: req.Source, Destination: req.Destination, Moved: true})
+	writeJSON(w, FileMoveResponse{ProjectRoot: projectRoot, Source: req.Source, Destination: req.Destination, Moved: true, CheckpointID: cp.ID})
 }
 
 func (s *Server) applyFilePatch(w http.ResponseWriter, r *http.Request) {
@@ -364,11 +399,46 @@ func (s *Server) applyFilePatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
 		return
 	}
+	paths, err := ws.PatchPaths(req.PatchText)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_patch", err.Error())
+		return
+	}
+	cp, err := ws.CreateCheckpoint(paths)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "file_checkpoint_failed", err.Error())
+		return
+	}
 	if err := ws.ApplyPatch(req.PatchText); err != nil {
 		writeError(w, r, http.StatusBadRequest, "apply_patch_failed", err.Error())
 		return
 	}
-	writeJSON(w, FilePatchResponse{ProjectRoot: projectRoot, Applied: true, PatchBytes: len(req.PatchText)})
+	writeJSON(w, FilePatchResponse{ProjectRoot: projectRoot, Applied: true, PatchBytes: len(req.PatchText), CheckpointID: cp.ID})
+}
+
+func (s *Server) restoreFileCheckpoint(w http.ResponseWriter, r *http.Request) {
+	var req FileRestoreRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
+	req.CheckpointID = strings.TrimSpace(req.CheckpointID)
+	if req.CheckpointID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", "checkpoint_id가 필요해요")
+		return
+	}
+	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+		return
+	}
+	cp, err := ws.RestoreCheckpoint(req.CheckpointID)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "restore_file_checkpoint_failed", err.Error())
+		return
+	}
+	writeJSON(w, FileRestoreResponse{ProjectRoot: projectRoot, CheckpointID: cp.ID, Restored: true, Entries: len(cp.Entries)})
 }
 
 func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
