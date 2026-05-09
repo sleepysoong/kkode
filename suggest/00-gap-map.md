@@ -29,7 +29,7 @@
 
 | 영역 | 현재 kkode | opencode/Codex/Claude Code 수준 | 부족도 | 제안 파일 |
 |---|---|---|---:|---|
-| Agent loop/session | SQLite session resume/fork, todo, compaction, artifact API/export/import, background run store, run SSE | interrupt queue, artifact auto-promotion policy, checkpoint rewind, cost budget | P0 | `01-agent-loop-session-state.md` |
+| Agent loop/session | SQLite session resume/fork, todo, compaction, artifact API/export/import, direct tool output artifact promotion, background run store, run SSE | interrupt queue, agent-run artifact promotion policy, checkpoint rewind, cost budget | P0 | `01-agent-loop-session-state.md` |
 | Tool surface | `file_*`, `shell_run`, `web_fetch`, grep/glob/range read/apply_patch/delete/move, direct tools API, Go symbol API | question/web search/custom MCP tool execution, richer LSP operations | P0 | `02-tools-sandbox-permissions.md` |
 | Permission/sandbox | 사용자 지시대로 권한 엔진 없음, YOLO 즉시 실행 | 안전 제품은 deny/ask/allow가 있지만 kkode에서는 의도적으로 제외해요 | N/A | `02-tools-sandbox-permissions.md` |
 | Checkpoint/undo | SQLite checkpoint, compaction checkpoint, file mutation checkpoint/restore API와 tool이 있음 | `/undo`, `/redo`, conversation rewind, code vs conversation restore UX | P0 | `02-tools-sandbox-permissions.md` |

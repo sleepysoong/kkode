@@ -3428,6 +3428,28 @@ components:
           default: 1048576
           maximum: 8388608
           description: tool 응답 output을 이 byte 수까지 잘라서 반환해요. 0이면 gateway 기본값 1048576 byte를 사용해요.
+        store_artifact:
+          type: boolean
+          default: false
+          description: true면 output이 잘리지 않아도 artifact_session_id에 tool output artifact를 저장해요.
+        artifact_session_id:
+          type: string
+          description: 지정하면 output이 잘렸거나 store_artifact=true일 때 session artifact로 전체 tool output을 저장해요.
+        artifact_run_id:
+          type: string
+          description: 저장 artifact에 연결할 run id예요.
+        artifact_turn_id:
+          type: string
+          description: 저장 artifact에 연결할 turn id예요. session에 존재해야 해요.
+        artifact_kind:
+          type: string
+          maxLength: 64
+          pattern: '^[A-Za-z0-9_.-]+$'
+          description: 저장 artifact kind예요. 기본값은 tool_output이에요.
+        artifact_name:
+          type: string
+          maxLength: 256
+          description: 저장 artifact 표시 이름이에요. 기본값은 tool 이름이에요.
     ToolCallResponse:
       type: object
       required: [tool]
@@ -3446,6 +3468,8 @@ components:
         output_truncated:
           type: boolean
           description: max_output_bytes 때문에 output이 잘렸는지 알려줘요.
+        artifact:
+          $ref: '#/components/schemas/Artifact'
     SessionCreateRequest:
       type: object
       required: [project_root, provider, model]

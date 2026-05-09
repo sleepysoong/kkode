@@ -4432,6 +4432,13 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "call_id") {
 		t.Fatalf("긴 call_id는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","store_artifact":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "artifact_session_id") {
+		t.Fatalf("store_artifact without artifact_session_id는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"web_fetch","arguments":{"url":"https://example.test","fill":"`+strings.Repeat("x", maxToolCallArgumentsBytes+1)+`"}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -4525,8 +4532,15 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "notes", "todo.md"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	artifactSession := session.NewSession(root, "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	artifactTurn := session.NewTurn("direct tool", llm.Request{Model: "gpt-5-mini"})
+	artifactTurn.ID = "turn_tool"
+	artifactSession.AppendTurn(artifactTurn)
+	if err := store.CreateSession(context.Background(), artifactSession); err != nil {
+		t.Fatal(err)
+	}
 
-	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md"},"max_output_bytes":2}`
+	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md"},"max_output_bytes":2,"artifact_session_id":"` + artifactSession.ID + `","artifact_turn_id":"turn_tool","artifact_name":"todo preview"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
@@ -4539,6 +4553,20 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	}
 	if called.Output != "he" || called.OutputBytes != len("hello") || !called.OutputTruncated {
 		t.Fatalf("tool output 제한 응답이 이상해요: %+v", called)
+	}
+	if called.Artifact == nil || called.Artifact.ID == "" || called.Artifact.SessionID != artifactSession.ID || called.Artifact.TurnID != "turn_tool" || called.Artifact.Content != nil || called.Artifact.ContentBytes == 0 {
+		t.Fatalf("truncated tool output artifact 응답이 이상해요: %+v", called.Artifact)
+	}
+	loadedArtifact, err := store.LoadArtifact(context.Background(), called.Artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifactPayload map[string]any
+	if err := json.Unmarshal(loadedArtifact.Content, &artifactPayload); err != nil {
+		t.Fatal(err)
+	}
+	if loadedArtifact.Name != "todo preview" || loadedArtifact.Kind != "tool_output" || artifactPayload["output"] != "hello" || artifactPayload["tool"] != "file_read" {
+		t.Fatalf("저장된 tool artifact가 이상해요: artifact=%+v payload=%+v", loadedArtifact, artifactPayload)
 	}
 
 	if err := os.WriteFile(filepath.Join(root, "notes", "large.txt"), []byte(strings.Repeat("x", defaultToolCallOutputBytes+1)), 0o644); err != nil {

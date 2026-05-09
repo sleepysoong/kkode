@@ -250,7 +250,7 @@ Run은 session 안에서 하나의 prompt 실행이에요.
 }
 ```
 
-현재는 SQLite `artifacts` table에 JSON content를 저장하고 session/run/turn/kind filter로 조회해요. List 응답은 metadata와 `content_bytes` 중심이고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해 큰 tool output을 event payload로만 싣지 않게 해요.
+현재는 SQLite `artifacts` table에 JSON content를 저장하고 session/run/turn/kind filter로 조회해요. List 응답은 metadata와 `content_bytes` 중심이고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해 큰 tool output을 event payload로만 싣지 않게 해요. Direct tool API는 `artifact_session_id`가 있고 output이 잘렸거나 `store_artifact=true`이면 전체 tool output을 artifact로 저장해요.
 
 ## REST endpoint 초안
 
@@ -695,7 +695,7 @@ func ToEventDTO(ev session.Event) EventDTO
 작업:
 
 - files API 추가해요.
-- artifact API는 추가됐고, 남은 작업은 run/tool 실행 경로에서 큰 stdout/diff/web 결과를 자동 artifact로 승격하는 정책이에요.
+- artifact API와 direct tool output 승격은 추가됐고, 남은 작업은 agent run 내부 tool 결과를 자동 artifact로 승격하는 정책이에요.
 - todo API 추가해요.
 - CORS/local auth 설정 추가해요.
 
@@ -767,7 +767,7 @@ curl -N http://127.0.0.1:41234/api/v1/runs/run_.../events \
 
 ## 데이터베이스 확장 제안
 
-현재 `session` SQLite schema에 events/turns/runs/artifacts가 있어요. 다음 단계는 artifact retention과 run/tool 자동 생성 정책을 정하면 돼요.
+현재 `session` SQLite schema에 events/turns/runs/artifacts가 있어요. 다음 단계는 artifact retention과 agent run 내부 tool 결과 자동 생성 정책을 정하면 돼요.
 
 ```sql
 CREATE TABLE runs (

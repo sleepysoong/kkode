@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/sleepysoong/kkode/llm"
+	"github.com/sleepysoong/kkode/session"
 	ktools "github.com/sleepysoong/kkode/tools"
 	"github.com/sleepysoong/kkode/workspace"
 )
@@ -47,22 +48,29 @@ type ToolListResponse struct {
 }
 
 type ToolCallRequest struct {
-	ProjectRoot    string         `json:"project_root"`
-	Tool           string         `json:"tool"`
-	Arguments      map[string]any `json:"arguments,omitempty"`
-	CallID         string         `json:"call_id,omitempty"`
-	TimeoutMS      int            `json:"timeout_ms,omitempty"`
-	WebMaxBytes    int64          `json:"web_max_bytes,omitempty"`
-	MaxOutputBytes int            `json:"max_output_bytes,omitempty"`
+	ProjectRoot       string         `json:"project_root"`
+	Tool              string         `json:"tool"`
+	Arguments         map[string]any `json:"arguments,omitempty"`
+	CallID            string         `json:"call_id,omitempty"`
+	TimeoutMS         int            `json:"timeout_ms,omitempty"`
+	WebMaxBytes       int64          `json:"web_max_bytes,omitempty"`
+	MaxOutputBytes    int            `json:"max_output_bytes,omitempty"`
+	StoreArtifact     bool           `json:"store_artifact,omitempty"`
+	ArtifactSessionID string         `json:"artifact_session_id,omitempty"`
+	ArtifactRunID     string         `json:"artifact_run_id,omitempty"`
+	ArtifactTurnID    string         `json:"artifact_turn_id,omitempty"`
+	ArtifactKind      string         `json:"artifact_kind,omitempty"`
+	ArtifactName      string         `json:"artifact_name,omitempty"`
 }
 
 type ToolCallResponse struct {
-	CallID          string `json:"call_id,omitempty"`
-	Tool            string `json:"tool"`
-	Output          string `json:"output,omitempty"`
-	Error           string `json:"error,omitempty"`
-	OutputBytes     int    `json:"output_bytes,omitempty"`
-	OutputTruncated bool   `json:"output_truncated,omitempty"`
+	CallID          string       `json:"call_id,omitempty"`
+	Tool            string       `json:"tool"`
+	Output          string       `json:"output,omitempty"`
+	Error           string       `json:"error,omitempty"`
+	OutputBytes     int          `json:"output_bytes,omitempty"`
+	OutputTruncated bool         `json:"output_truncated,omitempty"`
+	Artifact        *ArtifactDTO `json:"artifact,omitempty"`
 }
 
 func (s *Server) handleTools(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -132,6 +140,11 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Tool = strings.TrimSpace(req.Tool)
 	req.CallID = strings.TrimSpace(req.CallID)
+	req.ArtifactSessionID = strings.TrimSpace(req.ArtifactSessionID)
+	req.ArtifactRunID = strings.TrimSpace(req.ArtifactRunID)
+	req.ArtifactTurnID = strings.TrimSpace(req.ArtifactTurnID)
+	req.ArtifactKind = strings.TrimSpace(req.ArtifactKind)
+	req.ArtifactName = strings.TrimSpace(req.ArtifactName)
 	args, err := validateToolCallRequest(req)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_tool_call", err.Error())
@@ -147,6 +160,11 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cancel()
+	if req.ArtifactSessionID != "" {
+		if ok := s.validateArtifactTarget(w, r, req.ArtifactSessionID, req.ArtifactTurnID); !ok {
+			return
+		}
+	}
 	var ws *workspace.Workspace
 	if toolRequiresWorkspace(req.Tool) {
 		if req.ProjectRoot == "" {
@@ -171,8 +189,16 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusBadRequest, "tool_call_failed", err.Error())
 			return
 		}
+		fullOutput := output
 		output, outputBytes, truncated := truncateToolOutput(output, toolCallOutputLimit(req.MaxOutputBytes))
-		writeJSON(w, ToolCallResponse{CallID: req.CallID, Tool: req.Tool, Output: output, OutputBytes: outputBytes, OutputTruncated: truncated})
+		resp := ToolCallResponse{CallID: req.CallID, Tool: req.Tool, Output: output, OutputBytes: outputBytes, OutputTruncated: truncated}
+		if artifact, err := s.maybeSaveToolCallArtifact(r.Context(), req, resp.Tool, fullOutput, "", outputBytes, truncated); err != nil {
+			writeError(w, r, http.StatusInternalServerError, "save_tool_artifact_failed", err.Error())
+			return
+		} else {
+			resp.Artifact = artifact
+		}
+		writeJSON(w, resp)
 		return
 	}
 	_, handlers := ktools.StandardToolSet(ktools.SurfaceOptions{Workspace: ws, WebMaxBytes: req.WebMaxBytes, Timeout: toolCallTimeout(req.TimeoutMS)}).Parts()
@@ -182,7 +208,14 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	output, outputBytes, truncated := truncateToolOutput(result.Output, toolCallOutputLimit(req.MaxOutputBytes))
-	writeJSON(w, ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated})
+	resp := ToolCallResponse{CallID: result.CallID, Tool: result.Name, Output: output, Error: result.Error, OutputBytes: outputBytes, OutputTruncated: truncated}
+	if artifact, err := s.maybeSaveToolCallArtifact(r.Context(), req, resp.Tool, result.Output, result.Error, outputBytes, truncated); err != nil {
+		writeError(w, r, http.StatusInternalServerError, "save_tool_artifact_failed", err.Error())
+		return
+	} else {
+		resp.Artifact = artifact
+	}
+	writeJSON(w, resp)
 }
 
 func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
@@ -201,6 +234,12 @@ func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
 	if req.MaxOutputBytes > maxToolCallOutputBytes {
 		return nil, fmt.Errorf("max_output_bytes는 %d 이하여야 해요", maxToolCallOutputBytes)
 	}
+	if req.StoreArtifact && req.ArtifactSessionID == "" {
+		return nil, errors.New("store_artifact에는 artifact_session_id가 필요해요")
+	}
+	if err := validateToolArtifactRequest(req); err != nil {
+		return nil, err
+	}
 	if req.WebMaxBytes < 0 {
 		return nil, errors.New("web_max_bytes는 0 이상이어야 해요")
 	}
@@ -215,6 +254,78 @@ func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
 		return nil, fmt.Errorf("arguments는 %d byte 이하여야 해요", maxToolCallArgumentsBytes)
 	}
 	return args, nil
+}
+
+func validateToolArtifactRequest(req ToolCallRequest) error {
+	if req.ArtifactSessionID != "" && !validRunMetadataKey(req.ArtifactSessionID) {
+		return fmt.Errorf("artifact_session_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if req.ArtifactRunID != "" && !validRunMetadataKey(req.ArtifactRunID) {
+		return fmt.Errorf("artifact_run_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if req.ArtifactTurnID != "" && !validRunMetadataKey(req.ArtifactTurnID) {
+		return fmt.Errorf("artifact_turn_id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	if req.ArtifactKind != "" {
+		if len(req.ArtifactKind) > maxArtifactKindBytes {
+			return fmt.Errorf("artifact_kind는 %d byte 이하여야 해요", maxArtifactKindBytes)
+		}
+		if !validRunMetadataKey(req.ArtifactKind) {
+			return fmt.Errorf("artifact_kind는 영문/숫자/._- 문자만 쓸 수 있어요")
+		}
+	}
+	if len(req.ArtifactName) > maxArtifactNameBytes {
+		return fmt.Errorf("artifact_name은 %d byte 이하여야 해요", maxArtifactNameBytes)
+	}
+	return nil
+}
+
+func (s *Server) maybeSaveToolCallArtifact(ctx context.Context, req ToolCallRequest, toolName string, fullOutput string, toolError string, outputBytes int, outputTruncated bool) (*ArtifactDTO, error) {
+	if req.ArtifactSessionID == "" || (!req.StoreArtifact && !outputTruncated) {
+		return nil, nil
+	}
+	store := s.artifactStore()
+	if store == nil {
+		return nil, errors.New("artifact store가 연결되지 않았어요")
+	}
+	kind := req.ArtifactKind
+	if kind == "" {
+		kind = "tool_output"
+	}
+	name := req.ArtifactName
+	if name == "" {
+		name = toolName
+	}
+	content, err := json.Marshal(map[string]any{
+		"call_id":          req.CallID,
+		"tool":             toolName,
+		"output":           fullOutput,
+		"error":            toolError,
+		"output_bytes":     outputBytes,
+		"output_truncated": outputTruncated,
+	})
+	if err != nil {
+		return nil, err
+	}
+	artifact, err := store.SaveArtifact(ctx, session.Artifact{
+		SessionID: req.ArtifactSessionID,
+		RunID:     req.ArtifactRunID,
+		TurnID:    req.ArtifactTurnID,
+		Kind:      kind,
+		Name:      name,
+		MimeType:  "application/json",
+		Content:   json.RawMessage(content),
+		Metadata: map[string]string{
+			"source": "tool_call",
+			"tool":   toolName,
+		},
+		CreatedAt: s.cfg.Now(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	dto := toArtifactDTO(artifact, -1)
+	return &dto, nil
 }
 
 func toolCallOutputLimit(value int) int {
