@@ -2542,6 +2542,8 @@ components:
       required: true
       schema:
         type: string
+        maxLength: 128
+        pattern: '^[A-Za-z0-9_.-]+$'
     ResourceName:
       in: query
       name: name
@@ -2726,6 +2728,8 @@ components:
         max_file_pattern_bytes:
           type: integer
         max_file_checkpoint_id_bytes:
+          type: integer
+        max_resource_id_bytes:
           type: integer
         max_skill_preview_bytes:
           type: integer

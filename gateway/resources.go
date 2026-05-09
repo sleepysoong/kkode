@@ -151,8 +151,8 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 		return
 	}
 	id := strings.TrimSpace(rest[0])
-	if id == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_resource", "resource id가 필요해요")
+	if err := validateResourceIDText(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	switch r.Method {
@@ -175,8 +175,8 @@ func (s *Server) handleResources(w http.ResponseWriter, r *http.Request, rest []
 
 func (s *Server) withResource(w http.ResponseWriter, r *http.Request, kind session.ResourceKind, id string, fn func(session.Resource)) {
 	id = strings.TrimSpace(id)
-	if id == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_resource", "resource id가 필요해요")
+	if err := validateResourceIDText(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	store := s.resourceStore()
@@ -307,11 +307,8 @@ func resourceFromDTO(kind session.ResourceKind, id string, dto ResourceDTO) (ses
 
 func validateResourceIdentity(id string, name string, description string) error {
 	if id != "" {
-		if len(id) > maxResourceIDBytes {
-			return fmt.Errorf("resource id는 %d byte 이하여야 해요", maxResourceIDBytes)
-		}
-		if !validRunMetadataKey(id) {
-			return fmt.Errorf("resource id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		if err := validateResourceIDText(id); err != nil {
+			return err
 		}
 	}
 	if len(name) > maxResourceNameBytes {
@@ -319,6 +316,19 @@ func validateResourceIdentity(id string, name string, description string) error 
 	}
 	if len(strings.TrimSpace(description)) > maxResourceDescriptionBytes {
 		return fmt.Errorf("resource description은 %d byte 이하여야 해요", maxResourceDescriptionBytes)
+	}
+	return nil
+}
+
+func validateResourceIDText(id string) error {
+	if id == "" {
+		return fmt.Errorf("resource id가 필요해요")
+	}
+	if len(id) > maxResourceIDBytes {
+		return fmt.Errorf("resource id는 %d byte 이하여야 해요", maxResourceIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return fmt.Errorf("resource id는 영문/숫자/._- 문자만 쓸 수 있어요")
 	}
 	return nil
 }
