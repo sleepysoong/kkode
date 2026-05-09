@@ -35,6 +35,7 @@ type StatsResponse struct {
 	RunUsageByModel       map[string]UsageDTO            `json:"run_usage_by_model"`
 	TotalResources        int                            `json:"total_resources"`
 	Resources             map[string]int                 `json:"resources"`
+	ResourcesByEnabled    map[string]int                 `json:"resources_by_enabled"`
 }
 
 // RunDurationStatsDTO는 완료된 run timestamp에서 계산한 latency aggregate예요.
@@ -92,6 +93,7 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		RunUsageByModel:       usageDTOMapFromLLM(stats.RunUsageByModel),
 		TotalResources:        sumIntMap(stats.Resources),
 		Resources:             cloneIntMap(stats.Resources),
+		ResourcesByEnabled:    cloneIntMap(stats.ResourcesByEnabled),
 	}
 }
 

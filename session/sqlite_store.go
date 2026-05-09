@@ -545,7 +545,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, ArtifactBytesByKind: map[string]int64{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
+	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, ArtifactBytesByKind: map[string]int64{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}, ResourcesByEnabled: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -597,6 +597,9 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		return stats, err
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM resources GROUP BY kind`, stats.Resources); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT CASE WHEN enabled = 0 THEN 'disabled' ELSE 'enabled' END, COUNT(1) FROM resources GROUP BY CASE WHEN enabled = 0 THEN 'disabled' ELSE 'enabled' END`, stats.ResourcesByEnabled); err != nil {
 		return stats, err
 	}
 	if err := s.db.QueryRowContext(ctx, `SELECT

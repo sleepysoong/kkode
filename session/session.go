@@ -165,6 +165,7 @@ type StoreStats struct {
 	RunUsageByProvider    map[string]llm.Usage
 	RunUsageByModel       map[string]llm.Usage
 	Resources             map[string]int
+	ResourcesByEnabled    map[string]int
 }
 
 // RunDurationStats는 완료된 run timestamp에서 계산한 latency 집계예요.
