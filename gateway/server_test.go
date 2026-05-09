@@ -4788,6 +4788,12 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if detail.Name != "web_fetch" || detail.Category != "web" || detail.Effects[0] != "network" || detail.OutputFormat != "json" || detail.RequiresWorkspace || detail.ExampleArguments["url"] == "" {
 		t.Fatalf("tool 상세 discovery가 이상해요: %+v", detail)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools/"+strings.Repeat("x", maxToolCallNameBytes+1), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "tool") {
+		t.Fatalf("긴 tool 상세 이름은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(`{"tool":"missing_tool"}`))
 	req.Header.Set("Content-Type", "application/json")

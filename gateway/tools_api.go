@@ -121,6 +121,10 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getTool(w http.ResponseWriter, r *http.Request, name string) {
 	name = strings.TrimSpace(name)
+	if err := validateToolNameText(name); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_tool", err.Error())
+		return
+	}
 	defs := gatewayToolDefinitions()
 	for _, tool := range defs {
 		if tool.Name == name {
@@ -219,11 +223,8 @@ func (s *Server) callTool(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
-	if req.Tool == "" {
-		return nil, errors.New("tool이 필요해요")
-	}
-	if len(req.Tool) > maxToolCallNameBytes {
-		return nil, fmt.Errorf("tool은 %d byte 이하여야 해요", maxToolCallNameBytes)
+	if err := validateToolNameText(req.Tool); err != nil {
+		return nil, err
 	}
 	if len(req.CallID) > maxToolCallIDBytes {
 		return nil, fmt.Errorf("call_id는 %d byte 이하여야 해요", maxToolCallIDBytes)
@@ -254,6 +255,16 @@ func validateToolCallRequest(req ToolCallRequest) ([]byte, error) {
 		return nil, fmt.Errorf("arguments는 %d byte 이하여야 해요", maxToolCallArgumentsBytes)
 	}
 	return args, nil
+}
+
+func validateToolNameText(name string) error {
+	if name == "" {
+		return errors.New("tool이 필요해요")
+	}
+	if len(name) > maxToolCallNameBytes {
+		return fmt.Errorf("tool은 %d byte 이하여야 해요", maxToolCallNameBytes)
+	}
+	return nil
 }
 
 func validateToolArtifactRequest(req ToolCallRequest) error {
