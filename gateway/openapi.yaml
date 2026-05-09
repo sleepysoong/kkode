@@ -468,6 +468,26 @@ paths:
                 $ref: '#/components/schemas/FileCheckpointListResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/files/checkpoints/prune:
+    post:
+      operationId: postFilesCheckpointsPrune
+      summary: 오래된 workspace file checkpoint snapshot을 정리해요.
+      description: 최신 keep_latest개 checkpoint만 남기고 나머지를 삭제해요. 파일 내용 snapshot은 응답하지 않아요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileCheckpointPruneRequest'
+      responses:
+        '200':
+          description: file checkpoint prune 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileCheckpointPruneResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/files/checkpoints/{checkpoint_id}:
     get:
       operationId: getFilesCheckpointsByCheckpointId
@@ -3120,6 +3140,32 @@ components:
           type: string
         deleted:
           type: boolean
+    FileCheckpointPruneRequest:
+      type: object
+      required: [project_root, keep_latest]
+      properties:
+        project_root:
+          type: string
+        keep_latest:
+          type: integer
+          minimum: 0
+          description: 남길 최신 file checkpoint 개수예요. 0이면 모두 삭제해요.
+    FileCheckpointPruneResponse:
+      type: object
+      required: [project_root, deleted, deleted_count, kept, total_checkpoints]
+      properties:
+        project_root:
+          type: string
+        deleted:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileCheckpoint'
+        deleted_count:
+          type: integer
+        kept:
+          type: integer
+        total_checkpoints:
+          type: integer
     FileWriteRequest:
       type: object
       required: [project_root, path, content]

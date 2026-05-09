@@ -66,7 +66,7 @@
 ### 작업
 
 - file edit tool 실행 전 snapshot 저장은 구현됐고 유지해요.
-- file checkpoint restore/list/detail/delete tool/API는 구현됐고, retention 정책을 보강해요.
+- file checkpoint restore/list/detail/delete/prune tool/API와 keep-latest retention 정리는 구현됐어요.
 - `kkode undo`, `kkode redo`, `kkode rewind`를 추가해요.
 - bash command 변경은 추적 한계를 명확히 표시해요.
 
@@ -75,6 +75,7 @@
 - write/edit/apply_patch/delete/move로 만든 변경은 checkpoint id로 restore할 수 있어요.
 - conversation-only rewind와 code restore를 분리해요.
 - checkpoint가 session resume 뒤에도 남아 있어요.
+- 오래된 file checkpoint는 `keep_latest` 기준으로 한 번에 정리할 수 있어요.
 
 ## Phase 4: Project context + commands + skills
 

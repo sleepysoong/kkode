@@ -96,6 +96,7 @@ func TestGatewayAPIIndex(t *testing.T) {
 		"file_write":             {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
 		"file_move":              {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
 		"file_restore":           {Name: "file_restore", Method: "POST", Path: "/api/v1/files/restore"},
+		"file_checkpoints_prune": {Name: "file_checkpoints_prune", Method: "POST", Path: "/api/v1/files/checkpoints/prune"},
 		"file_checkpoint_delete": {Name: "file_checkpoint_delete", Method: "DELETE", Path: "/api/v1/files/checkpoints/{checkpoint_id}"},
 		"run_cancel":             {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
 		"lsp_hover":              {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
@@ -4305,7 +4306,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "file_delete") || !hasTool(listed.Tools, "file_move") || !hasTool(listed.Tools, "file_restore_checkpoint") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
+	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "file_delete") || !hasTool(listed.Tools, "file_move") || !hasTool(listed.Tools, "file_restore_checkpoint") || !hasTool(listed.Tools, "file_prune_checkpoints") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
 		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
 	}
 	if listed.TotalTools != len(listed.Tools) || listed.Limit != len(listed.Tools) || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
@@ -4321,10 +4322,10 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if !findTool(listed.Tools, "file_write").RequiresWorkspace || findTool(listed.Tools, "web_fetch").RequiresWorkspace {
 		t.Fatalf("tool별 workspace 요구 여부를 discovery해야 해요: %+v", listed.Tools)
 	}
-	if findTool(listed.Tools, "file_write").Category != "file" || findTool(listed.Tools, "file_write").Effects[0] != "write" || findTool(listed.Tools, "shell_run").Effects[0] != "execute" || findTool(listed.Tools, "web_fetch").OutputFormat != "json" {
+	if findTool(listed.Tools, "file_write").Category != "file" || findTool(listed.Tools, "file_write").Effects[0] != "write" || findTool(listed.Tools, "file_prune_checkpoints").OutputFormat != "json" || findTool(listed.Tools, "shell_run").Effects[0] != "execute" || findTool(listed.Tools, "web_fetch").OutputFormat != "json" {
 		t.Fatalf("tool별 category/effects/output_format discovery가 필요해요: %+v", listed.Tools)
 	}
-	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_delete").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_move").ExampleArguments["source"] == "" || findTool(listed.Tools, "file_restore_checkpoint").ExampleArguments["checkpoint_id"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
+	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_delete").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_move").ExampleArguments["source"] == "" || findTool(listed.Tools, "file_restore_checkpoint").ExampleArguments["checkpoint_id"] == "" || findTool(listed.Tools, "file_prune_checkpoints").ExampleArguments["keep_latest"] == nil || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
 		t.Fatalf("adapter form 생성을 위한 tool 예제가 필요해요: %+v", listed.Tools)
 	}
 
@@ -5878,6 +5879,29 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	}
 	if !checkpointDelete.Deleted || checkpointDelete.ProjectRoot != root || checkpointDelete.CheckpointID != deleted.CheckpointID {
 		t.Fatalf("file checkpoint delete가 이상해요: %+v", checkpointDelete)
+	}
+	body = `{"project_root":"` + root + `","keep_latest":0}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/checkpoints/prune", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("checkpoint prune status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var checkpointPrune FileCheckpointPruneResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpointPrune); err != nil {
+		t.Fatal(err)
+	}
+	if checkpointPrune.ProjectRoot != root || checkpointPrune.Kept != 0 || checkpointPrune.DeletedCount != len(checkpointPrune.Deleted) || checkpointPrune.TotalCheckpoints == 0 {
+		t.Fatalf("file checkpoint prune가 이상해요: %+v", checkpointPrune)
+	}
+	body = `{"project_root":"` + root + `","keep_latest":-1}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/checkpoints/prune", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "keep_latest") {
+		t.Fatalf("negative checkpoint prune는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	body = `{"project_root":"` + root + `","path":"docs"}`

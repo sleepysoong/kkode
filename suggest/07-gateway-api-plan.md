@@ -43,7 +43,7 @@
 
 - run interrupt는 별도 명령으로 분리되지 않았고 cancel/retry 중심이에요.
 - artifact API는 아직 없고 transcript/export/checkpoint로 대체하고 있어요.
-- session checkpoint는 payload 저장/조회 중심이고, file mutation checkpoint/restore는 전용 files API와 tool로 구현됐어요. 아직 conversation rewind와 undo/redo UX는 없어요.
+- session checkpoint는 payload 저장/조회 중심이고, file mutation checkpoint/restore/list/delete/prune는 전용 files API와 tool로 구현됐어요. 아직 conversation rewind와 undo/redo UX는 없어요.
 - Discord/webhook adapter가 없어요.
 
 ## 추천 패키지 구조
@@ -387,6 +387,7 @@ POST /api/v1/files/move
 POST /api/v1/files/patch
 POST /api/v1/files/restore
 GET  /api/v1/files/checkpoints
+POST /api/v1/files/checkpoints/prune
 GET  /api/v1/files/checkpoints/{checkpoint_id}
 DELETE /api/v1/files/checkpoints/{checkpoint_id}
 GET  /api/v1/files/glob?project_root=/repo&pattern=**/*.go
@@ -548,6 +549,7 @@ Run metadata에 다음을 저장해요.
 - `POST /api/v1/files/patch`
 - `POST /api/v1/files/restore`
 - `GET /api/v1/files/checkpoints`
+- `POST /api/v1/files/checkpoints/prune`
 - `GET /api/v1/files/checkpoints/{checkpoint_id}`
 - `DELETE /api/v1/files/checkpoints/{checkpoint_id}`
 - `GET /artifacts`

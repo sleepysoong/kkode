@@ -447,6 +447,8 @@ func toolMetadata(name string) toolMetadataDTO {
 		return toolMetadataDTO{Category: "file", Effects: []string{"read"}, OutputFormat: toolOutputFormat(name)}
 	case "file_write", "file_edit", "file_apply_patch", "file_delete", "file_move", "file_restore_checkpoint":
 		return toolMetadataDTO{Category: "file", Effects: []string{"write"}, OutputFormat: "text"}
+	case "file_prune_checkpoints":
+		return toolMetadataDTO{Category: "file", Effects: []string{"write"}, OutputFormat: "json"}
 	case "shell_run":
 		return toolMetadataDTO{Category: "shell", Effects: []string{"execute"}, OutputFormat: "json"}
 	case "web_fetch":
@@ -483,6 +485,8 @@ func toolExampleArguments(name string) map[string]any {
 		return map[string]any{"patch_text": "*** Begin Patch\n*** Update File: README.md\n@@\n-기존 문장\n+새 문장\n*** End Patch\n"}
 	case "file_restore_checkpoint":
 		return map[string]any{"checkpoint_id": "ws_20260509T120000Z_0000000000000000"}
+	case "file_prune_checkpoints":
+		return map[string]any{"keep_latest": 50}
 	case "file_list":
 		return map[string]any{"path": "."}
 	case "file_glob":

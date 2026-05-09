@@ -40,6 +40,12 @@ type FileCheckpointSummary struct {
 	Paths     []string  `json:"paths"`
 }
 
+type FileCheckpointPruneResult struct {
+	Deleted     []FileCheckpointSummary `json:"deleted"`
+	Kept        int                     `json:"kept"`
+	TotalBefore int                     `json:"total_before"`
+}
+
 func (w *Workspace) CreateCheckpoint(paths []string) (FileCheckpoint, error) {
 	cp, err := w.SnapshotPaths(paths)
 	if err != nil {
@@ -163,6 +169,27 @@ func (w *Workspace) DeleteCheckpoint(id string) error {
 		return err
 	}
 	return os.Remove(path)
+}
+
+func (w *Workspace) PruneCheckpoints(keepLatest int) (FileCheckpointPruneResult, error) {
+	if keepLatest < 0 {
+		return FileCheckpointPruneResult{}, errors.New("keep_latest must be >= 0")
+	}
+	items, err := w.ListCheckpoints()
+	if err != nil {
+		return FileCheckpointPruneResult{}, err
+	}
+	result := FileCheckpointPruneResult{Kept: min(keepLatest, len(items)), TotalBefore: len(items)}
+	if len(items) <= keepLatest {
+		return result, nil
+	}
+	for _, item := range items[keepLatest:] {
+		if err := w.DeleteCheckpoint(item.ID); err != nil {
+			return result, err
+		}
+		result.Deleted = append(result.Deleted, item)
+	}
+	return result, nil
 }
 
 func (w *Workspace) RestoreCheckpoint(id string) (FileCheckpoint, error) {

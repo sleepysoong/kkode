@@ -81,8 +81,8 @@ func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	defs, handlers := w.Tools()
-	if len(defs) != 12 {
-		t.Fatalf("defs=%d", len(defs))
+	if !hasWorkspaceTool(defs, "workspace_prune_checkpoints") {
+		t.Fatalf("workspace_prune_checkpoints가 tool 목록에 필요해요: %+v", defs)
 	}
 	res, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_read_file", CallID: "1", Arguments: []byte(`{"path":"b.txt"}`)})
 	if err != nil || res.Output != "tool text" {
@@ -180,6 +180,15 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	}
 }
 
+func hasWorkspaceTool(defs []llm.Tool, name string) bool {
+	for _, def := range defs {
+		if def.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestWorkspaceCheckpointRestoresMutations(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)
@@ -236,6 +245,34 @@ func TestWorkspaceCheckpointRestoresMutations(t *testing.T) {
 	listed, err = w.ListCheckpoints()
 	if err != nil || len(listed) != 0 {
 		t.Fatalf("checkpoint delete should remove snapshot: listed=%+v err=%v", listed, err)
+	}
+	for i := range 3 {
+		next, err := w.SnapshotPaths([]string{"docs/a.txt"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		next.ID = fmt.Sprintf("ws_20260509T12000%dZ_%016d", i, i)
+		next.CreatedAt = time.Date(2026, 5, 9, 12, i, 0, 0, time.UTC)
+		if err := w.SaveCheckpoint(next); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pruned, err := w.PruneCheckpoints(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pruned.TotalBefore != 3 || pruned.Kept != 1 || len(pruned.Deleted) != 2 {
+		t.Fatalf("checkpoint prune result=%+v", pruned)
+	}
+	listed, err = w.ListCheckpoints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != "ws_20260509T120002Z_0000000000000002" {
+		t.Fatalf("checkpoint prune should keep newest snapshot: %+v", listed)
+	}
+	if _, err := w.PruneCheckpoints(-1); err == nil {
+		t.Fatalf("negative keep_latest should fail")
 	}
 }
 

@@ -62,6 +62,17 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	if err != nil || !strings.Contains(restored, "two patched") {
 		t.Fatalf("restore should recover deleted file: %q err=%v", restored, err)
 	}
+	pruned, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_prune_checkpoints", CallID: "prune", Arguments: []byte(`{"keep_latest":1}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pruneResult workspace.FileCheckpointPruneResult
+	if err := json.Unmarshal([]byte(pruned.Output), &pruneResult); err != nil {
+		t.Fatal(err)
+	}
+	if pruneResult.Kept != 1 || len(pruneResult.Deleted) == 0 {
+		t.Fatalf("file_prune_checkpoints result가 이상해요: %+v", pruneResult)
+	}
 	shell, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "7", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
 	if err != nil {
 		t.Fatalf("non-zero shell command should return structured output: %v", err)

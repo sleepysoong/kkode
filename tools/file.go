@@ -21,6 +21,7 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 		{Kind: llm.ToolFunction, Name: "file_edit", Description: "workspace 파일에서 old 텍스트를 new 텍스트로 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": nonNegativeIntegerSchema()}, []string{"path", "old", "new"})},
 		{Kind: llm.ToolFunction, Name: "file_apply_patch", Description: "apply_patch 형식 patch를 workspace에 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
 		{Kind: llm.ToolFunction, Name: "file_restore_checkpoint", Description: "workspace file checkpoint를 복구해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"checkpoint_id": stringSchema()}, []string{"checkpoint_id"})},
+		{Kind: llm.ToolFunction, Name: "file_prune_checkpoints", Description: "최신 workspace file checkpoint만 남기고 오래된 snapshot을 삭제해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"keep_latest": nonNegativeIntegerSchema()}, []string{"keep_latest"})},
 		{Kind: llm.ToolFunction, Name: "file_list", Description: "workspace 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "file_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾아요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "file_grep", Description: "workspace 파일에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema()}, []string{"pattern"})},
@@ -135,6 +136,19 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 				return "", err
 			}
 			return fmt.Sprintf("checkpoint를 복구했어요: %s (%d entries)", cp.ID, len(cp.Entries)), nil
+		}),
+		"file_prune_checkpoints": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			KeepLatest int `json:"keep_latest"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			result, err := ws.PruneCheckpoints(in.KeepLatest)
+			if err != nil {
+				return "", err
+			}
+			b, _ := json.MarshalIndent(result, "", "  ")
+			return string(b), nil
 		}),
 		"file_list": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path string `json:"path"`

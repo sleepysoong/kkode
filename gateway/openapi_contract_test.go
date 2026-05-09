@@ -351,6 +351,8 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "FileCheckpointListResponse", dto: FileCheckpointListResponse{}},
 		{schema: "FileCheckpoint", dto: FileCheckpointDTO{}},
 		{schema: "FileCheckpointDeleteResponse", dto: FileCheckpointDeleteResponse{}},
+		{schema: "FileCheckpointPruneRequest", dto: FileCheckpointPruneRequest{}},
+		{schema: "FileCheckpointPruneResponse", dto: FileCheckpointPruneResponse{}},
 		{schema: "FileWriteRequest", dto: FileWriteRequest{}},
 		{schema: "LSPSymbolListResponse", dto: LSPSymbolListResponse{}},
 		{schema: "LSPLocationListResponse", dto: LSPLocationListResponse{}},

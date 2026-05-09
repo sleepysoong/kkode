@@ -155,6 +155,19 @@ type FileCheckpointDeleteResponse struct {
 	Deleted      bool   `json:"deleted"`
 }
 
+type FileCheckpointPruneRequest struct {
+	ProjectRoot string `json:"project_root"`
+	KeepLatest  int    `json:"keep_latest"`
+}
+
+type FileCheckpointPruneResponse struct {
+	ProjectRoot      string              `json:"project_root"`
+	Deleted          []FileCheckpointDTO `json:"deleted"`
+	DeletedCount     int                 `json:"deleted_count"`
+	Kept             int                 `json:"kept"`
+	TotalCheckpoints int                 `json:"total_checkpoints"`
+}
+
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		s.listFiles(w, r)
@@ -192,6 +205,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		s.listFileCheckpoints(w, r)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "checkpoints" && parts[2] == "prune" && r.Method == http.MethodPost {
+		s.pruneFileCheckpoints(w, r)
+		return
+	}
 	if len(parts) == 3 && parts[1] == "checkpoints" && r.Method == http.MethodGet {
 		s.getFileCheckpoint(w, r, parts[2])
 		return
@@ -222,6 +239,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 			writeMethodNotAllowed(w, r, "지원하지 않는 files checkpoint method예요", http.MethodGet)
 			return
 		}
+	}
+	if len(parts) == 3 && parts[1] == "checkpoints" && parts[2] == "prune" {
+		writeMethodNotAllowed(w, r, "지원하지 않는 files checkpoint prune method예요", http.MethodPost)
+		return
 	}
 	if len(parts) == 3 && parts[1] == "checkpoints" {
 		writeMethodNotAllowed(w, r, "지원하지 않는 files checkpoint method예요", http.MethodGet, http.MethodDelete)
@@ -530,6 +551,27 @@ func (s *Server) deleteFileCheckpoint(w http.ResponseWriter, r *http.Request, ch
 		return
 	}
 	writeJSON(w, FileCheckpointDeleteResponse{ProjectRoot: projectRoot, CheckpointID: checkpointID, Deleted: true})
+}
+
+func (s *Server) pruneFileCheckpoints(w http.ResponseWriter, r *http.Request) {
+	var req FileCheckpointPruneRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
+	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+		return
+	}
+	result, err := ws.PruneCheckpoints(req.KeepLatest)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "prune_file_checkpoints_failed", err.Error())
+		return
+	}
+	deleted := fileCheckpointDTOs(result.Deleted)
+	writeJSON(w, FileCheckpointPruneResponse{ProjectRoot: projectRoot, Deleted: deleted, DeletedCount: len(deleted), Kept: result.Kept, TotalCheckpoints: result.TotalBefore})
 }
 
 func fileCheckpointDTOs(items []workspace.FileCheckpointSummary) []FileCheckpointDTO {
