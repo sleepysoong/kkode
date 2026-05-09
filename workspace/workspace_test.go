@@ -129,7 +129,14 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if err != nil || content != "hello new" {
 		t.Fatalf("content=%q err=%v", content, err)
 	}
-	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "3", Arguments: []byte(`{"command":"echo","args":["ok"],"timeout_ms":1000}`)})
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_apply_patch", CallID: "3", Arguments: []byte(`{"patch_text":"*** Begin Patch\n*** Update File: a.txt\n@@\n-hello new\n+hello patched\n*** End Patch\n"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	content, err = w.ReadFile("a.txt")
+	if err != nil || content != "hello patched" {
+		t.Fatalf("patched content=%q err=%v", content, err)
+	}
+	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "4", Arguments: []byte(`{"command":"echo","args":["ok"],"timeout_ms":1000}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +150,7 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if cmd.DurationMS < 0 || cmd.StartedAt.IsZero() || cmd.EndedAt.IsZero() {
 		t.Fatalf("cmd timing이 이상해요: %#v", cmd)
 	}
-	out, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "4", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
+	out, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "5", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
 	if err != nil {
 		t.Fatalf("non-zero command should still return structured output: %v", err)
 	}
@@ -154,7 +161,7 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if cmd.ExitCode != 7 || cmd.Stdout != "out\n" || !strings.Contains(cmd.Stderr, "err") || cmd.DurationMS < 0 {
 		t.Fatalf("failed command result가 이상해요: %#v", cmd)
 	}
-	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "5", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "6", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
 		t.Fatalf("missing command should remain a tool error: %v", err)
 	}
 }
