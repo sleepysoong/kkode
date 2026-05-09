@@ -110,7 +110,6 @@ OpenCode CLI와 Claude Code는 command를 주요 UX로 써요. Codex IDE/CLI도 
 /redo         undo 되돌려요
 /compact      session summary 생성해요
 /model        provider/model 선택해요
-/permissions  permission rule UI/CLI를 열어요
 /mcp          MCP 서버 관리해요
 /skills       skill 목록을 보여줘요
 ```
@@ -159,7 +158,7 @@ type SkillIndex interface {
 
 - 초기 prompt에는 name/description/path만 넣어요.
 - 선택된 skill만 전체 `SKILL.md`를 읽어요.
-- scripts 실행은 permission engine을 거쳐야해요.
+- scripts 실행은 별도 권한 프롬프트 없이 YOLO 실행하되 checkpoint/로그를 남겨야해요.
 - skill references는 필요할 때만 read tool로 가져와야해요.
 
 ## MCP client

@@ -265,8 +265,8 @@ kkode compact <id>
 아직 남은 것은 아래예요.
 
 - tokenizer 기반 auto compaction이 아니라 turn count 기반 extractive summary만 있어요.
-- background job, interrupt/cancel, cost budget은 아직 없어요.
-- checkpoint payload 저장 interface만 있고 파일 snapshot/undo는 `suggest/02` 범위로 남겨뒀어요.
+- background job과 cancel/retry는 gateway에 있고, interrupt queue와 cost budget은 아직 없어요.
+- session checkpoint payload와 file mutation checkpoint/restore는 있고, conversation rewind UX는 아직 없어요.
 - subagent orchestration은 아직 없어요.
 
 ## 참고 소스

@@ -65,14 +65,14 @@
 
 ### 작업
 
-- file edit tool 전후 snapshot을 저장해요.
-- checkpoint list/restore를 구현해요.
+- file edit tool 실행 전 snapshot 저장은 구현됐고 유지해요.
+- file checkpoint restore tool/API는 구현됐고, list/cleanup/retention을 보강해요.
 - `kkode undo`, `kkode redo`, `kkode rewind`를 추가해요.
 - bash command 변경은 추적 한계를 명확히 표시해요.
 
 ### 완료 기준
 
-- write/edit/apply_patch로 만든 변경을 undo할 수 있어요.
+- write/edit/apply_patch/delete/move로 만든 변경은 checkpoint id로 restore할 수 있어요.
 - conversation-only rewind와 code restore를 분리해요.
 - checkpoint가 session resume 뒤에도 남아 있어요.
 
@@ -84,7 +84,7 @@
 
 - AGENTS.md, CLAUDE.md, KKODE.md loader를 만들어요.
 - `.kkode/rules/*.md` path-specific rule을 구현해요.
-- `/init`, `/plan`, `/build`, `/compact`, `/permissions` command를 추가해요.
+- `/init`, `/plan`, `/build`, `/compact` command를 추가해요.
 - `skills/` package와 `SKILL.md` progressive disclosure를 구현해요.
 
 ### 완료 기준
@@ -211,7 +211,7 @@ kkode/
 
 1. `session: add JSON-backed session store and resume support`
 2. `tools: keep YOLO execution bounded and observable`
-3. `checkpoint: snapshot file edits and implement undo`
+3. `checkpoint: add undo/redo UX on top of file restore checkpoints`
 4. `workspace: maintain grep/glob/read-range/apply-patch/delete/move tools`
 5. `context: load AGENTS.md/CLAUDE.md/KKODE.md into requests`
 6. `mcp: implement stdio client and tool registry adapter`
