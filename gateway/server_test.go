@@ -134,6 +134,8 @@ func TestGatewayMethodNotAllowedIncludesAllowHeader(t *testing.T) {
 		{name: "health", method: http.MethodPost, path: "/healthz", allow: "GET"},
 		{name: "sessions collection", method: http.MethodPatch, path: "/api/v1/sessions", allow: "GET, POST"},
 		{name: "files content", method: http.MethodDelete, path: "/api/v1/files/content", allow: "GET, PUT"},
+		{name: "files delete", method: http.MethodGet, path: "/api/v1/files/delete", allow: "POST"},
+		{name: "files move", method: http.MethodGet, path: "/api/v1/files/move", allow: "POST"},
 		{name: "tools collection", method: http.MethodPost, path: "/api/v1/tools", allow: "GET"},
 		{name: "tool call", method: http.MethodGet, path: "/api/v1/tools/call", allow: "POST"},
 		{name: "prompt render", method: http.MethodGet, path: "/api/v1/prompts/default/render", allow: "POST"},
@@ -4301,7 +4303,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
+	if !hasTool(listed.Tools, "file_write") || !hasTool(listed.Tools, "file_delete") || !hasTool(listed.Tools, "file_move") || !hasTool(listed.Tools, "web_fetch") || !hasTool(listed.Tools, "shell_run") {
 		t.Fatalf("표준 tool 목록이 부족해요: %+v", listed.Tools)
 	}
 	if listed.TotalTools != len(listed.Tools) || listed.Limit != len(listed.Tools) || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
@@ -4320,7 +4322,7 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if findTool(listed.Tools, "file_write").Category != "file" || findTool(listed.Tools, "file_write").Effects[0] != "write" || findTool(listed.Tools, "shell_run").Effects[0] != "execute" || findTool(listed.Tools, "web_fetch").OutputFormat != "json" {
 		t.Fatalf("tool별 category/effects/output_format discovery가 필요해요: %+v", listed.Tools)
 	}
-	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
+	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_delete").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_move").ExampleArguments["source"] == "" || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
 		t.Fatalf("adapter form 생성을 위한 tool 예제가 필요해요: %+v", listed.Tools)
 	}
 
@@ -4454,6 +4456,48 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	}
 	if string(data) != "hello" {
 		t.Fatalf("file_write가 실행되지 않았어요: %q", data)
+	}
+
+	body = `{"project_root":"` + root + `","tool":"file_move","arguments":{"source":"notes/todo.md","destination":"notes/moved.md"},"call_id":"move_1"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("file_move status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	called = ToolCallResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.CallID != "move_1" || called.Tool != "file_move" || called.Error != "" {
+		t.Fatalf("file_move tool call 응답이 이상해요: %+v", called)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "notes", "moved.md"))
+	if err != nil || string(data) != "hello" {
+		t.Fatalf("file_move가 실행되지 않았어요: data=%q err=%v", data, err)
+	}
+
+	body = `{"project_root":"` + root + `","tool":"file_delete","arguments":{"path":"notes/moved.md"},"call_id":"delete_1"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("file_delete status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	called = ToolCallResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &called); err != nil {
+		t.Fatal(err)
+	}
+	if called.CallID != "delete_1" || called.Tool != "file_delete" || called.Error != "" {
+		t.Fatalf("file_delete tool call 응답이 이상해요: %+v", called)
+	}
+	if _, err := os.Stat(filepath.Join(root, "notes", "moved.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("file_delete가 실행되지 않았어요: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes", "todo.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
 	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md"},"max_output_bytes":2}`
