@@ -202,6 +202,7 @@ type RunDTO struct {
 	StartedAt     time.Time         `json:"started_at,omitempty"`
 	EndedAt       time.Time         `json:"ended_at,omitempty"`
 	Error         string            `json:"error,omitempty"`
+	Usage         *UsageDTO         `json:"usage,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 }
 

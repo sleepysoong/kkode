@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/sleepysoong/kkode/llm"
 )
 
 // Run은 gateway background 작업 상태를 SQLite에 영속화하는 레코드예요.
@@ -30,6 +32,7 @@ type Run struct {
 	StartedAt     time.Time         `json:"started_at,omitempty"`
 	EndedAt       time.Time         `json:"ended_at,omitempty"`
 	Error         string            `json:"error,omitempty"`
+	Usage         llm.Usage         `json:"usage,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 	UpdatedAt     time.Time         `json:"updated_at"`

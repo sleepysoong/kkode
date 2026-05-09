@@ -734,11 +734,18 @@ func redactRunEventSnapshot(run RunDTO) RunDTO {
 }
 
 func sessionRunFromDTO(run RunDTO) session.Run {
-	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MaxOutputTokens: run.MaxOutputTokens, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MaxOutputTokens: run.MaxOutputTokens, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Usage: usageFromDTO(run.Usage), Metadata: cloneMap(run.Metadata)}
 }
 
 func runDTOFromSession(run session.Run) *RunDTO {
-	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MaxOutputTokens: run.MaxOutputTokens, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MaxOutputTokens: run.MaxOutputTokens, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Usage: toUsageDTO(run.Usage), Metadata: cloneMap(run.Metadata)}
+}
+
+func usageFromDTO(usage *UsageDTO) llm.Usage {
+	if usage == nil {
+		return llm.Usage{}
+	}
+	return llm.Usage{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens, ReasoningTokens: usage.ReasoningTokens}
 }
 
 func (m *AsyncRunManager) timestamp() time.Time {
@@ -765,6 +772,10 @@ func cloneRun(run *RunDTO) *RunDTO {
 	out.EnabledTools = cloneStringSlice(run.EnabledTools)
 	out.DisabledTools = cloneStringSlice(run.DisabledTools)
 	out.ContextBlocks = cloneStringSlice(run.ContextBlocks)
+	if run.Usage != nil {
+		usage := *run.Usage
+		out.Usage = &usage
+	}
 	return &out
 }
 

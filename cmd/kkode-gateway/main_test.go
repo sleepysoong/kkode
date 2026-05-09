@@ -579,8 +579,8 @@ func TestSyncRunStarterPassesRunMetadataToProviderRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.Metadata["trace_id"] != "trace_run" || run.MaxOutputTokens != 77 {
-		t.Fatalf("run metadata도 보존해야 해요: %+v", run.Metadata)
+	if run.Metadata["trace_id"] != "trace_run" || run.MaxOutputTokens != 77 || run.Usage == nil || run.Usage.TotalTokens != 12 {
+		t.Fatalf("run metadata/usage도 보존해야 해요: metadata=%+v usage=%+v", run.Metadata, run.Usage)
 	}
 	select {
 	case got := <-requests:
@@ -611,7 +611,9 @@ func (p captureMetadataProvider) Generate(ctx context.Context, req llm.Request) 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return llm.TextResponse("capture-meta", req.Model, "ok"), nil
+	resp := llm.TextResponse("capture-meta", req.Model, "ok")
+	resp.Usage = llm.Usage{InputTokens: 8, OutputTokens: 4, TotalTokens: 12, ReasoningTokens: 1}
+	return resp, nil
 }
 
 func TestSyncProviderTesterPreviewsWithoutSession(t *testing.T) {

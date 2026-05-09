@@ -292,6 +292,9 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, WorkingDirectory: req.WorkingDirectory, MaxOutputTokens: req.MaxOutputTokens, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
+			if result.Turn.Response != nil {
+				run.Usage = usageDTO(result.Turn.Response.Usage)
+			}
 		}
 		run.EventsURL = "/api/v1/runs/" + runID + "/events"
 		if runErr != nil {
@@ -607,10 +610,15 @@ func providerTestResult(resp *llm.Response, maxResultBytes int) *gateway.Provide
 		Status: resp.Status,
 	}
 	setProviderTestResultText(result, resp.Text, maxResultBytes)
-	if resp.Usage != (llm.Usage{}) {
-		result.Usage = &gateway.UsageDTO{InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens, TotalTokens: resp.Usage.TotalTokens, ReasoningTokens: resp.Usage.ReasoningTokens}
-	}
+	result.Usage = usageDTO(resp.Usage)
 	return result
+}
+
+func usageDTO(usage llm.Usage) *gateway.UsageDTO {
+	if usage == (llm.Usage{}) {
+		return nil
+	}
+	return &gateway.UsageDTO{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens, ReasoningTokens: usage.ReasoningTokens}
 }
 
 func setProviderTestResultText(result *gateway.ProviderTestResultDTO, text string, maxBytes int) {

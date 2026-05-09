@@ -5061,6 +5061,8 @@ components:
           format: date-time
         error:
           type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
         metadata:
           type: object
           maxProperties: 64

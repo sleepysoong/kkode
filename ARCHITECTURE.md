@@ -657,7 +657,7 @@ Run preview와 provider test의 `max_preview_bytes`/`max_result_bytes`도 최대
 
 CLI와 gateway run prompt는 공통 `app.MaxAgentPromptBytes` 262144 byte envelope를 써요. gateway는 `/capabilities.limits.max_run_prompt_bytes`로 노출하고, `kkode-agent`는 stdin prompt를 같은 크기 + 1 byte까지만 읽은 뒤 초과를 거부해서 pipe 입력이 unbounded memory read가 되지 않게 해요.
 
-Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provider `llm.Request.MaxOutputTokens`로 전달하며 SQLite run record와 retry 요청에 보존해요. Provider live smoke의 `max_output_tokens`는 최대 8192 token, `timeout_ms`는 최대 300000ms로 제한하고 `/capabilities.limits`에 노출해서 provider debug 호출이 장시간 generation으로 runtime slot을 오래 점유하지 않게 해요.
+Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provider `llm.Request.MaxOutputTokens`로 전달하며 SQLite run record와 retry 요청에 보존해요. 완료된 run은 provider `llm.Response.Usage`를 `runs.usage_json`과 `RunDTO.usage`에 보존해서 run list/detail/event/export 응답만으로 adapter가 token dashboard와 비용 ledger를 만들 수 있어요. Provider live smoke의 `max_output_tokens`는 최대 8192 token, `timeout_ms`는 최대 300000ms로 제한하고 `/capabilities.limits`에 노출해서 provider debug 호출이 장시간 generation으로 runtime slot을 오래 점유하지 않게 해요.
 
 파일 content preview의 `max_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한하고, `workspace.ReadFileRange`는 `max_bytes` 생략 시에도 최대 8388608 byte까지만 읽으며 더 큰 명시값은 거부하고 UTF-8 안전 경계에서 잘라요.
 

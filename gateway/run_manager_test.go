@@ -342,7 +342,7 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager := NewAsyncRunManagerWithStore(func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
-		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", TurnID: "turn_1"}, nil
+		return &RunDTO{ID: req.RunID, SessionID: req.SessionID, Status: "completed", TurnID: "turn_1", Usage: &UsageDTO{InputTokens: 9, OutputTokens: 4, TotalTokens: 13}}, nil
 	}, store)
 	run, err := manager.Start(ctx, RunStartRequest{SessionID: sess.ID, Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", WorkingDirectory: "services/api", MaxOutputTokens: 256, MCPServers: []string{"mcp_1"}, Skills: []string{"skill_1"}, Subagents: []string{"agent_1"}, EnabledTools: []string{"file_read"}, DisabledTools: []string{"shell_run"}, ContextBlocks: []string{"adapter token=ghp_123456789012345678901234567890123456 context"}})
 	if err != nil {
@@ -350,7 +350,7 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	}
 	waitForRunStatus(t, manager, run.ID, "completed")
 	loaded := waitForPersistedRunStatus(t, store, run.ID, "completed")
-	if loaded.TurnID != "turn_1" || loaded.Provider != "copilot" || loaded.Model != "gpt-5-mini" || loaded.WorkingDirectory != "services/api" || loaded.MaxOutputTokens != 256 || len(loaded.MCPServers) != 1 || loaded.MCPServers[0] != "mcp_1" || len(loaded.Skills) != 1 || loaded.Skills[0] != "skill_1" || len(loaded.Subagents) != 1 || loaded.Subagents[0] != "agent_1" || len(loaded.EnabledTools) != 1 || loaded.EnabledTools[0] != "file_read" || len(loaded.DisabledTools) != 1 || loaded.DisabledTools[0] != "shell_run" || len(loaded.ContextBlocks) != 1 || strings.Contains(loaded.ContextBlocks[0], "ghp_") || !strings.Contains(loaded.ContextBlocks[0], "[REDACTED]") {
+	if loaded.TurnID != "turn_1" || loaded.Provider != "copilot" || loaded.Model != "gpt-5-mini" || loaded.WorkingDirectory != "services/api" || loaded.MaxOutputTokens != 256 || loaded.Usage.TotalTokens != 13 || len(loaded.MCPServers) != 1 || loaded.MCPServers[0] != "mcp_1" || len(loaded.Skills) != 1 || loaded.Skills[0] != "skill_1" || len(loaded.Subagents) != 1 || loaded.Subagents[0] != "agent_1" || len(loaded.EnabledTools) != 1 || loaded.EnabledTools[0] != "file_read" || len(loaded.DisabledTools) != 1 || loaded.DisabledTools[0] != "shell_run" || len(loaded.ContextBlocks) != 1 || strings.Contains(loaded.ContextBlocks[0], "ghp_") || !strings.Contains(loaded.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("persisted run이 이상해요: %+v", loaded)
 	}
 	restarted := NewAsyncRunManagerWithStore(nil, store)
@@ -358,7 +358,7 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != "completed" || got.TurnID != "turn_1" || got.Provider != "copilot" || got.Model != "gpt-5-mini" || got.WorkingDirectory != "services/api" || got.MaxOutputTokens != 256 || len(got.MCPServers) != 1 || got.MCPServers[0] != "mcp_1" || len(got.EnabledTools) != 1 || got.EnabledTools[0] != "file_read" || len(got.DisabledTools) != 1 || got.DisabledTools[0] != "shell_run" || len(got.ContextBlocks) != 1 || strings.Contains(got.ContextBlocks[0], "ghp_") || !strings.Contains(got.ContextBlocks[0], "[REDACTED]") {
+	if got.Status != "completed" || got.TurnID != "turn_1" || got.Provider != "copilot" || got.Model != "gpt-5-mini" || got.WorkingDirectory != "services/api" || got.MaxOutputTokens != 256 || got.Usage == nil || got.Usage.TotalTokens != 13 || len(got.MCPServers) != 1 || got.MCPServers[0] != "mcp_1" || len(got.EnabledTools) != 1 || got.EnabledTools[0] != "file_read" || len(got.DisabledTools) != 1 || got.DisabledTools[0] != "shell_run" || len(got.ContextBlocks) != 1 || strings.Contains(got.ContextBlocks[0], "ghp_") || !strings.Contains(got.ContextBlocks[0], "[REDACTED]") {
 		t.Fatalf("restart 후 run 조회가 이상해요: %+v", got)
 	}
 }
