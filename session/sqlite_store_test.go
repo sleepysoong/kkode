@@ -114,7 +114,10 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}}); err != nil {
+	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveRun(ctx, Run{ID: "run_stats_openai", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "openai", Model: "gpt-5-mini", Usage: llm.Usage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(ctx, Checkpoint{ID: "cp_stats", SessionID: sess.ID, TurnID: turn.ID}); err != nil {
@@ -133,11 +136,14 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.Artifacts != 1 {
 		t.Fatalf("기본 stats가 이상해요: %+v", stats)
 	}
-	if stats.Runs["completed"] != 1 || stats.Resources[string(ResourceSkill)] != 1 {
+	if stats.Runs["completed"] != 2 || stats.Resources[string(ResourceSkill)] != 1 {
 		t.Fatalf("grouped stats가 이상해요: %+v", stats)
 	}
-	if stats.RunUsage.InputTokens != 11 || stats.RunUsage.OutputTokens != 7 || stats.RunUsage.TotalTokens != 18 || stats.RunUsage.ReasoningTokens != 3 {
+	if stats.RunUsage.InputTokens != 16 || stats.RunUsage.OutputTokens != 9 || stats.RunUsage.TotalTokens != 25 || stats.RunUsage.ReasoningTokens != 3 {
 		t.Fatalf("run usage stats가 이상해요: %+v", stats.RunUsage)
+	}
+	if stats.RunUsageByProvider["copilot"].TotalTokens != 18 || stats.RunUsageByProvider["openai"].TotalTokens != 7 || stats.RunUsageByModel["gpt-5-mini"].TotalTokens != 25 {
+		t.Fatalf("grouped run usage stats가 이상해요: provider=%+v model=%+v", stats.RunUsageByProvider, stats.RunUsageByModel)
 	}
 }
 

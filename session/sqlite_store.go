@@ -544,7 +544,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{Runs: map[string]int{}, Resources: map[string]int{}}
+	stats := StoreStats{Runs: map[string]int{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -573,6 +573,22 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.TotalTokens') AS INTEGER)), 0),
 		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.ReasoningTokens') AS INTEGER)), 0)
 		FROM runs`).Scan(&stats.RunUsage.InputTokens, &stats.RunUsage.OutputTokens, &stats.RunUsage.TotalTokens, &stats.RunUsage.ReasoningTokens); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedUsage(ctx, s.db, `SELECT COALESCE(NULLIF(provider, ''), 'unknown'),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.InputTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.OutputTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.TotalTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.ReasoningTokens') AS INTEGER)), 0)
+		FROM runs GROUP BY COALESCE(NULLIF(provider, ''), 'unknown')`, stats.RunUsageByProvider); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedUsage(ctx, s.db, `SELECT COALESCE(NULLIF(model, ''), 'unknown'),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.InputTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.OutputTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.TotalTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.ReasoningTokens') AS INTEGER)), 0)
+		FROM runs GROUP BY COALESCE(NULLIF(model, ''), 'unknown')`, stats.RunUsageByModel); err != nil {
 		return stats, err
 	}
 	return stats, nil
@@ -1729,6 +1745,23 @@ func scanGroupedCounts(ctx context.Context, db *sql.DB, query string, out map[st
 			return err
 		}
 		out[key] = count
+	}
+	return rows.Err()
+}
+
+func scanGroupedUsage(ctx context.Context, db *sql.DB, query string, out map[string]llm.Usage) error {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var usage llm.Usage
+		if err := rows.Scan(&key, &usage.InputTokens, &usage.OutputTokens, &usage.TotalTokens, &usage.ReasoningTokens); err != nil {
+			return err
+		}
+		out[key] = usage
 	}
 	return rows.Err()
 }
