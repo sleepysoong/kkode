@@ -23,6 +23,8 @@ type GitStatusResponse struct {
 	Entries          []GitStatusEntryDTO `json:"entries"`
 	TotalEntries     int                 `json:"total_entries,omitempty"`
 	Limit            int                 `json:"limit,omitempty"`
+	Offset           int                 `json:"offset,omitempty"`
+	NextOffset       int                 `json:"next_offset,omitempty"`
 	EntriesTruncated bool                `json:"entries_truncated,omitempty"`
 	OutputTruncated  bool                `json:"output_truncated,omitempty"`
 }
@@ -83,12 +85,16 @@ func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	offset, ok := queryOffsetParam(w, r, "offset", "invalid_git_status")
+	if !ok {
+		return
+	}
 	out, outputTruncated, err := runGitCommand(r.Context(), root, []string{"status", "--short", "--branch"}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_status_failed", err.Error())
 		return
 	}
-	writeJSON(w, limitGitStatus(parseGitStatus(root, out), limit, outputTruncated))
+	writeJSON(w, limitGitStatus(parseGitStatus(root, out), limit, offset, outputTruncated))
 }
 
 func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
@@ -162,17 +168,22 @@ func parseGitStatus(root string, out string) GitStatusResponse {
 	return resp
 }
 
-func limitGitStatus(resp GitStatusResponse, limit int, outputTruncated bool) GitStatusResponse {
+func limitGitStatus(resp GitStatusResponse, limit int, offset int, outputTruncated bool) GitStatusResponse {
 	resp.TotalEntries = len(resp.Entries)
 	resp.Limit = limit
+	resp.Offset = offset
 	resp.OutputTruncated = outputTruncated
-	if limit > 0 && len(resp.Entries) > limit {
+	if offset >= len(resp.Entries) {
+		resp.Entries = nil
+	} else if offset > 0 {
+		resp.Entries = resp.Entries[offset:]
+	}
+	pageTruncated := len(resp.Entries) > limit
+	if pageTruncated {
 		resp.Entries = resp.Entries[:limit]
-		resp.EntriesTruncated = true
 	}
-	if outputTruncated {
-		resp.EntriesTruncated = true
-	}
+	resp.NextOffset = nextOffset(offset, len(resp.Entries), pageTruncated)
+	resp.EntriesTruncated = pageTruncated || outputTruncated
 	return resp
 }
 

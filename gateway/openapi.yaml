@@ -550,6 +550,17 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 500
+            maximum: 5000
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: git status 결과예요.
@@ -3519,9 +3530,15 @@ components:
         limit:
           type: integer
           description: 이번 응답에 적용된 entry 제한이에요.
+        offset:
+          type: integer
+          description: 이번 응답에 적용된 entry 시작 offset이에요.
+        next_offset:
+          type: integer
+          description: 다음 page가 있으면 다음 offset이에요.
         entries_truncated:
           type: boolean
-          description: limit 또는 git 출력 byte 제한 때문에 entries가 잘렸는지 알려줘요.
+          description: limit/offset page 또는 git 출력 byte 제한 때문에 entries가 잘렸는지 알려줘요.
         output_truncated:
           type: boolean
           description: git status 원시 출력이 gateway byte 제한에 걸렸는지 알려줘요.

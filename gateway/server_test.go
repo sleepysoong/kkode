@@ -4345,15 +4345,30 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
-	if len(status.Entries) != 1 || status.TotalEntries < 2 || status.Limit != 1 || !status.EntriesTruncated {
+	if len(status.Entries) != 1 || status.TotalEntries < 2 || status.Limit != 1 || status.Offset != 0 || status.NextOffset != 1 || !status.EntriesTruncated {
 		t.Fatalf("git status 제한 metadata가 이상해요: %+v", status)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc"} {
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/status?project_root="+url.QueryEscape(root)+"&limit=1&offset=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("offset status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	status = GitStatusResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Entries) != 1 || status.TotalEntries < 2 || status.Limit != 1 || status.Offset != 1 || status.NextOffset != 0 || status.EntriesTruncated {
+		t.Fatalf("git status offset metadata가 이상해요: %+v", status)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/git/status?project_root="+url.QueryEscape(root)+"&"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 git status limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 git status query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 
