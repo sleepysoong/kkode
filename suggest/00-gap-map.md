@@ -11,7 +11,7 @@
 - `llm`에 provider-neutral request/response/tool/type이 있어요.
 - `providers/openai`, `providers/copilot`, `providers/codexcli`, `providers/omniroute` adapter가 있어요.
 - `agent.Agent`가 provider + workspace tools + guardrail + transcript + trace를 묶어요.
-- `workspace`는 read/write/replace/list/search/run_command를 제공해요.
+- `workspace`는 read/write/replace/list/search/run_command/apply_patch/delete/move를 제공해요.
 - `cmd/kkode-agent`는 provider를 골라 단발성 실행을 해요.
 
 이것은 “agent engine prototype”에는 충분하지만, “CLI/TUI 제품”으로는 아직 P0 기능이 많이 비어 있어요.
@@ -30,7 +30,7 @@
 | 영역 | 현재 kkode | opencode/Codex/Claude Code 수준 | 부족도 | 제안 파일 |
 |---|---|---|---:|---|
 | Agent loop/session | SQLite session resume/fork, todo, compaction, background run store, run SSE | interrupt queue, durable event replay stream, checkpoint rewind, cost budget | P0 | `01-agent-loop-session-state.md` |
-| Tool surface | `file_*`, `shell_run`, `web_fetch`, grep/glob/range read/apply_patch, direct tools API, Go symbol API | question/web search/custom MCP tool execution, richer LSP operations | P0 | `02-tools-sandbox-permissions.md` |
+| Tool surface | `file_*`, `shell_run`, `web_fetch`, grep/glob/range read/apply_patch/delete/move, direct tools API, Go symbol API | question/web search/custom MCP tool execution, richer LSP operations | P0 | `02-tools-sandbox-permissions.md` |
 | Permission/sandbox | 사용자 지시대로 권한 엔진 없음, YOLO 즉시 실행 | 안전 제품은 deny/ask/allow가 있지만 kkode에서는 의도적으로 제외해요 | N/A | `02-tools-sandbox-permissions.md` |
 | Checkpoint/undo | SQLite checkpoint 저장 타입과 compaction은 있음 | `/undo`, `/redo`, rewind, code vs conversation restore | P0 | `02-tools-sandbox-permissions.md` |
 | Project instructions | `prompts/*` 템플릿, system/compaction/todo prompt 분리 | AGENTS.md/CLAUDE.md/rules auto-load, hierarchical scopes | P0 | `03-context-skills-mcp.md` |
@@ -102,15 +102,12 @@ type PermissionEngine interface {
 }
 ```
 
-### 3. `apply_patch`, checkpoint, undo가 없으면 실사용이 힘들어요
+### 3. checkpoint, undo가 없으면 실사용이 힘들어요
 
-현재 `workspace_write_file`은 파일 전체를 덮고, `replace`는 첫 match만 바꿔요. 대규모 변경이나 rename/delete에는 부족해요. OpenCode는 `apply_patch`를 built-in tool로 두고 edit/write/apply_patch를 file modification permission으로 묶어요. Claude Code는 file editing tool 변경을 checkpoint로 추적하고 rewind에서 코드/대화 복구를 분리해요.
+`workspace_apply_patch`, `file_delete`, `file_move`, 전용 files API delete/move/patch는 구현됐어요. 그래도 Claude Code처럼 file editing tool 변경을 checkpoint로 추적하고 rewind에서 코드/대화 복구를 분리하는 흐름은 아직 부족해요.
 
-따라서 다음이 필요해요.
+남은 것은 다음이에요.
 
-- `workspace_apply_patch`
-- `workspace_delete_file`
-- `workspace_move_file`
 - edit operation log
 - checkpoint store
 - `/undo`, `/redo`, `/rewind` command

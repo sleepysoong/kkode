@@ -702,6 +702,13 @@ _ = text
 matches, err := ws.Grep("TODO", workspace.GrepOptions{PathGlob: "**/*.go"})
 _ = matches
 
+if err := ws.MovePath("notes/draft.md", "notes/final.md", false); err != nil {
+    return err
+}
+if err := ws.DeletePath("notes/old.md", false); err != nil {
+    return err
+}
+
 result, err := ws.RunDetailed(ctx, "go", []string{"test", "./..."}, workspace.CommandOptions{})
 _ = result
 ```
