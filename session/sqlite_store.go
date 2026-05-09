@@ -544,7 +544,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{Runs: map[string]int{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
+	stats := StoreStats{Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -569,6 +569,12 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		return stats, err
 	}
 	stats.RunDuration = runDuration
+	if err := loadGroupedRunDurationStats(ctx, s.db, `COALESCE(NULLIF(provider, ''), 'unknown')`, stats.RunDurationByProvider); err != nil {
+		return stats, err
+	}
+	if err := loadGroupedRunDurationStats(ctx, s.db, `COALESCE(NULLIF(model, ''), 'unknown')`, stats.RunDurationByModel); err != nil {
+		return stats, err
+	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM resources GROUP BY kind`, stats.Resources); err != nil {
 		return stats, err
 	}
@@ -1802,6 +1808,35 @@ func loadRunDurationStats(ctx context.Context, db *sql.DB) (RunDurationStats, er
 		stats.AvgMS = stats.SumMS / int64(stats.Count)
 	}
 	return stats, nil
+}
+
+func loadGroupedRunDurationStats(ctx context.Context, db *sql.DB, groupExpr string, out map[string]RunDurationStats) error {
+	rows, err := db.QueryContext(ctx, `SELECT `+groupExpr+`, started_at, ended_at FROM runs WHERE started_at <> '' AND ended_at <> ''`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key, startedRaw, endedRaw string
+		if err := rows.Scan(&key, &startedRaw, &endedRaw); err != nil {
+			return err
+		}
+		started := parseOptionalTime(startedRaw)
+		ended := parseOptionalTime(endedRaw)
+		if started.IsZero() || ended.IsZero() || ended.Before(started) {
+			continue
+		}
+		stats := out[key]
+		durationMS := ended.Sub(started).Milliseconds()
+		stats.Count++
+		stats.SumMS += durationMS
+		if durationMS > stats.MaxMS {
+			stats.MaxMS = durationMS
+		}
+		stats.AvgMS = stats.SumMS / int64(stats.Count)
+		out[key] = stats
+	}
+	return rows.Err()
 }
 
 func normalizeSession(sess *Session) {

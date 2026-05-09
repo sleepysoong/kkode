@@ -9,20 +9,22 @@ import (
 
 // StatsResponse는 외부 dashboard adapter가 gateway 저장소 상태를 한 번에 그릴 때 쓰는 응답이에요.
 type StatsResponse struct {
-	Sessions           int                 `json:"sessions"`
-	Turns              int                 `json:"turns"`
-	Events             int                 `json:"events"`
-	Todos              int                 `json:"todos"`
-	Checkpoints        int                 `json:"checkpoints"`
-	Artifacts          int                 `json:"artifacts"`
-	TotalRuns          int                 `json:"total_runs"`
-	Runs               map[string]int      `json:"runs"`
-	RunDuration        RunDurationStatsDTO `json:"run_duration"`
-	RunUsage           UsageDTO            `json:"run_usage"`
-	RunUsageByProvider map[string]UsageDTO `json:"run_usage_by_provider"`
-	RunUsageByModel    map[string]UsageDTO `json:"run_usage_by_model"`
-	TotalResources     int                 `json:"total_resources"`
-	Resources          map[string]int      `json:"resources"`
+	Sessions              int                            `json:"sessions"`
+	Turns                 int                            `json:"turns"`
+	Events                int                            `json:"events"`
+	Todos                 int                            `json:"todos"`
+	Checkpoints           int                            `json:"checkpoints"`
+	Artifacts             int                            `json:"artifacts"`
+	TotalRuns             int                            `json:"total_runs"`
+	Runs                  map[string]int                 `json:"runs"`
+	RunDuration           RunDurationStatsDTO            `json:"run_duration"`
+	RunDurationByProvider map[string]RunDurationStatsDTO `json:"run_duration_by_provider"`
+	RunDurationByModel    map[string]RunDurationStatsDTO `json:"run_duration_by_model"`
+	RunUsage              UsageDTO                       `json:"run_usage"`
+	RunUsageByProvider    map[string]UsageDTO            `json:"run_usage_by_provider"`
+	RunUsageByModel       map[string]UsageDTO            `json:"run_usage_by_model"`
+	TotalResources        int                            `json:"total_resources"`
+	Resources             map[string]int                 `json:"resources"`
 }
 
 // RunDurationStatsDTO는 완료된 run timestamp에서 계산한 latency aggregate예요.
@@ -53,25 +55,38 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, parts []str
 
 func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 	return StatsResponse{
-		Sessions:           stats.Sessions,
-		Turns:              stats.Turns,
-		Events:             stats.Events,
-		Todos:              stats.Todos,
-		Checkpoints:        stats.Checkpoints,
-		Artifacts:          stats.Artifacts,
-		TotalRuns:          sumIntMap(stats.Runs),
-		Runs:               cloneIntMap(stats.Runs),
-		RunDuration:        runDurationStatsDTOFromSession(stats.RunDuration),
-		RunUsage:           usageDTOFromLLM(stats.RunUsage),
-		RunUsageByProvider: usageDTOMapFromLLM(stats.RunUsageByProvider),
-		RunUsageByModel:    usageDTOMapFromLLM(stats.RunUsageByModel),
-		TotalResources:     sumIntMap(stats.Resources),
-		Resources:          cloneIntMap(stats.Resources),
+		Sessions:              stats.Sessions,
+		Turns:                 stats.Turns,
+		Events:                stats.Events,
+		Todos:                 stats.Todos,
+		Checkpoints:           stats.Checkpoints,
+		Artifacts:             stats.Artifacts,
+		TotalRuns:             sumIntMap(stats.Runs),
+		Runs:                  cloneIntMap(stats.Runs),
+		RunDuration:           runDurationStatsDTOFromSession(stats.RunDuration),
+		RunDurationByProvider: runDurationStatsDTOMapFromSession(stats.RunDurationByProvider),
+		RunDurationByModel:    runDurationStatsDTOMapFromSession(stats.RunDurationByModel),
+		RunUsage:              usageDTOFromLLM(stats.RunUsage),
+		RunUsageByProvider:    usageDTOMapFromLLM(stats.RunUsageByProvider),
+		RunUsageByModel:       usageDTOMapFromLLM(stats.RunUsageByModel),
+		TotalResources:        sumIntMap(stats.Resources),
+		Resources:             cloneIntMap(stats.Resources),
 	}
 }
 
 func runDurationStatsDTOFromSession(stats session.RunDurationStats) RunDurationStatsDTO {
 	return RunDurationStatsDTO{Count: stats.Count, SumMS: stats.SumMS, AvgMS: stats.AvgMS, MaxMS: stats.MaxMS}
+}
+
+func runDurationStatsDTOMapFromSession(in map[string]session.RunDurationStats) map[string]RunDurationStatsDTO {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]RunDurationStatsDTO, len(in))
+	for key, stats := range in {
+		out[key] = runDurationStatsDTOFromSession(stats)
+	}
+	return out
 }
 
 func usageDTOFromLLM(usage llm.Usage) UsageDTO {

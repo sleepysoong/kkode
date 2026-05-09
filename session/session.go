@@ -141,18 +141,20 @@ type TurnEventStore interface {
 
 // StoreStats는 운영 패널에서 한 번에 보여줄 저장소 규모와 상태 카운트예요.
 type StoreStats struct {
-	Sessions           int
-	Turns              int
-	Events             int
-	Todos              int
-	Checkpoints        int
-	Artifacts          int
-	Runs               map[string]int
-	RunDuration        RunDurationStats
-	RunUsage           llm.Usage
-	RunUsageByProvider map[string]llm.Usage
-	RunUsageByModel    map[string]llm.Usage
-	Resources          map[string]int
+	Sessions              int
+	Turns                 int
+	Events                int
+	Todos                 int
+	Checkpoints           int
+	Artifacts             int
+	Runs                  map[string]int
+	RunDuration           RunDurationStats
+	RunDurationByProvider map[string]RunDurationStats
+	RunDurationByModel    map[string]RunDurationStats
+	RunUsage              llm.Usage
+	RunUsageByProvider    map[string]llm.Usage
+	RunUsageByModel       map[string]llm.Usage
+	Resources             map[string]int
 }
 
 // RunDurationStats는 완료된 run timestamp에서 계산한 latency 집계예요.

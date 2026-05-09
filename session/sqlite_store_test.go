@@ -147,6 +147,9 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if stats.RunDuration.Count != 2 || stats.RunDuration.SumMS != 4000 || stats.RunDuration.AvgMS != 2000 || stats.RunDuration.MaxMS != 2500 {
 		t.Fatalf("run duration stats가 이상해요: %+v", stats.RunDuration)
 	}
+	if stats.RunDurationByProvider["copilot"].SumMS != 1500 || stats.RunDurationByProvider["openai"].SumMS != 2500 || stats.RunDurationByModel["gpt-5-mini"].SumMS != 4000 {
+		t.Fatalf("grouped run duration stats가 이상해요: provider=%+v model=%+v", stats.RunDurationByProvider, stats.RunDurationByModel)
+	}
 	if stats.RunUsageByProvider["copilot"].TotalTokens != 18 || stats.RunUsageByProvider["openai"].TotalTokens != 7 || stats.RunUsageByModel["gpt-5-mini"].TotalTokens != 25 {
 		t.Fatalf("grouped run usage stats가 이상해요: provider=%+v model=%+v", stats.RunUsageByProvider, stats.RunUsageByModel)
 	}

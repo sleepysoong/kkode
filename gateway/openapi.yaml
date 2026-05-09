@@ -2984,7 +2984,7 @@ components:
           description: 집계된 run duration 최대 millisecond예요.
     StatsResponse:
       type: object
-      required: [sessions, turns, events, todos, checkpoints, artifacts, total_runs, runs, run_duration, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources]
+      required: [sessions, turns, events, todos, checkpoints, artifacts, total_runs, runs, run_duration, run_duration_by_provider, run_duration_by_model, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources]
       properties:
         sessions:
           type: integer
@@ -3007,6 +3007,14 @@ components:
             type: integer
         run_duration:
           $ref: '#/components/schemas/RunDurationStats'
+        run_duration_by_provider:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/RunDurationStats'
+        run_duration_by_model:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/RunDurationStats'
         run_usage:
           $ref: '#/components/schemas/Usage'
         run_usage_by_provider:
