@@ -547,7 +547,7 @@ func TestGatewayReplaysEventsAsJSONAndSSE(t *testing.T) {
 		t.Fatalf("잘못된 event after_seq는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	for _, query := range []string{"limit=-1", "limit=abc", "stream=maybe"} {
+	for _, query := range []string{"limit=-1", "limit=abc", "stream=maybe", "type=" + strings.Repeat("x", maxSessionEventTypeBytes+1)} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/events?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
@@ -1451,6 +1451,7 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 		{name: "negative limit", query: "limit=-1"},
 		{name: "malformed limit", query: "limit=abc"},
 		{name: "malformed stream", query: "stream=maybe"},
+		{name: "long type", query: "type=" + strings.Repeat("x", maxSessionEventTypeBytes+1)},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?"+tc.query, nil)
 		rec = httptest.NewRecorder()
@@ -3462,6 +3463,7 @@ func TestGatewayRunEventsRejectInvalidAfterSeq(t *testing.T) {
 		{name: "negative limit", query: "limit=-1"},
 		{name: "malformed limit", query: "limit=abc"},
 		{name: "malformed stream", query: "stream=maybe"},
+		{name: "long type", query: "type=" + strings.Repeat("x", maxSessionEventTypeBytes+1)},
 	} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?"+tc.query, nil)
 		rec = httptest.NewRecorder()
@@ -5829,6 +5831,9 @@ func TestGatewayImportPreflightsArtifactsBeforeSavingSession(t *testing.T) {
 		}, want: "event id"},
 		{name: "missing event type", mutate: func(s *session.Session) {
 			s.Events = []session.Event{{ID: "ev_missing_type", SessionID: s.ID}}
+		}, want: "event type"},
+		{name: "oversized event type", mutate: func(s *session.Session) {
+			s.Events = []session.Event{{ID: "ev_huge_type", SessionID: s.ID, Type: strings.Repeat("x", maxSessionEventTypeBytes+1)}}
 		}, want: "event type"},
 		{name: "missing event turn", mutate: func(s *session.Session) {
 			s.Events = []session.Event{{ID: "ev_missing_turn", SessionID: s.ID, TurnID: "turn_missing", Type: "turn.completed"}}

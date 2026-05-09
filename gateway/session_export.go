@@ -19,6 +19,7 @@ const maxSessionLastInputItemsBytes = 1 << 20
 const maxSessionTurnPromptBytes = 32 << 10
 const maxSessionTurnSnapshotBytes = 1 << 20
 const maxSessionEventIDBytes = 128
+const maxSessionEventTypeBytes = 128
 const maxSessionEventPayloadBytes = 1 << 20
 const maxRunIDBytes = 128
 
@@ -698,6 +699,9 @@ func validateImportedSessionEvent(sessionID string, turnIDs map[string]bool, ev 
 	}
 	if ev.Type == "" {
 		return fmt.Errorf("event type이 필요해요")
+	}
+	if len(ev.Type) > maxSessionEventTypeBytes {
+		return fmt.Errorf("event type은 %d byte 이하여야 해요", maxSessionEventTypeBytes)
 	}
 	if len(ev.Payload) > maxSessionEventPayloadBytes {
 		return fmt.Errorf("event payload는 %d byte 이하여야 해요", maxSessionEventPayloadBytes)

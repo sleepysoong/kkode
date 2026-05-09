@@ -343,7 +343,10 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	eventType, ok := queryEventTypeParam(w, r, "invalid_request_events")
+	if !ok {
+		return
+	}
 	stream, ok := queryWantsSSE(w, r, "invalid_request_events")
 	if !ok {
 		return
@@ -1239,7 +1242,10 @@ func (s *Server) getSessionEvents(w http.ResponseWriter, r *http.Request, sessio
 	if !ok {
 		return
 	}
-	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	eventType, ok := queryEventTypeParam(w, r, "invalid_session_events")
+	if !ok {
+		return
+	}
 	stream, ok := queryWantsSSE(w, r, "invalid_session_events")
 	if !ok {
 		return
@@ -1789,7 +1795,10 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 	if !ok {
 		return
 	}
-	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	eventType, ok := queryEventTypeParam(w, r, "invalid_run_events")
+	if !ok {
+		return
+	}
 	stream, ok := queryWantsSSE(w, r, "invalid_run_events")
 	if !ok {
 		return
@@ -2177,6 +2186,15 @@ func queryNonNegativeLimitParam(w http.ResponseWriter, r *http.Request, key stri
 
 func queryAfterSeq(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return queryNonNegativeIntParam(w, r, "after_seq", 0, "invalid_after_seq")
+}
+
+func queryEventTypeParam(w http.ResponseWriter, r *http.Request, code string) (string, bool) {
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
+	if len(eventType) > maxSessionEventTypeBytes {
+		writeError(w, r, http.StatusBadRequest, code, fmt.Sprintf("type은 %d byte 이하여야 해요", maxSessionEventTypeBytes))
+		return "", false
+	}
+	return eventType, true
 }
 
 func queryOffsetParam(w http.ResponseWriter, r *http.Request, key string, code string) (int, bool) {
