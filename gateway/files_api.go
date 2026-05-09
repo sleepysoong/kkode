@@ -17,6 +17,7 @@ const maxProjectRootBytes = 4096
 const maxFileContentBytes = workspace.MaxFileReadBytes
 const maxFilePathBytes = 4096
 const maxFilePatternBytes = 4096
+const maxFileCheckpointIDBytes = 128
 
 type FileEntryDTO struct {
 	Name    string    `json:"name"`
@@ -511,8 +512,8 @@ func (s *Server) restoreFileCheckpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.CheckpointID = strings.TrimSpace(req.CheckpointID)
-	if req.CheckpointID == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", "checkpoint_id가 필요해요")
+	if err := validateFileCheckpointIDText(req.CheckpointID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", err.Error())
 		return
 	}
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
@@ -563,7 +564,12 @@ func (s *Server) getFileCheckpoint(w http.ResponseWriter, r *http.Request, check
 	if !ok {
 		return
 	}
-	cp, err := ws.LoadCheckpoint(strings.TrimSpace(checkpointID))
+	checkpointID = strings.TrimSpace(checkpointID)
+	if err := validateFileCheckpointIDText(checkpointID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint", err.Error())
+		return
+	}
+	cp, err := ws.LoadCheckpoint(checkpointID)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "file_checkpoint_not_found", err.Error())
 		return
@@ -577,6 +583,10 @@ func (s *Server) deleteFileCheckpoint(w http.ResponseWriter, r *http.Request, ch
 		return
 	}
 	checkpointID = strings.TrimSpace(checkpointID)
+	if err := validateFileCheckpointIDText(checkpointID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint", err.Error())
+		return
+	}
 	if err := ws.DeleteCheckpoint(checkpointID); err != nil {
 		writeError(w, r, http.StatusBadRequest, "delete_file_checkpoint_failed", err.Error())
 		return
@@ -793,6 +803,16 @@ func validateFilePathText(label string, value string) error {
 func validateFilePatternText(label string, value string) error {
 	if len(value) > maxFilePatternBytes {
 		return fmt.Errorf("%s는 %d byte 이하여야 해요", label, maxFilePatternBytes)
+	}
+	return nil
+}
+
+func validateFileCheckpointIDText(value string) error {
+	if value == "" {
+		return fmt.Errorf("checkpoint_id가 필요해요")
+	}
+	if len(value) > maxFileCheckpointIDBytes {
+		return fmt.Errorf("checkpoint_id는 %d byte 이하여야 해요", maxFileCheckpointIDBytes)
 	}
 	return nil
 }

@@ -602,12 +602,20 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 			writeMethodNotAllowed(w, r, "provider test는 POST만 지원해요", http.MethodPost)
 			return
 		}
+		if err := validateProviderNameText(parts[1]); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_provider", err.Error())
+			return
+		}
 		s.testProvider(w, r, parts[1])
 		return
 	}
 	if len(parts) == 2 {
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w, r, "provider 상세는 GET만 지원해요", http.MethodGet)
+			return
+		}
+		if err := validateProviderNameText(parts[1]); err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_provider", err.Error())
 			return
 		}
 		provider, ok := findProvider(s.cfg.Providers, parts[1])
@@ -688,6 +696,17 @@ func validateProviderTestRequest(req ProviderTestRequest) error {
 	default:
 		return validateRunMetadata(req.Metadata)
 	}
+}
+
+func validateProviderNameText(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("provider가 필요해요")
+	}
+	if len(value) > maxRunProviderModelBytes {
+		return fmt.Errorf("provider는 %d byte 이하여야 해요", maxRunProviderModelBytes)
+	}
+	return nil
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -822,6 +841,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxFileContentBytes:         maxFileContentBytes,
 		MaxFilePathBytes:            maxFilePathBytes,
 		MaxFilePatternBytes:         maxFilePatternBytes,
+		MaxFileCheckpointIDBytes:    maxFileCheckpointIDBytes,
 		MaxSkillPreviewBytes:        maxSkillPreviewBytes,
 		MaxSubagentPreviewBytes:     maxSubagentPreviewPromptBytes,
 		MaxPromptTemplateNameBytes:  maxPromptTemplateNameBytes,

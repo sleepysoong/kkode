@@ -129,6 +129,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
       responses:
         '200':
           description: provider 상세예요.
@@ -148,6 +149,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
       requestBody:
         required: false
         content:
@@ -509,6 +511,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
         - in: query
           name: project_root
           required: true
@@ -532,6 +535,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
         - in: query
           name: project_root
           required: true
@@ -2721,6 +2725,8 @@ components:
           type: integer
         max_file_pattern_bytes:
           type: integer
+        max_file_checkpoint_id_bytes:
+          type: integer
         max_skill_preview_bytes:
           type: integer
         max_subagent_preview_prompt_bytes:
@@ -3289,6 +3295,7 @@ components:
           description: max_bytes가 있으면 UTF-8 문자 경계를 보존해서 잘린 파일 내용이에요.
         checkpoint_id:
           type: string
+          maxLength: 128
           description: 쓰기 응답이면 변경 전 file checkpoint id예요.
         content_bytes:
           type: integer
@@ -3396,6 +3403,7 @@ components:
           type: boolean
         checkpoint_id:
           type: string
+          maxLength: 128
           description: 삭제 전 file checkpoint id예요.
     FileMoveRequest:
       type: object
@@ -3446,6 +3454,7 @@ components:
           type: string
         checkpoint_id:
           type: string
+          maxLength: 128
     FileRestoreResponse:
       type: object
       required: [project_root, checkpoint_id, restored]
@@ -3454,6 +3463,7 @@ components:
           type: string
         checkpoint_id:
           type: string
+          maxLength: 128
         restored:
           type: boolean
         entries:
@@ -3484,6 +3494,7 @@ components:
       properties:
         id:
           type: string
+          maxLength: 128
         created_at:
           type: string
           format: date-time
@@ -3501,6 +3512,7 @@ components:
           type: string
         checkpoint_id:
           type: string
+          maxLength: 128
         deleted:
           type: boolean
     FileCheckpointPruneRequest:
