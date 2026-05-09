@@ -218,7 +218,6 @@ paths:
             default: 500
             maximum: 5000
         - $ref: '#/components/parameters/Offset'
-        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: file entry 목록이에요.

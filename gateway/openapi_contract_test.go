@@ -204,6 +204,19 @@ func TestOpenAPIPathParametersAreDeclared(t *testing.T) {
 	}
 }
 
+func TestOpenAPIOperationParametersAreUnique(t *testing.T) {
+	parameters := readOpenAPIOperationParameters(t)
+	for op, names := range parameters {
+		seen := map[string]bool{}
+		for _, name := range names {
+			if seen[name] {
+				t.Fatalf("OpenAPI operation %s has duplicate parameter %s", op, name)
+			}
+			seen[name] = true
+		}
+	}
+}
+
 func TestOpenAPIComponentReferencesExist(t *testing.T) {
 	data, err := os.ReadFile("openapi.yaml")
 	if err != nil {
@@ -329,6 +342,10 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "FileGrepMatch", dto: FileGrepMatchDTO{}},
 		{schema: "FilePatchRequest", dto: FilePatchRequest{}},
 		{schema: "FilePatchResponse", dto: FilePatchResponse{}},
+		{schema: "FileDeleteRequest", dto: FileDeleteRequest{}},
+		{schema: "FileDeleteResponse", dto: FileDeleteResponse{}},
+		{schema: "FileMoveRequest", dto: FileMoveRequest{}},
+		{schema: "FileMoveResponse", dto: FileMoveResponse{}},
 		{schema: "FileWriteRequest", dto: FileWriteRequest{}},
 		{schema: "LSPSymbolListResponse", dto: LSPSymbolListResponse{}},
 		{schema: "LSPLocationListResponse", dto: LSPLocationListResponse{}},
@@ -724,6 +741,85 @@ func readOpenAPIPathParameterComponents(t *testing.T, text string) map[string]st
 				out[current] = m[1]
 			}
 		}
+	}
+	return out
+}
+
+func readOpenAPIOperationParameters(t *testing.T) map[string][]string {
+	t.Helper()
+	data, err := os.ReadFile("openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pathRe := regexp.MustCompile(`^  (/[^:]+):$`)
+	methodRe := regexp.MustCompile(`^    (get|post|put|delete|patch|options):$`)
+	refRe := regexp.MustCompile(`\$ref:\s*'?#/components/parameters/([A-Za-z0-9_]+)'?`)
+	inRe := regexp.MustCompile(`^\s*-?\s*in:\s*([A-Za-z0-9_]+)\s*$`)
+	nameRe := regexp.MustCompile(`^\s*name:\s*([A-Za-z0-9_-]+)\s*$`)
+	out := map[string][]string{}
+	currentPath := ""
+	currentOp := ""
+	inParameters := false
+	directIn := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "components:" {
+			break
+		}
+		if m := pathRe.FindStringSubmatch(line); m != nil {
+			currentPath = m[1]
+			currentOp = ""
+			inParameters = false
+			directIn = ""
+			continue
+		}
+		if currentPath == "" {
+			continue
+		}
+		if m := methodRe.FindStringSubmatch(line); m != nil {
+			currentOp = m[1] + " " + currentPath
+			out[currentOp] = nil
+			inParameters = false
+			directIn = ""
+			continue
+		}
+		if currentOp == "" {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "parameters:" {
+			inParameters = true
+			directIn = ""
+			continue
+		}
+		if !inParameters {
+			continue
+		}
+		if strings.HasPrefix(line, "      ") && !strings.HasPrefix(line, "        ") && trimmed != "" && trimmed != "parameters:" {
+			inParameters = false
+			directIn = ""
+			continue
+		}
+		if m := refRe.FindStringSubmatch(line); m != nil {
+			out[currentOp] = append(out[currentOp], "ref:"+m[1])
+			directIn = ""
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") {
+			directIn = ""
+		}
+		if m := inRe.FindStringSubmatch(line); m != nil {
+			directIn = m[1]
+			continue
+		}
+		if directIn != "" {
+			if m := nameRe.FindStringSubmatch(line); m != nil {
+				out[currentOp] = append(out[currentOp], directIn+":"+m[1])
+				directIn = ""
+			}
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("OpenAPI operation parameter를 읽지 못했어요")
 	}
 	return out
 }
