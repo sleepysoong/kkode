@@ -158,6 +158,8 @@ type StoreStats struct {
 	ArtifactBytes         int64
 	ArtifactBytesByKind   map[string]int64
 	Runs                  map[string]int
+	RunsByProvider        map[string]int
+	RunsByModel           map[string]int
 	RunDuration           RunDurationStats
 	RunDurationByProvider map[string]RunDurationStats
 	RunDurationByModel    map[string]RunDurationStats

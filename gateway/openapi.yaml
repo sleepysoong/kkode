@@ -2988,7 +2988,7 @@ components:
           description: nearest-rank 방식으로 계산한 run duration 95 percentile millisecond예요.
     StatsResponse:
       type: object
-      required: [sessions, sessions_by_provider, sessions_by_model, sessions_by_mode, turns, events, events_by_type, run_events, run_events_by_type, todos, todos_by_status, checkpoints, artifacts, artifacts_by_kind, artifact_bytes, artifact_bytes_by_kind, total_runs, runs, run_duration, run_duration_by_provider, run_duration_by_model, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources, resources_by_enabled]
+      required: [sessions, sessions_by_provider, sessions_by_model, sessions_by_mode, turns, events, events_by_type, run_events, run_events_by_type, todos, todos_by_status, checkpoints, artifacts, artifacts_by_kind, artifact_bytes, artifact_bytes_by_kind, total_runs, runs, runs_by_provider, runs_by_model, run_duration, run_duration_by_provider, run_duration_by_model, run_usage, run_usage_by_provider, run_usage_by_model, total_resources, resources, resources_by_enabled]
       properties:
         sessions:
           type: integer
@@ -3055,6 +3055,17 @@ components:
           description: 모든 run 상태 카운트의 합계예요.
         runs:
           type: object
+          description: run status별 row count예요.
+          additionalProperties:
+            type: integer
+        runs_by_provider:
+          type: object
+          description: run provider별 row count예요.
+          additionalProperties:
+            type: integer
+        runs_by_model:
+          type: object
+          description: run model별 row count예요.
           additionalProperties:
             type: integer
         run_duration:

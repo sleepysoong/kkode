@@ -27,6 +27,8 @@ type StatsResponse struct {
 	ArtifactBytesByKind   map[string]int64               `json:"artifact_bytes_by_kind"`
 	TotalRuns             int                            `json:"total_runs"`
 	Runs                  map[string]int                 `json:"runs"`
+	RunsByProvider        map[string]int                 `json:"runs_by_provider"`
+	RunsByModel           map[string]int                 `json:"runs_by_model"`
 	RunDuration           RunDurationStatsDTO            `json:"run_duration"`
 	RunDurationByProvider map[string]RunDurationStatsDTO `json:"run_duration_by_provider"`
 	RunDurationByModel    map[string]RunDurationStatsDTO `json:"run_duration_by_model"`
@@ -85,6 +87,8 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		ArtifactBytesByKind:   cloneInt64Map(stats.ArtifactBytesByKind),
 		TotalRuns:             sumIntMap(stats.Runs),
 		Runs:                  cloneIntMap(stats.Runs),
+		RunsByProvider:        cloneIntMap(stats.RunsByProvider),
+		RunsByModel:           cloneIntMap(stats.RunsByModel),
 		RunDuration:           runDurationStatsDTOFromSession(stats.RunDuration),
 		RunDurationByProvider: runDurationStatsDTOMapFromSession(stats.RunDurationByProvider),
 		RunDurationByModel:    runDurationStatsDTOMapFromSession(stats.RunDurationByModel),

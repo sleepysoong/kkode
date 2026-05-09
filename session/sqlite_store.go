@@ -545,7 +545,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, ArtifactBytesByKind: map[string]int64{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}, ResourcesByEnabled: map[string]int{}}
+	stats := StoreStats{SessionsByProvider: map[string]int{}, SessionsByModel: map[string]int{}, SessionsByMode: map[string]int{}, EventsByType: map[string]int{}, RunEventsByType: map[string]int{}, TodosByStatus: map[string]int{}, ArtifactsByKind: map[string]int{}, ArtifactBytesByKind: map[string]int64{}, Runs: map[string]int{}, RunsByProvider: map[string]int{}, RunsByModel: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}, ResourcesByEnabled: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -564,6 +564,12 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		}
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT status, COUNT(1) FROM runs GROUP BY status`, stats.Runs); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT COALESCE(NULLIF(provider, ''), 'unknown'), COUNT(1) FROM runs GROUP BY COALESCE(NULLIF(provider, ''), 'unknown')`, stats.RunsByProvider); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT COALESCE(NULLIF(model, ''), 'unknown'), COUNT(1) FROM runs GROUP BY COALESCE(NULLIF(model, ''), 'unknown')`, stats.RunsByModel); err != nil {
 		return stats, err
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT provider_name, COUNT(1) FROM sessions GROUP BY provider_name`, stats.SessionsByProvider); err != nil {
