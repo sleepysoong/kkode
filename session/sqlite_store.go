@@ -643,9 +643,25 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, q SessionQuery) ([]Sessi
 	query := `SELECT s.id, s.project_root, s.provider_name, s.model, s.agent_name, s.mode, s.summary, s.updated_at, COUNT(t.id) AS turn_count
 		FROM sessions s LEFT JOIN turns t ON t.session_id = s.id`
 	args := []any{}
+	where := []string{}
 	if q.ProjectRoot != "" {
-		query += ` WHERE s.project_root = ?`
+		where = append(where, `s.project_root = ?`)
 		args = append(args, q.ProjectRoot)
+	}
+	if q.ProviderName != "" {
+		where = append(where, `s.provider_name = ?`)
+		args = append(args, q.ProviderName)
+	}
+	if q.Model != "" {
+		where = append(where, `s.model = ?`)
+		args = append(args, q.Model)
+	}
+	if q.Mode != "" {
+		where = append(where, `s.mode = ?`)
+		args = append(args, string(q.Mode))
+	}
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	query += ` GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?`
 	args = append(args, limit)

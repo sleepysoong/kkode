@@ -1082,7 +1082,16 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projectRoot := strings.TrimSpace(r.URL.Query().Get("project_root"))
-	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: projectRoot, Limit: limit + 1, Offset: offset})
+	provider, model, ok := queryRunProviderModel(w, r, "invalid_session_list")
+	if !ok {
+		return
+	}
+	mode := session.AgentMode(strings.TrimSpace(r.URL.Query().Get("mode")))
+	if mode != "" && !validAgentMode(mode) {
+		writeError(w, r, http.StatusBadRequest, "invalid_session_list", "mode는 build, plan, ask 중 하나여야 해요")
+		return
+	}
+	sessions, err := s.cfg.Store.ListSessions(r.Context(), session.SessionQuery{ProjectRoot: projectRoot, ProviderName: provider, Model: model, Mode: mode, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_sessions_failed", err.Error())
 		return

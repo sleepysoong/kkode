@@ -84,9 +84,12 @@ type Checkpoint struct {
 }
 
 type SessionQuery struct {
-	ProjectRoot string
-	Limit       int
-	Offset      int
+	ProjectRoot  string
+	ProviderName string
+	Model        string
+	Mode         AgentMode
+	Limit        int
+	Offset       int
 }
 
 type CheckpointQuery struct {

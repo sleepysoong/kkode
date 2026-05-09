@@ -397,6 +397,19 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if err := store.CreateSession(context.Background(), extra); err != nil {
 		t.Fatal(err)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?provider=openai&model=gpt-5-mini&mode=build&limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = SessionListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || listed.Sessions[0].ID != extra.ID {
+		t.Fatalf("session provider/model/mode filter가 이상해요: %+v", listed)
+	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?limit=1", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -430,7 +443,9 @@ func TestGatewayCreatesAndListsSessions(t *testing.T) {
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("session offset metadata가 이상해요: %+v", listed)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+	longProvider := strings.Repeat("p", maxRunProviderModelBytes+1)
+	longModel := strings.Repeat("m", maxRunProviderModelBytes+1)
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc", "provider=" + longProvider, "model=" + longModel, "mode=invalid"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)

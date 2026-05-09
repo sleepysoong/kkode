@@ -672,6 +672,24 @@ paths:
           schema:
             type: string
         - in: query
+          name: provider
+          schema:
+            type: string
+            maxLength: 128
+          description: session provider_name 값으로 좁혀요.
+        - in: query
+          name: model
+          schema:
+            type: string
+            maxLength: 128
+          description: session model 값으로 좁혀요.
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [build, plan, ask]
+          description: session mode 값으로 좁혀요.
+        - in: query
           name: limit
           schema:
             type: integer
