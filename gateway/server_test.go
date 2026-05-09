@@ -2984,7 +2984,7 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("resource offset metadata가 이상해요: %+v", listed)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc", "enabled=maybe"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
@@ -2996,6 +2996,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 		}
 		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("resource list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "enabled") && !strings.Contains(rec.Body.String(), "enabled") {
+			t.Fatalf("resource list enabled 오류는 enabled를 설명해야 해요: query=%s body=%s", query, rec.Body.String())
 		}
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?name="+strings.Repeat("x", maxResourceNameBytes+1), nil)

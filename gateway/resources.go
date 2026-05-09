@@ -207,8 +207,11 @@ func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store ses
 		return
 	}
 	var enabled *bool
-	if raw := strings.TrimSpace(r.URL.Query().Get("enabled")); raw != "" {
-		value := raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
+	if strings.TrimSpace(r.URL.Query().Get("enabled")) != "" {
+		value, ok := queryBoolParam(w, r, "enabled", false, "invalid_resource_list")
+		if !ok {
+			return
+		}
 		enabled = &value
 	}
 	query := session.ResourceQuery{Kind: route.Kind, Name: name, Enabled: enabled}
