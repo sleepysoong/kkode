@@ -611,7 +611,7 @@ func toolExampleArguments(name string) map[string]any {
 	case "lsp_symbols":
 		return map[string]any{"query": "Run", "limit": 20}
 	case "lsp_document_symbols":
-		return map[string]any{"path": "gateway/server.go"}
+		return map[string]any{"path": "gateway/server.go", "limit": 100}
 	case "lsp_definitions":
 		return map[string]any{"symbol": "Server", "limit": 20}
 	case "lsp_references":
