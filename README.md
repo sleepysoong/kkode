@@ -193,7 +193,7 @@ erDiagram
 
 ### Agent runtime: `agent/`
 
-- `agent.Agent`가 provider, 표준 tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요. Guardrail은 substring 차단뿐 아니라 `GuardrailPolicy`와 `JSONRequiredFieldsPolicy`로 adapter별 출력 schema/policy 검사를 붙일 수 있어요.
+- `agent.Agent`가 provider, 표준 tool, guardrail, transcript, trace event를 묶어서 실제 coding agent loop를 실행해요. Guardrail은 substring 차단뿐 아니라 `GuardrailPolicy`와 `JSONRequiredFieldsPolicy`로 adapter별 출력 schema/policy 검사를 붙일 수 있고, `OTelObserver`/`GlobalOTelObserver`로 trace event를 OpenTelemetry span으로 내보낼 수 있어요.
 - `session.SQLiteStore`와 `runtime.Runtime`이 session resume/fork, turn/event/todo 저장을 담당해요.
 - OpenAI-compatible Responses tool loop를 기본으로 쓰고, provider별 adapter는 `llm.Provider`만 구현하면 붙일 수 있어요.
 - `cmd/kkode-agent` CLI로 prompt, provider, model, workspace root, session ID를 넘겨 바로 실행할 수 있어요.

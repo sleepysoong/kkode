@@ -412,6 +412,9 @@ type Observer interface {
     OnEvent(ctx context.Context, event TraceEvent)
 }
 
+func OTelObserver(tracer trace.Tracer) Observer
+func GlobalOTelObserver(instrumentationName string) Observer
+
 type TraceEvent struct {
     At      time.Time
     Type    string
@@ -439,7 +442,7 @@ func (a *Agent) Stream(ctx context.Context, prompt string) (llm.EventStream, err
 2. custom tool과 workspace tool을 합쳐요.
 3. `BaseRequest`에 model, instructions, prompt, tools를 얹어요.
 4. `llm.RunToolLoop`로 provider와 tool call을 반복해요.
-5. `ToolRegistry.WithMiddleware`로 감싼 handler가 tool 시작/완료/실패 event를 trace에 남겨요.
+5. `ToolRegistry.WithMiddleware`로 감싼 handler가 tool 시작/완료/실패 event를 trace에 남겨요. 필요하면 `OTelObserver`나 `GlobalOTelObserver`로 같은 event를 OpenTelemetry span으로 내보내요.
 6. 출력 guardrail을 검사해요.
 7. transcript가 있으면 요청/응답/오류를 저장 가능한 구조로 누적해요.
 
