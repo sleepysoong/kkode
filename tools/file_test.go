@@ -25,6 +25,9 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_write", CallID: "1", Arguments: []byte(`{"path":"a.txt","content":"one\ntwo needle\nthree"}`)}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_write", CallID: "1b", Arguments: []byte(`{"path":"b.txt","content":"needle again"}`)}); err != nil {
+		t.Fatal(err)
+	}
 	read, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_read", CallID: "2", Arguments: []byte(`{"path":"a.txt","offset_line":2,"limit_lines":1}`)})
 	if err != nil || read.Output != "two needle" {
 		t.Fatalf("read=%#v err=%v", read, err)
@@ -32,6 +35,17 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	grep, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_grep", CallID: "3", Arguments: []byte(`{"pattern":"needle","path_glob":"*.txt"}`)})
 	if err != nil || !strings.Contains(grep.Output, "needle") {
 		t.Fatalf("grep=%#v err=%v", grep, err)
+	}
+	grep, err = handlers.Execute(ctx, llm.ToolCall{Name: "file_grep", CallID: "3b", Arguments: []byte(`{"pattern":"needle","path_glob":"*.txt","max_matches":1,"offset":1}`)})
+	if err != nil {
+		t.Fatalf("offset grep err=%v", err)
+	}
+	var grepMatches []workspace.SearchMatch
+	if err := json.Unmarshal([]byte(grep.Output), &grepMatches); err != nil {
+		t.Fatalf("offset grep output should be JSON: %v output=%s", err, grep.Output)
+	}
+	if len(grepMatches) != 1 || grepMatches[0].Path != "b.txt" {
+		t.Fatalf("offset grep should return the second match: %+v", grepMatches)
 	}
 	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_apply_patch", CallID: "4", Arguments: []byte(`{"patch_text":"*** Begin Patch\n*** Update File: a.txt\n@@\n one\n-two needle\n+two patched\n three\n*** End Patch\n"}`)}); err != nil {
 		t.Fatal(err)

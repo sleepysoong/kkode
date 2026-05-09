@@ -389,6 +389,13 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	if err != nil || len(matches) != 1 || matches[0].Line != 2 {
 		t.Fatalf("matches=%#v err=%v", matches, err)
 	}
+	if err := w.WriteFile("src/b.txt", "needle two\n"); err != nil {
+		t.Fatal(err)
+	}
+	matches, err = w.Grep("needle", GrepOptions{PathGlob: "src/**", MaxMatches: 1, Offset: 1})
+	if err != nil || len(matches) != 1 || matches[0].Path != "src/b.txt" {
+		t.Fatalf("offset matches=%#v err=%v", matches, err)
+	}
 	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{MaxBytes: -1}); err == nil || !strings.Contains(err.Error(), "max_bytes") {
 		t.Fatalf("negative max_bytes는 거부해야 해요: %v", err)
 	}
@@ -406,6 +413,12 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	}
 	if _, err := w.Grep("needle", GrepOptions{MaxMatches: MaxGrepMatches + 1}); err == nil || !strings.Contains(err.Error(), "max_matches") {
 		t.Fatalf("large max_matches는 거부해야 해요: %v", err)
+	}
+	if _, err := w.Grep("needle", GrepOptions{Offset: -1}); err == nil || !strings.Contains(err.Error(), "offset") {
+		t.Fatalf("negative offset은 거부해야 해요: %v", err)
+	}
+	if _, err := w.Grep("needle", GrepOptions{Offset: MaxGrepMatches}); err == nil || !strings.Contains(err.Error(), "offset") {
+		t.Fatalf("large offset은 거부해야 해요: %v", err)
 	}
 	if err := w.EditFile("src/a.txt", "needle", "patched", -1); err == nil || !strings.Contains(err.Error(), "expected_replacements") {
 		t.Fatalf("negative expected_replacements는 거부해야 해요: %v", err)

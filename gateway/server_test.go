@@ -4520,8 +4520,8 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if findTool(listed.Tools, "file_write").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_delete").ExampleArguments["path"] == "" || findTool(listed.Tools, "file_move").ExampleArguments["source"] == "" || findTool(listed.Tools, "file_restore_checkpoint").ExampleArguments["checkpoint_id"] == "" || findTool(listed.Tools, "file_prune_checkpoints").ExampleArguments["keep_latest"] == nil || findTool(listed.Tools, "web_fetch").ExampleArguments["url"] == "" {
 		t.Fatalf("adapter form 생성을 위한 tool 예제가 필요해요: %+v", listed.Tools)
 	}
-	if findTool(listed.Tools, "file_list").ExampleArguments["limit"] == nil || findTool(listed.Tools, "file_glob").ExampleArguments["limit"] == nil || findTool(listed.Tools, "lsp_document_symbols").ExampleArguments["limit"] == nil {
-		t.Fatalf("bounded list tool 예제에는 limit이 필요해요: %+v", listed.Tools)
+	if findTool(listed.Tools, "file_list").ExampleArguments["limit"] == nil || findTool(listed.Tools, "file_glob").ExampleArguments["limit"] == nil || findTool(listed.Tools, "file_grep").ExampleArguments["offset"] == nil || findTool(listed.Tools, "lsp_document_symbols").ExampleArguments["limit"] == nil {
+		t.Fatalf("bounded list/search tool 예제에는 cursor metadata가 필요해요: %+v", listed.Tools)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools?limit=1&offset=1", nil)

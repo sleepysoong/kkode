@@ -603,7 +603,7 @@ func toolExampleArguments(name string) map[string]any {
 	case "file_glob":
 		return map[string]any{"pattern": "**/*.go", "limit": 100}
 	case "file_grep":
-		return map[string]any{"pattern": "TODO", "path_glob": "**/*.go", "max_matches": 20}
+		return map[string]any{"pattern": "TODO", "path_glob": "**/*.go", "max_matches": 20, "offset": 0}
 	case "shell_run":
 		return map[string]any{"command": "go", "args": []any{"test", "./..."}, "timeout_ms": 120000}
 	case "web_fetch":

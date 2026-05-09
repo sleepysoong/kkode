@@ -24,7 +24,7 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 		{Kind: llm.ToolFunction, Name: "file_prune_checkpoints", Description: "최신 workspace file checkpoint만 남기고 오래된 snapshot을 삭제해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"keep_latest": nonNegativeIntegerSchema()}, []string{"keep_latest"})},
 		{Kind: llm.ToolFunction, Name: "file_list", Description: "workspace 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "file_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾아요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"pattern"})},
-		{Kind: llm.ToolFunction, Name: "file_grep", Description: "workspace 파일에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema()}, []string{"pattern"})},
+		{Kind: llm.ToolFunction, Name: "file_grep", Description: "workspace 파일에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema(), "offset": nonNegativeIntegerSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "shell_run", Description: "workspace command를 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": nonNegativeIntegerSchema()}, []string{"command"})},
 	}
 	handlers := llm.ToolRegistry{
@@ -190,11 +190,12 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			Regex         bool   `json:"regex"`
 			CaseSensitive bool   `json:"case_sensitive"`
 			MaxMatches    int    `json:"max_matches"`
+			Offset        int    `json:"offset"`
 		}) (string, error) {
 			if ws == nil {
 				return "", fmt.Errorf("workspace is nil")
 			}
-			matches, err := ws.Grep(in.Pattern, workspace.GrepOptions{PathGlob: in.PathGlob, Regex: in.Regex, CaseSensitive: in.CaseSensitive, MaxMatches: in.MaxMatches})
+			matches, err := ws.Grep(in.Pattern, workspace.GrepOptions{PathGlob: in.PathGlob, Regex: in.Regex, CaseSensitive: in.CaseSensitive, MaxMatches: in.MaxMatches, Offset: in.Offset})
 			if err != nil {
 				return "", err
 			}

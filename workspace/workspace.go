@@ -67,6 +67,7 @@ type GrepOptions struct {
 	CaseSensitive bool
 	PathGlob      string
 	MaxMatches    int
+	Offset        int
 }
 
 type SearchMatch struct {
@@ -373,9 +374,19 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 	if opts.MaxMatches > MaxGrepMatches {
 		return nil, fmt.Errorf("max_matches must be <= %d", MaxGrepMatches)
 	}
+	if opts.Offset < 0 {
+		return nil, errors.New("offset must be >= 0")
+	}
+	if opts.Offset >= MaxGrepMatches {
+		return nil, fmt.Errorf("offset must be < %d", MaxGrepMatches)
+	}
 	maxMatches := opts.MaxMatches
 	if maxMatches <= 0 {
 		maxMatches = 100
+	}
+	scanMatches := maxMatches + opts.Offset
+	if scanMatches > MaxGrepMatches {
+		scanMatches = MaxGrepMatches
 	}
 	var re *regexp.Regexp
 	needle := pattern
@@ -395,7 +406,7 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 	}
 	var matches []SearchMatch
 	err := w.walkFiles(func(path string, rel string, _ os.DirEntry) error {
-		if len(matches) >= maxMatches {
+		if len(matches) >= scanMatches {
 			return filepath.SkipAll
 		}
 		if opts.PathGlob != "" && !globMatches(opts.PathGlob, rel) {
@@ -422,14 +433,24 @@ func (w *Workspace) Grep(pattern string, opts GrepOptions) ([]SearchMatch, error
 			}
 			if ok {
 				matches = append(matches, SearchMatch{Path: rel, Line: lineNo, Excerpt: strings.TrimSpace(line)})
-				if len(matches) >= maxMatches {
+				if len(matches) >= scanMatches {
 					return filepath.SkipAll
 				}
 			}
 		}
 		return scanner.Err()
 	})
-	return matches, err
+	if err != nil {
+		return nil, err
+	}
+	if opts.Offset >= len(matches) {
+		return nil, nil
+	}
+	matches = matches[opts.Offset:]
+	if len(matches) > maxMatches {
+		matches = matches[:maxMatches]
+	}
+	return matches, nil
 }
 
 func (w *Workspace) walkFiles(visit func(path string, rel string, entry os.DirEntry) error) error {
@@ -661,7 +682,7 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		{Kind: llm.ToolFunction, Name: "workspace_prune_checkpoints", Description: "최신 workspace file checkpoint만 남기고 오래된 snapshot을 삭제해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"keep_latest": nonNegativeIntegerSchema()}, []string{"keep_latest"})},
 		{Kind: llm.ToolFunction, Name: "workspace_list", Description: "workspace 안의 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "workspace_glob", Description: "workspace 파일 경로를 glob 패턴으로 찾어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"pattern"})},
-		{Kind: llm.ToolFunction, Name: "workspace_grep", Description: "workspace 파일들에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema()}, []string{"pattern"})},
+		{Kind: llm.ToolFunction, Name: "workspace_grep", Description: "workspace 파일들에서 문자열 또는 regex를 검색해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"pattern": stringSchema(), "path_glob": stringSchema(), "regex": booleanSchema(), "case_sensitive": booleanSchema(), "max_matches": nonNegativeIntegerSchema(), "offset": nonNegativeIntegerSchema()}, []string{"pattern"})},
 		{Kind: llm.ToolFunction, Name: "workspace_search", Description: "workspace 파일들에서 literal 문자열을 검색하고 파일 경로만 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"needle": stringSchema(), "limit": nonNegativeIntegerSchema()}, []string{"needle"})},
 		{Kind: llm.ToolFunction, Name: "workspace_run_command", Description: "workspace에서 명령을 실행하고 구조화 결과를 돌려줘요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"command": stringSchema(), "args": arraySchema(stringSchema()), "timeout_ms": nonNegativeIntegerSchema()}, []string{"command"})},
 	}
@@ -799,8 +820,9 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 			Regex         bool   `json:"regex"`
 			CaseSensitive bool   `json:"case_sensitive"`
 			MaxMatches    int    `json:"max_matches"`
+			Offset        int    `json:"offset"`
 		}) (string, error) {
-			matches, err := w.Grep(in.Pattern, GrepOptions{PathGlob: in.PathGlob, Regex: in.Regex, CaseSensitive: in.CaseSensitive, MaxMatches: in.MaxMatches})
+			matches, err := w.Grep(in.Pattern, GrepOptions{PathGlob: in.PathGlob, Regex: in.Regex, CaseSensitive: in.CaseSensitive, MaxMatches: in.MaxMatches, Offset: in.Offset})
 			if err != nil {
 				return "", err
 			}
