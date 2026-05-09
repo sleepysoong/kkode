@@ -5247,6 +5247,22 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("checkpoint offset metadata가 이상해요: %+v", listed)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?turn_id=turn_1&limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = CheckpointListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Checkpoints) != 1 || listed.Checkpoints[0].ID != created.ID || listed.Checkpoints[0].TurnID != "turn_1" {
+		t.Fatalf("checkpoint turn_id 목록이 이상해요: %+v", listed)
+	}
+	if listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("checkpoint turn_id metadata가 이상해요: %+v", listed)
+	}
 	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?"+query, nil)
 		rec = httptest.NewRecorder()

@@ -66,7 +66,8 @@ func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	items, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, Limit: limit + 1, Offset: offset})
+	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
+	items, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, TurnID: turnID, Limit: limit + 1, Offset: offset})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_checkpoints_failed", err.Error())
 		return

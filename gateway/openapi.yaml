@@ -980,6 +980,12 @@ paths:
             type: integer
             default: 50
             maximum: 200
+        - $ref: '#/components/parameters/Offset'
+        - in: query
+          name: turn_id
+          schema:
+            type: string
+          description: checkpoint turn_id 값으로 목록을 좁혀요.
       responses:
         default:
           $ref: '#/components/responses/Error'

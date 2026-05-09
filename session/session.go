@@ -94,6 +94,7 @@ type SessionQuery struct {
 
 type CheckpointQuery struct {
 	SessionID string
+	TurnID    string
 	Limit     int
 	Offset    int
 }

@@ -690,6 +690,13 @@ func TestCheckpointStoreListsAndLoads(t *testing.T) {
 	if len(firstPage) != 1 || len(offsetPage) != 1 || firstPage[0].ID == offsetPage[0].ID {
 		t.Fatalf("checkpoint offset list가 이상해요: first=%+v offset=%+v", firstPage, offsetPage)
 	}
+	filtered, err := store.ListCheckpoints(ctx, CheckpointQuery{SessionID: sess.ID, TurnID: "turn_1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered) != 1 || filtered[0].ID != cp.ID || filtered[0].TurnID != "turn_1" {
+		t.Fatalf("checkpoint turn_id filter가 이상해요: %+v", filtered)
+	}
 }
 
 func TestTodoToolsUseDedicatedSaveTodosWhenAvailable(t *testing.T) {
