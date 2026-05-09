@@ -4382,8 +4382,22 @@ func TestGatewayGitStatusDiffAndLog(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &diff); err != nil {
 		t.Fatal(err)
 	}
-	if diff.Path != "README.md" || !strings.Contains(diff.Diff, "+world") {
+	if diff.Path != "README.md" || !strings.Contains(diff.Diff, "+world") || diff.DiffBytes < len(diff.Diff) {
 		t.Fatalf("git diff 응답이 이상해요: %+v", diff)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&path="+url.QueryEscape("README.md")+"&max_bytes=5", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("truncated diff status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	diff = GitDiffResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &diff); err != nil {
+		t.Fatal(err)
+	}
+	if !diff.Truncated || diff.DiffBytes <= len(diff.Diff) {
+		t.Fatalf("git diff byte metadata가 이상해요: %+v", diff)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/git/diff?project_root="+url.QueryEscape(root)+"&max_bytes=-1", nil)

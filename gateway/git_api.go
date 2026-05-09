@@ -33,6 +33,7 @@ type GitDiffResponse struct {
 	ProjectRoot string `json:"project_root"`
 	Path        string `json:"path,omitempty"`
 	Diff        string `json:"diff"`
+	DiffBytes   int    `json:"diff_bytes,omitempty"`
 	Truncated   bool   `json:"truncated,omitempty"`
 }
 
@@ -91,7 +92,7 @@ func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, outputTruncated, err := runGitCommand(r.Context(), root, []string{"status", "--short", "--branch"}, 512*1024)
+	out, _, outputTruncated, err := runGitCommand(r.Context(), root, []string{"status", "--short", "--branch"}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_status_failed", err.Error())
 		return
@@ -123,12 +124,12 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, truncated, err := runGitCommand(r.Context(), root, args, int64(maxBytes))
+	out, diffBytes, truncated, err := runGitCommand(r.Context(), root, args, int64(maxBytes))
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_diff_failed", err.Error())
 		return
 	}
-	writeJSON(w, GitDiffResponse{ProjectRoot: root, Path: canonicalRel, Diff: out, Truncated: truncated})
+	writeJSON(w, GitDiffResponse{ProjectRoot: root, Path: canonicalRel, Diff: out, DiffBytes: diffBytes, Truncated: truncated})
 }
 
 func (s *Server) gitLog(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +145,7 @@ func (s *Server) gitLog(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "--skip", fmt.Sprint(offset), "-n", fmt.Sprint(limit + 1)}, 512*1024)
+	out, _, _, err := runGitCommand(r.Context(), root, []string{"log", "--oneline", "--skip", fmt.Sprint(offset), "-n", fmt.Sprint(limit + 1)}, 512*1024)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "git_log_failed", err.Error())
 		return
@@ -216,7 +217,7 @@ func limitGitLog(commits []GitLogEntryDTO, limit int) ([]GitLogEntryDTO, bool) {
 	return commits[:limit], true
 }
 
-func runGitCommand(ctx context.Context, root string, args []string, maxBytes int64) (string, bool, error) {
+func runGitCommand(ctx context.Context, root string, args []string, maxBytes int64) (string, int, bool, error) {
 	if maxBytes <= 0 {
 		maxBytes = 1 << 20
 	}
@@ -233,18 +234,20 @@ func runGitCommand(ctx context.Context, root string, args []string, maxBytes int
 		if stderr.truncated {
 			msg = strings.TrimRight(msg, "\n") + "\n[git stderr truncated]"
 		}
-		return "", stdout.truncated, fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		return "", stdout.BytesWritten(), stdout.truncated, fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
-	return stdout.String(), stdout.truncated, nil
+	return stdout.String(), stdout.BytesWritten(), stdout.truncated, nil
 }
 
 type boundedBuffer struct {
 	buf       bytes.Buffer
 	max       int64
+	written   int64
 	truncated bool
 }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
+	b.written += int64(len(p))
 	if b.max <= 0 {
 		b.max = 1 << 20
 	}
@@ -260,6 +263,14 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 	}
 	_, _ = b.buf.Write(p)
 	return len(p), nil
+}
+
+func (b *boundedBuffer) BytesWritten() int {
+	maxInt := int(^uint(0) >> 1)
+	if b.written > int64(maxInt) {
+		return maxInt
+	}
+	return int(b.written)
 }
 
 func (b *boundedBuffer) String() string {

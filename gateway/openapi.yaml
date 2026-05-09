@@ -3567,6 +3567,9 @@ components:
           type: string
         diff:
           type: string
+        diff_bytes:
+          type: integer
+          description: 제한 전 git diff stdout byte 수예요.
         truncated:
           type: boolean
     GitLogResponse:

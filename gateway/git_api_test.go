@@ -18,7 +18,7 @@ func TestRunGitCommandBoundsStderr(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	_, _, err := runGitCommand(context.Background(), t.TempDir(), []string{"status"}, 1024)
+	_, _, _, err := runGitCommand(context.Background(), t.TempDir(), []string{"status"}, 1024)
 	if err == nil {
 		t.Fatal("failing git command should return an error")
 	}
