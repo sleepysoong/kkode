@@ -42,6 +42,16 @@ type ArtifactListResponse struct {
 	ResultTruncated bool          `json:"result_truncated,omitempty"`
 }
 
+type ArtifactPruneRequest struct {
+	KeepLatest int `json:"keep_latest"`
+}
+
+type ArtifactPruneResponse struct {
+	SessionID        string `json:"session_id"`
+	KeepLatest       int    `json:"keep_latest"`
+	DeletedArtifacts int    `json:"deleted_artifacts"`
+}
+
 func (s *Server) handleSessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
 	store := s.artifactStore()
 	if store == nil {
@@ -57,6 +67,14 @@ func (s *Server) handleSessionArtifacts(w http.ResponseWriter, r *http.Request, 
 		default:
 			writeMethodNotAllowed(w, r, "지원하지 않는 artifact method예요", http.MethodGet, http.MethodPost)
 		}
+		return
+	}
+	if len(rest) == 1 && rest[0] == "prune" {
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, r, "지원하지 않는 artifact prune method예요", http.MethodPost)
+			return
+		}
+		s.pruneSessionArtifacts(w, r, sessionID)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "artifact endpoint를 찾을 수 없어요")
@@ -165,6 +183,33 @@ func (s *Server) deleteArtifact(w http.ResponseWriter, r *http.Request, store se
 		return
 	}
 	writeJSON(w, map[string]any{"deleted": true, "artifact_id": id})
+}
+
+func (s *Server) pruneSessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID string) {
+	var req ArtifactPruneRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	if req.KeepLatest < 0 {
+		writeError(w, r, http.StatusBadRequest, "invalid_artifact_prune", "keep_latest는 0 이상이어야 해요")
+		return
+	}
+	if _, err := s.cfg.Store.LoadSession(r.Context(), sessionID); err != nil {
+		writeError(w, r, http.StatusNotFound, "session_not_found", err.Error())
+		return
+	}
+	store, ok := s.cfg.Store.(session.ArtifactPruneStore)
+	if !ok {
+		writeError(w, r, http.StatusNotImplemented, "artifact_prune_store_missing", "이 gateway에는 artifact prune store가 연결되지 않았어요")
+		return
+	}
+	deleted, err := store.PruneArtifacts(r.Context(), sessionID, req.KeepLatest)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "prune_artifacts_failed", err.Error())
+		return
+	}
+	writeJSON(w, ArtifactPruneResponse{SessionID: sessionID, KeepLatest: req.KeepLatest, DeletedArtifacts: deleted})
 }
 
 func (s *Server) artifactStore() session.ArtifactStore {

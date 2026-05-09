@@ -99,6 +99,7 @@ func TestGatewayAPIIndex(t *testing.T) {
 		"file_checkpoints_prune":  {Name: "file_checkpoints_prune", Method: "POST", Path: "/api/v1/files/checkpoints/prune"},
 		"file_checkpoint_delete":  {Name: "file_checkpoint_delete", Method: "DELETE", Path: "/api/v1/files/checkpoints/{checkpoint_id}"},
 		"session_artifact_create": {Name: "session_artifact_create", Method: "POST", Path: "/api/v1/sessions/{session_id}/artifacts"},
+		"session_artifacts_prune": {Name: "session_artifacts_prune", Method: "POST", Path: "/api/v1/sessions/{session_id}/artifacts/prune"},
 		"artifact_delete":         {Name: "artifact_delete", Method: "DELETE", Path: "/api/v1/artifacts/{artifact_id}"},
 		"run_cancel":              {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
 		"lsp_hover":               {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
@@ -5214,13 +5215,50 @@ func TestGatewayCreatesListsReadsAndDeletesArtifacts(t *testing.T) {
 		t.Fatalf("artifact 상세 truncation이 이상해요: %+v", got)
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/v1/artifacts/artifact_1", nil)
+	for _, id := range []string{"artifact_2", "artifact_3"} {
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/artifacts", bytes.NewBufferString(`{"id":"`+id+`","turn_id":"turn_artifact","run_id":"run_1","kind":"tool_output","content":{"matches":2}}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+		}
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sess.ID+"/artifacts/prune", bytes.NewBufferString(`{"keep_latest":1}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/artifact_1", nil)
+	var pruned ArtifactPruneResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &pruned); err != nil {
+		t.Fatal(err)
+	}
+	if pruned.SessionID != sess.ID || pruned.KeepLatest != 1 || pruned.DeletedArtifacts != 2 {
+		t.Fatalf("artifact prune 응답이 이상해요: %+v", pruned)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/artifacts?limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Artifacts) != 1 {
+		t.Fatalf("artifact prune 후 목록이 이상해요: %+v", listed)
+	}
+	remainingID := listed.Artifacts[0].ID
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/artifacts/"+remainingID, nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/"+remainingID, nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {

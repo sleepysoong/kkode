@@ -873,6 +873,32 @@ func (s *SQLiteStore) DeleteArtifact(ctx context.Context, id string) error {
 	return nil
 }
 
+func (s *SQLiteStore) PruneArtifacts(ctx context.Context, sessionID string, keepLatest int) (int, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return 0, fmt.Errorf("session_id is required")
+	}
+	if keepLatest < 0 {
+		return 0, fmt.Errorf("keep_latest must be non-negative")
+	}
+	res, err := s.db.ExecContext(ctx, `DELETE FROM artifacts
+		WHERE session_id = ?
+		  AND id NOT IN (
+			SELECT id FROM artifacts
+			WHERE session_id = ?
+			ORDER BY updated_at DESC, id DESC
+			LIMIT ?
+		  )`, sessionID, sessionID, keepLatest)
+	if err != nil {
+		return 0, err
+	}
+	count, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 type artifactScanner interface {
 	Scan(dest ...any) error
 }

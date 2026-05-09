@@ -363,6 +363,8 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "LSPHoverResponse", dto: LSPHoverResponse{}},
 		{schema: "CheckpointListResponse", dto: CheckpointListResponse{}},
 		{schema: "ArtifactListResponse", dto: ArtifactListResponse{}},
+		{schema: "ArtifactPruneRequest", dto: ArtifactPruneRequest{}},
+		{schema: "ArtifactPruneResponse", dto: ArtifactPruneResponse{}},
 		{schema: "Artifact", dto: ArtifactDTO{}},
 		{schema: "ResourceListResponse", dto: ResourceListResponse{}},
 		{schema: "Resource", dto: ResourceDTO{}},

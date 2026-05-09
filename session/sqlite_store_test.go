@@ -178,10 +178,29 @@ func TestSQLiteStorePersistsArtifacts(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != "artifact_1" {
 		t.Fatalf("artifact 목록이 이상해요: %+v", listed)
 	}
-	if err := store.DeleteArtifact(ctx, "artifact_1"); err != nil {
+	for _, id := range []string{"artifact_2", "artifact_3"} {
+		if _, err := store.SaveArtifact(ctx, Artifact{ID: id, SessionID: sess.ID, RunID: "run_1", TurnID: turn.ID, Kind: "tool_output", Content: json.RawMessage(`{"matches":2}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deleted, err := store.PruneArtifacts(ctx, sess.ID, 1)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.LoadArtifact(ctx, "artifact_1"); err == nil {
+	if deleted != 2 {
+		t.Fatalf("artifact prune 삭제 개수가 이상해요: %d", deleted)
+	}
+	listed, err = store.ListArtifacts(ctx, ArtifactQuery{SessionID: sess.ID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("artifact prune 후 목록이 이상해요: %+v", listed)
+	}
+	if err := store.DeleteArtifact(ctx, listed[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LoadArtifact(ctx, listed[0].ID); err == nil {
 		t.Fatal("deleted artifact는 다시 읽히면 안 돼요")
 	}
 }

@@ -1056,6 +1056,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Artifact'
+  /api/v1/sessions/{session_id}/artifacts/prune:
+    post:
+      operationId: postSessionsBySessionIdArtifactsPrune
+      summary: 최신 artifact만 남기고 오래된 artifact를 삭제해요.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactPruneRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Error'
+        '200':
+          description: artifact prune 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactPruneResponse'
   /api/v1/artifacts/{artifact_id}:
     get:
       operationId: getArtifactsByArtifactId
@@ -3945,6 +3966,24 @@ components:
           type: integer
         result_truncated:
           type: boolean
+    ArtifactPruneRequest:
+      type: object
+      required: [keep_latest]
+      properties:
+        keep_latest:
+          type: integer
+          minimum: 0
+          description: 남길 최신 artifact 개수예요. 0이면 session artifact를 모두 삭제해요.
+    ArtifactPruneResponse:
+      type: object
+      required: [session_id, keep_latest, deleted_artifacts]
+      properties:
+        session_id:
+          type: string
+        keep_latest:
+          type: integer
+        deleted_artifacts:
+          type: integer
     Artifact:
       type: object
       required: [kind]

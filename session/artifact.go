@@ -37,3 +37,7 @@ type ArtifactStore interface {
 	ListArtifacts(ctx context.Context, q ArtifactQuery) ([]Artifact, error)
 	DeleteArtifact(ctx context.Context, id string) error
 }
+
+type ArtifactPruneStore interface {
+	PruneArtifacts(ctx context.Context, sessionID string, keepLatest int) (int, error)
+}

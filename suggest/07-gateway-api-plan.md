@@ -463,6 +463,7 @@ PATCH /api/v1/sessions/{session_id}/todos/{todo_id}
 ```http
 GET /api/v1/sessions/{session_id}/artifacts
 POST /api/v1/sessions/{session_id}/artifacts
+POST /api/v1/sessions/{session_id}/artifacts/prune
 GET /api/v1/artifacts/{artifact_id}
 DELETE /api/v1/artifacts/{artifact_id}
 ```
@@ -767,7 +768,7 @@ curl -N http://127.0.0.1:41234/api/v1/runs/run_.../events \
 
 ## 데이터베이스 확장 제안
 
-현재 `session` SQLite schema에 events/turns/runs/artifacts가 있어요. 다음 단계는 artifact retention과 agent run 내부 tool 결과 자동 생성 정책을 정하면 돼요.
+현재 `session` SQLite schema에 events/turns/runs/artifacts가 있고 session별 artifact retention prune API도 있어요. 다음 단계는 agent run 내부 tool 결과 자동 생성 정책을 정하면 돼요.
 
 ```sql
 CREATE TABLE runs (
