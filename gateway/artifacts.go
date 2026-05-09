@@ -175,6 +175,11 @@ func (s *Server) createSessionArtifact(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Server) getArtifact(w http.ResponseWriter, r *http.Request, store session.ArtifactStore, id string) {
+	id = strings.TrimSpace(id)
+	if err := validateArtifactIDText(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_artifact", err.Error())
+		return
+	}
 	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_content_bytes", maxArtifactContentBytes, "invalid_artifact")
 	if !ok {
 		return
@@ -192,6 +197,11 @@ func (s *Server) getArtifact(w http.ResponseWriter, r *http.Request, store sessi
 }
 
 func (s *Server) deleteArtifact(w http.ResponseWriter, r *http.Request, store session.ArtifactStore, id string) {
+	id = strings.TrimSpace(id)
+	if err := validateArtifactIDText(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_artifact", err.Error())
+		return
+	}
 	if err := store.DeleteArtifact(r.Context(), id); err != nil {
 		writeError(w, r, http.StatusNotFound, "artifact_not_found", err.Error())
 		return
@@ -251,11 +261,8 @@ func (s *Server) validateArtifactTarget(w http.ResponseWriter, r *http.Request, 
 
 func validateArtifactDTO(dto ArtifactDTO) error {
 	if dto.ID != "" {
-		if len(dto.ID) > maxArtifactIDBytes {
-			return fmt.Errorf("artifact id는 %d byte 이하여야 해요", maxArtifactIDBytes)
-		}
-		if !validRunMetadataKey(dto.ID) {
-			return fmt.Errorf("artifact id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		if err := validateArtifactIDText(dto.ID); err != nil {
+			return err
 		}
 	}
 	if err := validateOptionalIDFilter("artifact run_id", dto.RunID, maxRunIDBytes); err != nil {
@@ -286,6 +293,19 @@ func validateArtifactDTO(dto ArtifactDTO) error {
 		return fmt.Errorf("artifact content는 JSON 값이어야 해요")
 	}
 	return validateRunMetadata(dto.Metadata)
+}
+
+func validateArtifactIDText(id string) error {
+	if id == "" {
+		return fmt.Errorf("artifact id가 필요해요")
+	}
+	if len(id) > maxArtifactIDBytes {
+		return fmt.Errorf("artifact id는 %d byte 이하여야 해요", maxArtifactIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return fmt.Errorf("artifact id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	return nil
 }
 
 func validateArtifactFilters(runID string, turnID string, kind string) error {
