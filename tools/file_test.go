@@ -40,7 +40,20 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	if err != nil || !strings.Contains(patched, "two patched") {
 		t.Fatalf("patched=%q err=%v", patched, err)
 	}
-	shell, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "5", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
+	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_move", CallID: "5", Arguments: []byte(`{"source":"a.txt","destination":"archive/a.txt"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := ws.ReadFile("archive/a.txt")
+	if err != nil || !strings.Contains(moved, "two patched") {
+		t.Fatalf("moved=%q err=%v", moved, err)
+	}
+	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "file_delete", CallID: "6", Arguments: []byte(`{"path":"archive/a.txt"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.ReadFile("archive/a.txt"); err == nil {
+		t.Fatal("file_delete should remove the file")
+	}
+	shell, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "7", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
 	if err != nil {
 		t.Fatalf("non-zero shell command should return structured output: %v", err)
 	}
@@ -51,7 +64,7 @@ func TestFileToolsReadWriteAndGrep(t *testing.T) {
 	if cmd.ExitCode != 7 || cmd.Stdout != "out\n" || !strings.Contains(cmd.Stderr, "err") || cmd.DurationMS < 0 {
 		t.Fatalf("shell_run result가 이상해요: %#v", cmd)
 	}
-	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "6", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
+	if _, err := handlers.Execute(ctx, llm.ToolCall{Name: "shell_run", CallID: "8", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
 		t.Fatalf("missing shell command should remain a tool error: %v", err)
 	}
 }

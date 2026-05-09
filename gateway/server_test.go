@@ -94,6 +94,7 @@ func TestGatewayAPIIndex(t *testing.T) {
 	for name, want := range map[string]APIIndexOperationDTO{
 		"session_create": {Name: "session_create", Method: "POST", Path: "/api/v1/sessions"},
 		"file_write":     {Name: "file_write", Method: "PUT", Path: "/api/v1/files/content"},
+		"file_move":      {Name: "file_move", Method: "POST", Path: "/api/v1/files/move"},
 		"run_cancel":     {Name: "run_cancel", Method: "POST", Path: "/api/v1/runs/{run_id}/cancel"},
 		"lsp_hover":      {Name: "lsp_hover", Method: "GET", Path: "/api/v1/lsp/hover"},
 	} {
@@ -5695,6 +5696,58 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if content.ProjectRoot != root || content.Path != "docs/b.md" {
 		t.Fatalf("file write 응답은 canonical project/path를 반환해야 해요: %+v", content)
 	}
+
+	body = `{"project_root":" ` + root + ` ","source":" docs/b.md ","destination":" docs/moved.md "}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/move", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var moved FileMoveResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	if !moved.Moved || moved.ProjectRoot != root || moved.Source != "docs/b.md" || moved.Destination != "docs/moved.md" {
+		t.Fatalf("file move 응답이 이상해요: %+v", moved)
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs", "b.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("file move는 source를 없애야 해요: %v", err)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "docs", "moved.md"))
+	if err != nil || string(data) != "new" {
+		t.Fatalf("file move 결과가 이상해요: content=%q err=%v", data, err)
+	}
+
+	body = `{"project_root":"` + root + `","path":"docs/moved.md"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/delete", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var deleted FileDeleteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &deleted); err != nil {
+		t.Fatal(err)
+	}
+	if !deleted.Deleted || deleted.ProjectRoot != root || deleted.Path != "docs/moved.md" {
+		t.Fatalf("file delete 응답이 이상해요: %+v", deleted)
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs", "moved.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("file delete는 파일을 지워야 해요: %v", err)
+	}
+
+	body = `{"project_root":"` + root + `","path":"docs"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/delete", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "recursive") {
+		t.Fatalf("directory delete without recursive는 거부해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	writeTestFile(t, filepath.Join(root, "docs", "b.md"), "new")
 
 	body = `{"project_root":"` + root + `","path":"docs/too-large.md","content":"` + strings.Repeat("x", workspace.MaxFileWriteBytes+1) + `"}`
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/files/content", bytes.NewBufferString(body))

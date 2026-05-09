@@ -16,6 +16,8 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 	defs := []llm.Tool{
 		{Kind: llm.ToolFunction, Name: "file_read", Description: "workspace 파일을 읽어요. offset_line, limit_lines, max_bytes로 범위를 줄일 수 있어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "offset_line": nonNegativeIntegerSchema(), "limit_lines": nonNegativeIntegerSchema(), "max_bytes": nonNegativeIntegerSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "file_write", Description: "workspace 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
+		{Kind: llm.ToolFunction, Name: "file_delete", Description: "workspace 파일이나 디렉터리를 삭제해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "recursive": booleanSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "file_move", Description: "workspace 파일이나 디렉터리를 이동하거나 이름을 바꿔요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"source": stringSchema(), "destination": stringSchema(), "overwrite": booleanSchema()}, []string{"source", "destination"})},
 		{Kind: llm.ToolFunction, Name: "file_edit", Description: "workspace 파일에서 old 텍스트를 new 텍스트로 교체해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "old": stringSchema(), "new": stringSchema(), "expected_replacements": nonNegativeIntegerSchema()}, []string{"path", "old", "new"})},
 		{Kind: llm.ToolFunction, Name: "file_apply_patch", Description: "apply_patch 형식 patch를 workspace에 적용해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"patch_text": stringSchema()}, []string{"patch_text"})},
 		{Kind: llm.ToolFunction, Name: "file_list", Description: "workspace 디렉터리를 나열해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema()}, []string{"path"})},
@@ -46,6 +48,31 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 				return "", err
 			}
 			return "파일을 썼어요: " + in.Path, nil
+		}),
+		"file_delete": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Path      string `json:"path"`
+			Recursive bool   `json:"recursive"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			if err := ws.DeletePath(in.Path, in.Recursive); err != nil {
+				return "", err
+			}
+			return "경로를 삭제했어요: " + in.Path, nil
+		}),
+		"file_move": llm.JSONToolHandler(func(ctx context.Context, in struct {
+			Source      string `json:"source"`
+			Destination string `json:"destination"`
+			Overwrite   bool   `json:"overwrite"`
+		}) (string, error) {
+			if ws == nil {
+				return "", fmt.Errorf("workspace is nil")
+			}
+			if err := ws.MovePath(in.Source, in.Destination, in.Overwrite); err != nil {
+				return "", err
+			}
+			return "경로를 이동했어요: " + in.Source + " -> " + in.Destination, nil
 		}),
 		"file_edit": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path                 string `json:"path"`

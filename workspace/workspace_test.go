@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,7 +81,7 @@ func TestWorkspaceToolsReadWriteAndCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	defs, handlers := w.Tools()
-	if len(defs) != 9 {
+	if len(defs) != 11 {
 		t.Fatalf("defs=%d", len(defs))
 	}
 	res, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_read_file", CallID: "1", Arguments: []byte(`{"path":"b.txt"}`)})
@@ -136,7 +137,20 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if err != nil || content != "hello patched" {
 		t.Fatalf("patched content=%q err=%v", content, err)
 	}
-	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "4", Arguments: []byte(`{"command":"echo","args":["ok"],"timeout_ms":1000}`)})
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_move_path", CallID: "4", Arguments: []byte(`{"source":"a.txt","destination":"moved/a.txt"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := w.ReadFile("moved/a.txt")
+	if err != nil || moved != "hello patched" {
+		t.Fatalf("moved content=%q err=%v", moved, err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_delete_path", CallID: "5", Arguments: []byte(`{"path":"moved/a.txt"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.ReadFile("moved/a.txt"); err == nil {
+		t.Fatal("deleted file should not remain readable")
+	}
+	out, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "6", Arguments: []byte(`{"command":"echo","args":["ok"],"timeout_ms":1000}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +164,7 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if cmd.DurationMS < 0 || cmd.StartedAt.IsZero() || cmd.EndedAt.IsZero() {
 		t.Fatalf("cmd timing이 이상해요: %#v", cmd)
 	}
-	out, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "5", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
+	out, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "7", Arguments: []byte(`{"command":"sh","args":["-c","echo out; echo err >&2; exit 7"],"timeout_ms":1000}`)})
 	if err != nil {
 		t.Fatalf("non-zero command should still return structured output: %v", err)
 	}
@@ -161,8 +175,63 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if cmd.ExitCode != 7 || cmd.Stdout != "out\n" || !strings.Contains(cmd.Stderr, "err") || cmd.DurationMS < 0 {
 		t.Fatalf("failed command result가 이상해요: %#v", cmd)
 	}
-	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "6", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "8", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
 		t.Fatalf("missing command should remain a tool error: %v", err)
+	}
+}
+
+func TestWorkspaceDeleteAndMovePath(t *testing.T) {
+	dir := t.TempDir()
+	w, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteFile("src/a.txt", "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.MovePath("src/a.txt", "dst/a.txt", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "src", "a.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("source should be gone after move: %v", err)
+	}
+	got, err := w.ReadFile("dst/a.txt")
+	if err != nil || got != "alpha" {
+		t.Fatalf("moved file=%q err=%v", got, err)
+	}
+	if err := w.WriteFile("dst/existing.txt", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.MovePath("dst/a.txt", "dst/existing.txt", false); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("move without overwrite should reject existing destination: %v", err)
+	}
+	if err := w.MovePath("dst/a.txt", "dst/existing.txt", true); err != nil {
+		t.Fatal(err)
+	}
+	got, err = w.ReadFile("dst/existing.txt")
+	if err != nil || got != "alpha" {
+		t.Fatalf("overwritten file=%q err=%v", got, err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "nested", "child"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.MovePath("nested", "nested/child/moved", false); err == nil || !strings.Contains(err.Error(), "inside source") {
+		t.Fatalf("moving directory into itself should fail: %v", err)
+	}
+	if err := w.DeletePath("nested", false); err == nil || !strings.Contains(err.Error(), "recursive") {
+		t.Fatalf("directory delete should require recursive=true: %v", err)
+	}
+	if err := w.DeletePath("nested", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "nested")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recursive delete should remove directory: %v", err)
+	}
+	if err := w.DeletePath(".", true); err == nil || !strings.Contains(err.Error(), "root") {
+		t.Fatalf("workspace root delete should fail: %v", err)
+	}
+	if err := w.MovePath("dst/existing.txt", ".", true); err == nil || !strings.Contains(err.Error(), "root") {
+		t.Fatalf("workspace root overwrite should fail: %v", err)
 	}
 }
 

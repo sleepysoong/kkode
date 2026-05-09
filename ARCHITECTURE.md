@@ -571,6 +571,11 @@ POST /api/v1/tools/call
 GET  /api/v1/files
 GET  /api/v1/files/content
 PUT  /api/v1/files/content
+POST /api/v1/files/delete
+POST /api/v1/files/move
+POST /api/v1/files/patch
+GET  /api/v1/files/glob
+GET  /api/v1/files/grep
 GET  /api/v1/git/status
 GET  /api/v1/git/diff
 GET  /api/v1/git/log

@@ -445,7 +445,7 @@ func toolMetadata(name string) toolMetadataDTO {
 	switch strings.TrimSpace(name) {
 	case "file_read", "file_list", "file_glob", "file_grep":
 		return toolMetadataDTO{Category: "file", Effects: []string{"read"}, OutputFormat: toolOutputFormat(name)}
-	case "file_write", "file_edit", "file_apply_patch":
+	case "file_write", "file_edit", "file_apply_patch", "file_delete", "file_move":
 		return toolMetadataDTO{Category: "file", Effects: []string{"write"}, OutputFormat: "text"}
 	case "shell_run":
 		return toolMetadataDTO{Category: "shell", Effects: []string{"execute"}, OutputFormat: "json"}
@@ -473,6 +473,10 @@ func toolExampleArguments(name string) map[string]any {
 		return map[string]any{"path": "README.md", "max_bytes": 4096}
 	case "file_write":
 		return map[string]any{"path": "notes/todo.md", "content": "할 일을 정리해요\n"}
+	case "file_delete":
+		return map[string]any{"path": "notes/old.md", "recursive": false}
+	case "file_move":
+		return map[string]any{"source": "notes/draft.md", "destination": "notes/final.md", "overwrite": false}
 	case "file_edit":
 		return map[string]any{"path": "README.md", "old": "기존 문장", "new": "새 문장", "expected_replacements": 1}
 	case "file_apply_patch":

@@ -79,6 +79,32 @@ type FileWriteRequest struct {
 	Content     string `json:"content"`
 }
 
+type FileDeleteRequest struct {
+	ProjectRoot string `json:"project_root"`
+	Path        string `json:"path"`
+	Recursive   bool   `json:"recursive,omitempty"`
+}
+
+type FileDeleteResponse struct {
+	ProjectRoot string `json:"project_root"`
+	Path        string `json:"path"`
+	Deleted     bool   `json:"deleted"`
+}
+
+type FileMoveRequest struct {
+	ProjectRoot string `json:"project_root"`
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Overwrite   bool   `json:"overwrite,omitempty"`
+}
+
+type FileMoveResponse struct {
+	ProjectRoot string `json:"project_root"`
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Moved       bool   `json:"moved"`
+}
+
 type FilePatchRequest struct {
 	ProjectRoot string `json:"project_root"`
 	PatchText   string `json:"patch_text"`
@@ -111,6 +137,14 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 		s.applyFilePatch(w, r)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "delete" && r.Method == http.MethodPost {
+		s.deleteFilePath(w, r)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "move" && r.Method == http.MethodPost {
+		s.moveFilePath(w, r)
+		return
+	}
 	if len(parts) == 1 {
 		writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodGet)
 		return
@@ -124,6 +158,9 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, parts []str
 			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodGet)
 			return
 		case "patch":
+			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodPost)
+			return
+		case "delete", "move":
 			writeMethodNotAllowed(w, r, "지원하지 않는 files method예요", http.MethodPost)
 			return
 		}
@@ -269,6 +306,47 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: req.Path, Content: req.Content, ContentBytes: len(req.Content), FileBytes: int64(len(req.Content))})
+}
+
+func (s *Server) deleteFilePath(w http.ResponseWriter, r *http.Request) {
+	var req FileDeleteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
+	req.Path = strings.TrimSpace(req.Path)
+	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+		return
+	}
+	if err := ws.DeletePath(req.Path, req.Recursive); err != nil {
+		writeError(w, r, http.StatusBadRequest, "delete_file_failed", err.Error())
+		return
+	}
+	writeJSON(w, FileDeleteResponse{ProjectRoot: projectRoot, Path: req.Path, Deleted: true})
+}
+
+func (s *Server) moveFilePath(w http.ResponseWriter, r *http.Request) {
+	var req FileMoveRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSONDecodeError(w, r, err)
+		return
+	}
+	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
+	req.Source = strings.TrimSpace(req.Source)
+	req.Destination = strings.TrimSpace(req.Destination)
+	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
+		return
+	}
+	if err := ws.MovePath(req.Source, req.Destination, req.Overwrite); err != nil {
+		writeError(w, r, http.StatusBadRequest, "move_file_failed", err.Error())
+		return
+	}
+	writeJSON(w, FileMoveResponse{ProjectRoot: projectRoot, Source: req.Source, Destination: req.Destination, Moved: true})
 }
 
 func (s *Server) applyFilePatch(w http.ResponseWriter, r *http.Request) {

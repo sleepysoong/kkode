@@ -331,6 +331,46 @@ paths:
                 $ref: '#/components/schemas/FileGrepResponse'
         '400':
           $ref: '#/components/responses/Error'
+  /api/v1/files/delete:
+    post:
+      operationId: postFilesDelete
+      summary: workspace 파일이나 디렉터리를 삭제해요.
+      description: 권한 프롬프트 없이 project_root 기준으로 즉시 삭제해요. 디렉터리는 recursive=true가 필요해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileDeleteRequest'
+      responses:
+        '200':
+          description: file delete 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileDeleteResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+  /api/v1/files/move:
+    post:
+      operationId: postFilesMove
+      summary: workspace 파일이나 디렉터리를 이동하거나 이름을 바꿔요.
+      description: 권한 프롬프트 없이 project_root 기준으로 즉시 이동해요. destination이 있으면 overwrite=true가 필요해요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileMoveRequest'
+      responses:
+        '200':
+          description: file move 결과예요.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileMoveResponse'
+        '400':
+          $ref: '#/components/responses/Error'
   /api/v1/files/glob:
     get:
       operationId: getFilesGlob
@@ -2854,6 +2894,52 @@ components:
           type: string
         patch_text:
           type: string
+    FileDeleteRequest:
+      type: object
+      required: [project_root, path]
+      properties:
+        project_root:
+          type: string
+        path:
+          type: string
+        recursive:
+          type: boolean
+          default: false
+    FileDeleteResponse:
+      type: object
+      required: [project_root, path, deleted]
+      properties:
+        project_root:
+          type: string
+        path:
+          type: string
+        deleted:
+          type: boolean
+    FileMoveRequest:
+      type: object
+      required: [project_root, source, destination]
+      properties:
+        project_root:
+          type: string
+        source:
+          type: string
+        destination:
+          type: string
+        overwrite:
+          type: boolean
+          default: false
+    FileMoveResponse:
+      type: object
+      required: [project_root, source, destination, moved]
+      properties:
+        project_root:
+          type: string
+        source:
+          type: string
+        destination:
+          type: string
+        moved:
+          type: boolean
     FilePatchResponse:
       type: object
       required: [project_root, applied]
