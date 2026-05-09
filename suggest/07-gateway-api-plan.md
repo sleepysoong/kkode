@@ -34,21 +34,17 @@
 - `session.SQLiteStore`: session/turn/event/todo/checkpoint 저장소예요.
 - `runtime.Runtime`: agent + session store 실행 wrapper예요.
 - `agent.Agent`: provider/tool loop 실행 단위예요.
-- `tools.FileTools`: `file_read`, `file_write`, `file_edit`, `file_apply_patch`, `file_glob`, `file_grep`, `shell_run`이에요.
+- `tools.FileTools`: `file_read`, `file_write`, `file_delete`, `file_move`, `file_edit`, `file_apply_patch`, `file_glob`, `file_grep`, `shell_run`이에요.
 - `tools.WebTools`: `web_fetch`예요.
 - `providers/*`: OpenAI, Copilot SDK, Codex CLI, OmniRoute provider adapter예요.
 - `cmd/kkode-agent`: 단발 CLI + SQLite session 연결이에요.
 
-부족한 것:
+아직 남은 것:
 
-- HTTP server package가 없어요.
-- API auth가 없어요.
-- event stream endpoint가 없어요.
-- run cancel/interrupt가 없어요.
-- event replay cursor가 없어요.
-- artifact/diff/checkpoint API가 없어요.
+- run interrupt는 별도 명령으로 분리되지 않았고 cancel/retry 중심이에요.
+- artifact API는 아직 없고 transcript/export/checkpoint로 대체하고 있어요.
+- checkpoint는 payload 저장/조회 중심이고 code snapshot undo/redo는 아직 없어요.
 - Discord/webhook adapter가 없어요.
-- OpenAPI spec이 없어요.
 
 ## 추천 패키지 구조
 
@@ -383,24 +379,27 @@ run.cancelled
 웹 패널에서 파일 브라우저를 만들려면 agent tool과 별개로 direct file API가 필요해요.
 
 ```http
-GET  /api/v1/files?session_id=sess_...&path=README.md
-PUT  /api/v1/files?session_id=sess_...&path=README.md
-GET  /api/v1/files/list?session_id=sess_...&path=.
-GET  /api/v1/files/glob?session_id=sess_...&pattern=**/*.go
-GET  /api/v1/files/grep?session_id=sess_...&pattern=TODO&path_glob=**/*.go
-POST /api/v1/files/apply-patch
+GET  /api/v1/files?project_root=/repo&path=.
+GET  /api/v1/files/content?project_root=/repo&path=README.md
+PUT  /api/v1/files/content
+POST /api/v1/files/delete
+POST /api/v1/files/move
+POST /api/v1/files/patch
+GET  /api/v1/files/glob?project_root=/repo&pattern=**/*.go
+GET  /api/v1/files/grep?project_root=/repo&pattern=TODO&path_glob=**/*.go
 ```
 
-`PUT /files` request:
+`PUT /api/v1/files/content` request:
 
 ```json
 {
-  "content": "...",
-  "expected_sha256": "optional-for-optimistic-lock"
+  "project_root": "/repo",
+  "path": "README.md",
+  "content": "..."
 }
 ```
 
-YOLO라도 웹 패널 충돌 방지를 위해 `expected_sha256`는 넣는 게 좋아요.
+YOLO 방향이라 별도 승인 없이 바로 쓰지만, adapter는 필요하면 쓰기 전에 `GET /api/v1/files/content`로 preview를 다시 읽고 충돌을 자체 확인하면 돼요.
 
 ### Tools
 
