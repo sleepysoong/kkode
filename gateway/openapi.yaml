@@ -2548,6 +2548,8 @@ components:
       required: true
       schema:
         type: string
+        maxLength: 128
+        pattern: '^[A-Za-z0-9_.-]+$'
     ResourceID:
       in: path
       name: resource_id
@@ -2724,6 +2726,8 @@ components:
         max_session_id_bytes:
           type: integer
         max_turn_id_bytes:
+          type: integer
+        max_run_id_bytes:
           type: integer
         max_project_root_bytes:
           type: integer

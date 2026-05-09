@@ -504,6 +504,7 @@ type LimitDTO struct {
 	RunWebMaxBytes              int64 `json:"run_web_max_bytes,omitempty"`
 	MaxSessionIDBytes           int   `json:"max_session_id_bytes,omitempty"`
 	MaxTurnIDBytes              int   `json:"max_turn_id_bytes,omitempty"`
+	MaxRunIDBytes               int   `json:"max_run_id_bytes,omitempty"`
 	MaxProjectRootBytes         int   `json:"max_project_root_bytes,omitempty"`
 	MaxMCPHTTPResponseBytes     int   `json:"max_mcp_http_response_bytes,omitempty"`
 	MaxMCPProbeNameBytes        int   `json:"max_mcp_probe_name_bytes,omitempty"`

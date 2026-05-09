@@ -834,6 +834,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		RunWebMaxBytes:              cfg.RunWebMaxBytes,
 		MaxSessionIDBytes:           maxSessionIDBytes,
 		MaxTurnIDBytes:              maxRunIDBytes,
+		MaxRunIDBytes:               maxRunIDBytes,
 		MaxProjectRootBytes:         maxProjectRootBytes,
 		MaxMCPHTTPResponseBytes:     maxMCPHTTPResponseBytes,
 		MaxMCPProbeNameBytes:        maxMCPProbeNameBytes,
@@ -1461,6 +1462,20 @@ func validateTurnIDText(id string) error {
 	return validateOptionalIDFilter("turn_id", id, maxRunIDBytes)
 }
 
+func validateRunIDText(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("run id가 필요해요")
+	}
+	if len(id) > maxRunIDBytes {
+		return fmt.Errorf("run id는 %d byte 이하여야 해요", maxRunIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return fmt.Errorf("run id는 영문/숫자/._- 문자만 쓸 수 있어요")
+	}
+	return nil
+}
+
 func (s *Server) writeSSEEvents(w http.ResponseWriter, r *http.Request, events []EventDTO) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1504,6 +1519,10 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 		return
 	}
 	runID := parts[1]
+	if err := validateRunIDText(runID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())
+		return
+	}
 	if len(parts) == 2 && r.Method == http.MethodGet {
 		s.getRun(w, r, runID)
 		return
