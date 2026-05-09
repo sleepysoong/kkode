@@ -564,15 +564,7 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 	if err := scanGroupedCounts(ctx, s.db, `SELECT status, COUNT(1) FROM runs GROUP BY status`, stats.Runs); err != nil {
 		return stats, err
 	}
-	runDuration, err := loadRunDurationStats(ctx, s.db)
-	if err != nil {
-		return stats, err
-	}
-	stats.RunDuration = runDuration
-	if err := loadGroupedRunDurationStats(ctx, s.db, `COALESCE(NULLIF(provider, ''), 'unknown')`, stats.RunDurationByProvider); err != nil {
-		return stats, err
-	}
-	if err := loadGroupedRunDurationStats(ctx, s.db, `COALESCE(NULLIF(model, ''), 'unknown')`, stats.RunDurationByModel); err != nil {
+	if err := loadRunDurationStats(ctx, s.db, &stats); err != nil {
 		return stats, err
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM resources GROUP BY kind`, stats.Resources); err != nil {
@@ -1777,48 +1769,20 @@ func scanGroupedUsage(ctx context.Context, db *sql.DB, query string, out map[str
 	return rows.Err()
 }
 
-func loadRunDurationStats(ctx context.Context, db *sql.DB) (RunDurationStats, error) {
-	rows, err := db.QueryContext(ctx, `SELECT started_at, ended_at FROM runs WHERE started_at <> '' AND ended_at <> ''`)
-	if err != nil {
-		return RunDurationStats{}, err
-	}
-	defer rows.Close()
-	var stats RunDurationStats
-	for rows.Next() {
-		var startedRaw, endedRaw string
-		if err := rows.Scan(&startedRaw, &endedRaw); err != nil {
-			return RunDurationStats{}, err
-		}
-		started := parseOptionalTime(startedRaw)
-		ended := parseOptionalTime(endedRaw)
-		if started.IsZero() || ended.IsZero() || ended.Before(started) {
-			continue
-		}
-		durationMS := ended.Sub(started).Milliseconds()
-		stats.Count++
-		stats.SumMS += durationMS
-		if durationMS > stats.MaxMS {
-			stats.MaxMS = durationMS
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return RunDurationStats{}, err
-	}
-	if stats.Count > 0 {
-		stats.AvgMS = stats.SumMS / int64(stats.Count)
-	}
-	return stats, nil
-}
-
-func loadGroupedRunDurationStats(ctx context.Context, db *sql.DB, groupExpr string, out map[string]RunDurationStats) error {
-	rows, err := db.QueryContext(ctx, `SELECT `+groupExpr+`, started_at, ended_at FROM runs WHERE started_at <> '' AND ended_at <> ''`)
+func loadRunDurationStats(ctx context.Context, db *sql.DB, stats *StoreStats) error {
+	rows, err := db.QueryContext(ctx, `SELECT
+		COALESCE(NULLIF(provider, ''), 'unknown'),
+		COALESCE(NULLIF(model, ''), 'unknown'),
+		started_at,
+		ended_at
+		FROM runs WHERE started_at <> '' AND ended_at <> ''`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var key, startedRaw, endedRaw string
-		if err := rows.Scan(&key, &startedRaw, &endedRaw); err != nil {
+		var provider, model, startedRaw, endedRaw string
+		if err := rows.Scan(&provider, &model, &startedRaw, &endedRaw); err != nil {
 			return err
 		}
 		started := parseOptionalTime(startedRaw)
@@ -1826,17 +1790,25 @@ func loadGroupedRunDurationStats(ctx context.Context, db *sql.DB, groupExpr stri
 		if started.IsZero() || ended.IsZero() || ended.Before(started) {
 			continue
 		}
-		stats := out[key]
 		durationMS := ended.Sub(started).Milliseconds()
-		stats.Count++
-		stats.SumMS += durationMS
-		if durationMS > stats.MaxMS {
-			stats.MaxMS = durationMS
-		}
-		stats.AvgMS = stats.SumMS / int64(stats.Count)
-		out[key] = stats
+		addRunDuration(&stats.RunDuration, durationMS)
+		providerStats := stats.RunDurationByProvider[provider]
+		addRunDuration(&providerStats, durationMS)
+		stats.RunDurationByProvider[provider] = providerStats
+		modelStats := stats.RunDurationByModel[model]
+		addRunDuration(&modelStats, durationMS)
+		stats.RunDurationByModel[model] = modelStats
 	}
 	return rows.Err()
+}
+
+func addRunDuration(stats *RunDurationStats, durationMS int64) {
+	stats.Count++
+	stats.SumMS += durationMS
+	stats.AvgMS = stats.SumMS / int64(stats.Count)
+	if durationMS > stats.MaxMS {
+		stats.MaxMS = durationMS
+	}
 }
 
 func normalizeSession(sess *Session) {
