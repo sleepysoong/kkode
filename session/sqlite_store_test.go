@@ -565,6 +565,13 @@ func TestRunEventStorePersistsReplay(t *testing.T) {
 	if len(replay) != 1 || replay[0].Type != "run.completed" || replay[0].Run.Status != "completed" {
 		t.Fatalf("run event replay가 이상해요: %+v", replay)
 	}
+	replay, err = store.ListRunEvents(ctx, RunEventQuery{RunID: run.ID, Type: "run.completed", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replay) != 1 || replay[0].Seq != 2 || replay[0].Type != "run.completed" {
+		t.Fatalf("run event type filter가 이상해요: %+v", replay)
+	}
 }
 
 func TestRunSnapshotStorePersistsRunAndEventTogether(t *testing.T) {

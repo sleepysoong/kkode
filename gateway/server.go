@@ -333,6 +333,7 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
 	stream, ok := queryWantsSSE(w, r, "invalid_request_events")
 	if !ok {
 		return
@@ -351,10 +352,10 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if stream {
-		s.writeRequestEventsSSE(w, r, runs, limit, afterSeq, heartbeatInterval)
+		s.writeRequestEventsSSE(w, r, runs, limit, afterSeq, eventType, heartbeatInterval)
 		return
 	}
-	events, err := s.collectRequestRunEvents(r, runs, limit+1, afterSeq)
+	events, err := s.collectRequestRunEvents(r, runs, limit+1, afterSeq, eventType)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_run_events_failed", err.Error())
 		return
@@ -363,14 +364,14 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	writeJSON(w, RequestCorrelationEventsResponse{RequestID: requestID, Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq})
 }
 
-func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int, afterSeq int) ([]RunEventDTO, error) {
+func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit int, afterSeq int, eventType string) ([]RunEventDTO, error) {
 	events := make([]RunEventDTO, 0, len(runs))
 	for _, run := range runs {
 		if len(events) >= limit {
 			break
 		}
 		remaining := limit - len(events)
-		runEvents, err := s.eventsForCorrelationRun(r, run, remaining, afterSeq)
+		runEvents, err := s.eventsForCorrelationRun(r, run, remaining, afterSeq, eventType)
 		if err != nil {
 			return nil, err
 		}
@@ -400,12 +401,12 @@ func (s *Server) collectRequestRunEvents(r *http.Request, runs []RunDTO, limit i
 	return events, nil
 }
 
-func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int, afterSeq int) ([]RunEventDTO, error) {
+func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int, afterSeq int, eventType string) ([]RunEventDTO, error) {
 	if limit <= 0 {
 		return []RunEventDTO{}, nil
 	}
 	if s.cfg.RunEventLister != nil {
-		events, err := s.cfg.RunEventLister(r.Context(), run.ID, afterSeq, limit)
+		events, err := s.cfg.RunEventLister(r.Context(), run.ID, afterSeq, eventType, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -415,14 +416,21 @@ func (s *Server) eventsForCorrelationRun(r *http.Request, run RunDTO, limit int,
 			}
 			return events, nil
 		}
+		if eventType != "" {
+			return []RunEventDTO{}, nil
+		}
 	}
 	if afterSeq >= 1 {
 		return []RunEventDTO{}, nil
 	}
-	return []RunEventDTO{{Seq: 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}}, nil
+	event := RunEventDTO{Seq: 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}
+	if eventType != "" && event.Type != eventType {
+		return []RunEventDTO{}, nil
+	}
+	return []RunEventDTO{event}, nil
 }
 
-func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int, afterSeq int, heartbeatInterval time.Duration) {
+func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, runs []RunDTO, limit int, afterSeq int, eventType string, heartbeatInterval time.Duration) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -487,7 +495,7 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 			}(ch)
 		}
 	}
-	events, err := s.collectRequestRunEvents(r, runs, limit, afterSeq)
+	events, err := s.collectRequestRunEvents(r, runs, limit, afterSeq, eventType)
 	if err != nil {
 		writeSSEFrame(w, flusher, 1, "error", map[string]string{"error": err.Error()})
 		return
@@ -513,6 +521,12 @@ func (s *Server) writeRequestEventsSSE(w http.ResponseWriter, r *http.Request, r
 			writeSSEHeartbeat(w, flusher)
 		case event := <-updates:
 			event = redactRunEvent(event)
+			if eventType != "" && event.Type != eventType {
+				if activeIDs[event.Run.ID] && isTerminalRunStatus(event.Run.Status) {
+					terminal[event.Run.ID] = true
+				}
+				continue
+			}
 			streamSeq++
 			if event.Seq <= 0 {
 				event.Seq = streamSeq
@@ -1710,6 +1724,7 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 	if !ok {
 		return
 	}
+	eventType := strings.TrimSpace(r.URL.Query().Get("type"))
 	stream, ok := queryWantsSSE(w, r, "invalid_run_events")
 	if !ok {
 		return
@@ -1739,36 +1754,40 @@ func (s *Server) getRunEvents(w http.ResponseWriter, r *http.Request, runID stri
 		return
 	}
 	if !stream {
-		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq, limit))
+		writeJSON(w, s.runEventSnapshotResponse(r, runID, *run, afterSeq, eventType, limit))
 		return
 	}
-	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq, limit, heartbeatInterval)
+	s.writeRunSSE(w, r, runID, *run, live, liveEvents, unsubscribe, afterSeq, eventType, limit, heartbeatInterval)
 }
 
-func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) []RunEventDTO {
-	return s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit)
+func (s *Server) runEventSnapshot(r *http.Request, runID string, fallback RunDTO, afterSeq int, eventType string, limit int) []RunEventDTO {
+	return s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, eventType, limit)
 }
 
-func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) RunEventListResponse {
-	events := s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, limit+1)
+func (s *Server) runEventSnapshotResponse(r *http.Request, runID string, fallback RunDTO, afterSeq int, eventType string, limit int) RunEventListResponse {
+	events := s.runEventSnapshotWithLimit(r, runID, fallback, afterSeq, eventType, limit+1)
 	events, truncated, nextAfterSeq := trimRunEvents(events, limit)
 	return RunEventListResponse{Events: events, AfterSeq: afterSeq, Limit: limit, ResultTruncated: truncated, NextAfterSeq: nextAfterSeq}
 }
 
-func (s *Server) runEventSnapshotWithLimit(r *http.Request, runID string, fallback RunDTO, afterSeq int, limit int) []RunEventDTO {
+func (s *Server) runEventSnapshotWithLimit(r *http.Request, runID string, fallback RunDTO, afterSeq int, eventType string, limit int) []RunEventDTO {
 	if s.cfg.RunEventLister != nil {
-		events, err := s.cfg.RunEventLister(r.Context(), runID, afterSeq, limit)
+		events, err := s.cfg.RunEventLister(r.Context(), runID, afterSeq, eventType, limit)
 		if err == nil && len(events) > 0 {
 			return redactRunEvents(events)
 		}
-		if err == nil && afterSeq > 0 {
+		if err == nil && (afterSeq > 0 || eventType != "") {
 			return []RunEventDTO{}
 		}
 	}
 	if afterSeq >= 1 {
 		return []RunEventDTO{}
 	}
-	return []RunEventDTO{redactRunEvent(RunEventDTO{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback})}
+	event := RunEventDTO{Seq: 1, At: s.cfg.Now(), Type: runEventType(fallback.Status), Run: fallback}
+	if eventType != "" && event.Type != eventType {
+		return []RunEventDTO{}
+	}
+	return []RunEventDTO{redactRunEvent(event)}
 }
 
 func redactRunEvents(events []RunEventDTO) []RunEventDTO {
@@ -1850,7 +1869,7 @@ func trimRunEvents(events []RunEventDTO, limit int) ([]RunEventDTO, bool, int) {
 	return events, truncated, next
 }
 
-func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int, limit int, heartbeatInterval time.Duration) {
+func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID string, initial RunDTO, live <-chan RunDTO, liveEvents <-chan RunEventDTO, unsubscribe func(), afterSeq int, eventType string, limit int, heartbeatInterval time.Duration) {
 	if unsubscribe != nil {
 		defer unsubscribe()
 	}
@@ -1860,7 +1879,7 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	flusher, _ := w.(http.Flusher)
 	heartbeat := time.NewTicker(heartbeatInterval)
 	defer heartbeat.Stop()
-	events := s.runEventSnapshot(r, runID, initial, afterSeq, limit)
+	events := s.runEventSnapshot(r, runID, initial, afterSeq, eventType, limit)
 	seq := 0
 	lastStatus := initial.Status
 	for _, event := range events {
@@ -1870,7 +1889,10 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 	}
 	if seq == 0 {
 		seq = 1
-		writeRunSSEEvent(w, flusher, RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(initial.Status), Run: initial})
+		event := RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(initial.Status), Run: initial}
+		if eventType == "" || event.Type == eventType {
+			writeRunSSEEvent(w, flusher, event)
+		}
 	}
 	if isTerminalRunStatus(lastStatus) || (s.cfg.RunSubscriber == nil && s.cfg.RunEventSubscriber == nil) {
 		return
@@ -1891,6 +1913,12 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 			case event, ok := <-ch:
 				if !ok {
 					return
+				}
+				if eventType != "" && event.Type != eventType {
+					if isTerminalRunStatus(event.Run.Status) {
+						return
+					}
+					continue
 				}
 				if event.Seq <= seq {
 					seq++
@@ -1924,8 +1952,13 @@ func (s *Server) writeRunSSE(w http.ResponseWriter, r *http.Request, runID strin
 			if !ok {
 				return
 			}
+			event := RunEventDTO{Seq: seq + 1, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run}
+			if eventType != "" && event.Type != eventType {
+				continue
+			}
 			seq++
-			writeRunSSEEvent(w, flusher, RunEventDTO{Seq: seq, At: s.cfg.Now(), Type: runEventType(run.Status), Run: run})
+			event.Seq = seq
+			writeRunSSEEvent(w, flusher, event)
 			if isTerminalRunStatus(run.Status) {
 				return
 			}

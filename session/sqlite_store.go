@@ -1387,6 +1387,10 @@ func (s *SQLiteStore) ListRunEvents(ctx context.Context, q RunEventQuery) ([]Run
 		query += ` AND seq > ?`
 		args = append(args, q.AfterSeq)
 	}
+	if q.Type != "" {
+		query += ` AND type = ?`
+		args = append(args, q.Type)
+	}
 	query += ` ORDER BY seq ASC LIMIT ?`
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)

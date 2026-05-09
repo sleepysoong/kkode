@@ -1355,15 +1355,17 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	var query RunQuery
 	var eventRunID string
 	var gotAfterSeq int
+	var gotEventType string
 	srv, err := New(Config{
 		Store: store,
 		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
 			query = q
 			return []RunDTO{{ID: "run_req", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: q.RequestID}}}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			eventRunID = runID
 			gotAfterSeq = afterSeq
+			gotEventType = eventType
 			return []RunEventDTO{
 				{Seq: 1, At: time.Unix(2, 0).UTC(), Type: "run.completed", Message: "done " + secret, Run: RunDTO{ID: runID, Status: "completed", Prompt: "done " + secret, Metadata: map[string]string{"token": secret}}},
 				{Seq: 2, At: time.Unix(1, 0).UTC(), Type: "run.queued", Payload: json.RawMessage(`{"value":"token=abc1234567890secretvalue"}`), Run: RunDTO{ID: runID, Status: "queued", ContextBlocks: []string{"context " + secret}}},
@@ -1411,6 +1413,15 @@ func TestGatewayRequestCorrelationEventsEndpoint(t *testing.T) {
 	}
 	if body.AfterSeq != 1 {
 		t.Fatalf("request correlation after_seq metadata가 이상해요: %+v", body)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/req_filter/events?type=run.completed&limit=5", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("type filter status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if gotEventType != "run.completed" {
+		t.Fatalf("request correlation event type이 run event lister에 전달되지 않았어요: %q", gotEventType)
 	}
 
 	for _, tc := range []struct {
@@ -1556,7 +1567,7 @@ func TestGatewayRequestCorrelationSSECatchesUpdateDuringReplay(t *testing.T) {
 			}
 			return []RunDTO{run}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			if !published {
 				published = true
 				bus.Publish(RunDTO{ID: "run_req_replay_race", SessionID: "sess_1", Status: "completed", Metadata: map[string]string{RequestIDMetadataKey: "req_replay_race"}})
@@ -1635,7 +1646,7 @@ func newReadyTestServer(t *testing.T, store session.Store) *Server {
 		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
 			return &RunDTO{ID: runID, Status: "cancelled"}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			return nil, nil
 		},
 		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -1827,7 +1838,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
 			return &RunDTO{ID: runID, Status: "cancelled"}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			return nil, nil
 		},
 		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -1916,7 +1927,7 @@ func TestGatewayDiagnosticsMarksMissingProviderAuthUnhealthy(t *testing.T) {
 		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
 			return &RunDTO{ID: runID, Status: "cancelled"}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			return nil, nil
 		},
 		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -1984,7 +1995,7 @@ func TestGatewayDiagnosticsMarksInjectedFailingCheckUnhealthy(t *testing.T) {
 		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
 			return &RunDTO{ID: runID, Status: "cancelled"}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			return nil, nil
 		},
 		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -2054,7 +2065,7 @@ func TestGatewayDiagnosticsTreatsWarningsAsHealthy(t *testing.T) {
 		RunCanceler: func(ctx context.Context, runID string) (*RunDTO, error) {
 			return &RunDTO{ID: runID, Status: "cancelled"}, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			return nil, nil
 		},
 		RunSubscriber: func(ctx context.Context, runID string) (<-chan RunDTO, func()) {
@@ -3328,18 +3339,29 @@ func TestGatewayStreamsRunEvents(t *testing.T) {
 func TestGatewayRunEventsRejectInvalidAfterSeq(t *testing.T) {
 	store := openTestStore(t)
 	run := RunDTO{ID: "run_after_seq", SessionID: "sess_1", Status: "completed", EventsURL: runEventsURL("run_after_seq")}
+	var gotEventType string
 	srv, err := New(Config{
 		Store: store,
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
 			copy := run
 			return &copy, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
+			gotEventType = eventType
 			return []RunEventDTO{{Seq: 1, At: time.Now().UTC(), Type: "run.completed", Run: run}}, nil
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?type=run.completed&limit=10", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("type filter status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if gotEventType != "run.completed" {
+		t.Fatalf("run event type이 run event lister에 전달되지 않았어요: %q", gotEventType)
 	}
 	for _, tc := range []struct {
 		name  string
@@ -3351,8 +3373,8 @@ func TestGatewayRunEventsRejectInvalidAfterSeq(t *testing.T) {
 		{name: "malformed limit", query: "limit=abc"},
 		{name: "malformed stream", query: "stream=maybe"},
 	} {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?"+tc.query, nil)
-		rec := httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/runs/run_after_seq/events?"+tc.query, nil)
+		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 		want := strings.Split(tc.query, "=")[0]
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
@@ -3600,7 +3622,7 @@ func TestGatewayRunSSECatchesUpdateDuringReplay(t *testing.T) {
 			copy := run
 			return &copy, nil
 		},
-		RunEventLister: func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+		RunEventLister: func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 			if !published {
 				published = true
 				bus.Publish(RunDTO{ID: "run_replay_race", SessionID: "sess_1", Status: "completed"})

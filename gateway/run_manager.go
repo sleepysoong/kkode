@@ -34,7 +34,7 @@ type RunLister func(ctx context.Context, q RunQuery) ([]RunDTO, error)
 type RunCanceler func(ctx context.Context, runID string) (*RunDTO, error)
 
 // RunEventLister는 durable run event replay 경계예요.
-type RunEventLister func(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error)
+type RunEventLister func(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error)
 
 // RunRuntimeStats는 현재 gateway 프로세스가 소유한 background run 실행면 상태예요.
 type RunRuntimeStats struct {
@@ -698,12 +698,12 @@ func (m *AsyncRunManager) recordProgressEvent(ctx context.Context, runID string,
 	}
 }
 
-func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int, limit int) ([]RunEventDTO, error) {
+func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int, eventType string, limit int) ([]RunEventDTO, error) {
 	if m == nil {
 		return nil, errors.New("run manager가 필요해요")
 	}
 	if m.runEventStore != nil {
-		events, err := m.runEventStore.ListRunEvents(ctx, session.RunEventQuery{RunID: runID, AfterSeq: afterSeq, Limit: limit})
+		events, err := m.runEventStore.ListRunEvents(ctx, session.RunEventQuery{RunID: runID, AfterSeq: afterSeq, Type: eventType, Limit: limit})
 		if err != nil {
 			return nil, err
 		}
@@ -720,7 +720,11 @@ func (m *AsyncRunManager) Events(ctx context.Context, runID string, afterSeq int
 	if afterSeq >= 1 {
 		return []RunEventDTO{}, nil
 	}
-	return []RunEventDTO{redactRunEvent(RunEventDTO{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: *run})}, nil
+	event := RunEventDTO{Seq: 1, At: m.timestamp(), Type: runEventType(run.Status), Run: *run}
+	if eventType != "" && event.Type != eventType {
+		return []RunEventDTO{}, nil
+	}
+	return []RunEventDTO{redactRunEvent(event)}, nil
 }
 
 func redactRunEvent(event RunEventDTO) RunEventDTO {

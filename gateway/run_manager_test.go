@@ -531,7 +531,7 @@ func TestAsyncRunManagerRecoversStaleRuns(t *testing.T) {
 	if unchanged.Status != "completed" {
 		t.Fatalf("terminal run은 건드리면 안 돼요: %+v", unchanged)
 	}
-	replay, err := manager.Events(ctx, stale.ID, 0, 10)
+	replay, err := manager.Events(ctx, stale.ID, 0, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +562,7 @@ func waitForRunEventType(t *testing.T, manager *AsyncRunManager, runID string, e
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		replay, err := manager.Events(context.Background(), runID, 0, 10)
+		replay, err := manager.Events(context.Background(), runID, 0, "", 10)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -571,7 +571,7 @@ func waitForRunEventType(t *testing.T, manager *AsyncRunManager, runID string, e
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	replay, _ := manager.Events(context.Background(), runID, 0, 10)
+	replay, _ := manager.Events(context.Background(), runID, 0, "", 10)
 	t.Fatalf("run event type %s가 기록되지 않았어요: %+v", eventType, replay)
 	return nil
 }
@@ -669,7 +669,7 @@ func TestAsyncRunManagerReplaysPersistedRunEvents(t *testing.T) {
 		}
 	}
 	restarted := NewAsyncRunManagerWithStore(nil, store)
-	afterFirst, err := restarted.Events(ctx, run.ID, 1, 10)
+	afterFirst, err := restarted.Events(ctx, run.ID, 1, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

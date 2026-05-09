@@ -66,6 +66,7 @@ type RunEvent struct {
 type RunEventQuery struct {
 	RunID    string
 	AfterSeq int
+	Type     string
 	Limit    int
 }
 

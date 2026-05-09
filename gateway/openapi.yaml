@@ -2235,6 +2235,17 @@ paths:
             default: 200
             maximum: 1000
         - in: query
+          name: after_seq
+          schema:
+            type: integer
+            default: 0
+          description: 이 seq 이후 durable run event만 replay해요.
+        - in: query
+          name: type
+          schema:
+            type: string
+          description: durable run event type 값으로 좁혀요.
+        - in: query
           name: stream
           schema:
             type: boolean
@@ -2350,6 +2361,11 @@ paths:
             type: integer
             default: 200
             maximum: 1000
+        - in: query
+          name: type
+          schema:
+            type: string
+          description: durable run event type 값으로 좁혀요.
         - in: query
           name: stream
           schema:
