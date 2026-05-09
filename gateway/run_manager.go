@@ -227,7 +227,7 @@ func (m *AsyncRunManager) Start(ctx context.Context, req RunStartRequest) (*RunD
 		runID = session.NewID("run")
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
-	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "queued", EventsURL: runEventsURL(runID), StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
+	accepted := RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: req.Provider, Model: req.Model, WorkingDirectory: req.WorkingDirectory, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "queued", EventsURL: runEventsURL(runID), StartedAt: m.timestamp(), Metadata: cloneMap(req.Metadata)}
 	m.mu.Lock()
 	if existing, exists := m.runs[runID]; exists {
 		if sameIdempotentRun(existing.run, req) {
@@ -525,6 +525,9 @@ func (m *AsyncRunManager) execute(ctx context.Context, cancel context.CancelFunc
 		if run.Model == "" {
 			run.Model = req.Model
 		}
+		if run.WorkingDirectory == "" {
+			run.WorkingDirectory = req.WorkingDirectory
+		}
 		if len(run.MCPServers) == 0 {
 			run.MCPServers = cloneStringSlice(req.MCPServers)
 		}
@@ -728,11 +731,11 @@ func redactRunEventSnapshot(run RunDTO) RunDTO {
 }
 
 func sessionRunFromDTO(run RunDTO) session.Run {
-	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return session.Run{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func runDTOFromSession(run session.Run) *RunDTO {
-	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
+	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Metadata: cloneMap(run.Metadata)}
 }
 
 func (m *AsyncRunManager) timestamp() time.Time {

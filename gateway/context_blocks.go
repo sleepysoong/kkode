@@ -56,6 +56,7 @@ func sanitizeRunStartRequest(req RunStartRequest) RunStartRequest {
 	req.Prompt = strings.TrimSpace(req.Prompt)
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.Model = strings.TrimSpace(req.Model)
+	req.WorkingDirectory = sanitizeWorkingDirectory(req.WorkingDirectory)
 	req.Metadata = sanitizeRunMetadata(req.Metadata)
 	req.MCPServers = sanitizeResourceIDs(req.MCPServers)
 	req.Skills = sanitizeResourceIDs(req.Skills)
@@ -76,6 +77,12 @@ func validateRunRequestShape(req RunStartRequest) error {
 	if len(req.Model) > maxRunProviderModelBytes {
 		return fmt.Errorf("model은 %d byte 이하여야 해요", maxRunProviderModelBytes)
 	}
+	if len(req.WorkingDirectory) > maxRunPromptBytes {
+		return fmt.Errorf("working_directory는 %d byte 이하여야 해요", maxRunPromptBytes)
+	}
+	if workingDirectoryEscapesRoot(req.WorkingDirectory) {
+		return fmt.Errorf("working_directory는 project root 밖을 가리킬 수 없어요")
+	}
 	if err := validateRunSelectorList("mcp_servers", req.MCPServers, true); err != nil {
 		return err
 	}
@@ -95,6 +102,35 @@ func validateRunRequestShape(req RunStartRequest) error {
 		return fmt.Errorf("context_blocks는 최대 %d개까지 허용돼요", maxRunContextBlocks)
 	}
 	return nil
+}
+
+func sanitizeWorkingDirectory(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.ReplaceAll(value, "\\", "/")
+	for strings.Contains(value, "//") {
+		value = strings.ReplaceAll(value, "//", "/")
+	}
+	value = strings.TrimPrefix(value, "./")
+	value = strings.Trim(value, "/")
+	if value == "." {
+		return ""
+	}
+	return value
+}
+
+func workingDirectoryEscapesRoot(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, part := range strings.Split(value, "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func validateRunSelectorList(label string, values []string, identifier bool) error {

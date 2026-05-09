@@ -8,16 +8,18 @@ import (
 
 // Run은 gateway background 작업 상태를 SQLite에 영속화하는 레코드예요.
 type Run struct {
-	ID         string   `json:"id"`
-	SessionID  string   `json:"session_id"`
-	TurnID     string   `json:"turn_id,omitempty"`
-	Status     string   `json:"status"`
-	Prompt     string   `json:"prompt,omitempty"`
-	Provider   string   `json:"provider,omitempty"`
-	Model      string   `json:"model,omitempty"`
-	MCPServers []string `json:"mcp_servers,omitempty"`
-	Skills     []string `json:"skills,omitempty"`
-	Subagents  []string `json:"subagents,omitempty"`
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	TurnID    string `json:"turn_id,omitempty"`
+	Status    string `json:"status"`
+	Prompt    string `json:"prompt,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// WorkingDirectory는 project root 기준 subdir scoped instruction 힌트예요.
+	WorkingDirectory string   `json:"working_directory,omitempty"`
+	MCPServers       []string `json:"mcp_servers,omitempty"`
+	Skills           []string `json:"skills,omitempty"`
+	Subagents        []string `json:"subagents,omitempty"`
 	// EnabledTools/DisabledTools는 run 당시 local tool surface 선택이에요.
 	EnabledTools  []string `json:"enabled_tools,omitempty"`
 	DisabledTools []string `json:"disabled_tools,omitempty"`

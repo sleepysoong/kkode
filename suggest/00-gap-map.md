@@ -33,7 +33,7 @@
 | Tool surface | `file_*`, `shell_run`, `web_fetch`, grep/glob/range read/apply_patch/delete/move, direct tools API, Go symbol API | question/web search/custom MCP tool execution, richer LSP operations | P0 | `02-tools-sandbox-permissions.md` |
 | Permission/sandbox | 사용자 지시대로 권한 엔진 없음, YOLO 즉시 실행 | 안전 제품은 deny/ask/allow가 있지만 kkode에서는 의도적으로 제외해요 | N/A | `02-tools-sandbox-permissions.md` |
 | Checkpoint/undo | SQLite checkpoint, compaction checkpoint, file mutation checkpoint/restore API와 tool이 있음 | `/undo`, `/redo`, conversation rewind, code vs conversation restore UX | P0 | `02-tools-sandbox-permissions.md` |
-| Project instructions | `prompts/*` 템플릿, root `AGENTS.md`/`CLAUDE.md`/`KKODE.md` auto-load, optional global memory load | hierarchical subdir scopes, `/init` rule generation | P0 | `03-context-skills-mcp.md` |
+| Project instructions | `prompts/*` 템플릿, root→working_directory `AGENTS.md`/`CLAUDE.md`/`KKODE.md` auto-load, optional global memory load | `/init` rule generation, rules directories | P0 | `03-context-skills-mcp.md` |
 | Skills/commands/plugins | skill manifest API와 Copilot skill directory 연결 일부 구현 | SKILL.md progressive disclosure, slash commands, plugins, marketplaces | P1 | `03-context-skills-mcp.md` |
 | MCP | MCP manifest CRUD, Copilot 연결, stdio `tools/list` probe와 `tools/call` API | stdio/HTTP/SSE OAuth, tool call endpoint, tool search, resource/prompt support | P0 | `03-context-skills-mcp.md` |
 | Provider auth/model catalog | env 기반 auth status, provider registry, default model/capability discovery | login/logout, credentials store, dynamic model registry, budget | P0 | `04-provider-auth-model-router-cost.md` |

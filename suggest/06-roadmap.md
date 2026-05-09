@@ -83,7 +83,7 @@
 
 ### 작업
 
-- root AGENTS.md, CLAUDE.md, KKODE.md loader는 구현됐고, subdir scope와 `/init` 초안을 보강해요.
+- root부터 `working_directory`까지 AGENTS.md, CLAUDE.md, KKODE.md loader는 구현됐고, rules directory와 `/init` 초안을 보강해요.
 - `.kkode/rules/*.md` path-specific rule을 구현해요.
 - `/init`, `/plan`, `/build`, `/compact` command를 추가해요.
 - `skills/` package와 `SKILL.md` progressive disclosure를 구현해요.
@@ -214,7 +214,7 @@ kkode/
 2. `tools: keep YOLO execution bounded and observable`
 3. `checkpoint: add undo/redo UX on top of file restore checkpoints`
 4. `workspace: maintain grep/glob/read-range/apply-patch/delete/move tools`
-5. `context: add subdir-scoped rules and /init on top of root AGENTS/CLAUDE/KKODE loader`
+5. `context: add rules directories and /init on top of AGENTS/CLAUDE/KKODE loader`
 6. `mcp: implement stdio client and tool registry adapter`
 7. `cli: replace kkode-agent with kkode run/session/auth/models`
 8. `gateway: expose sessions/runs/events over REST and SSE`

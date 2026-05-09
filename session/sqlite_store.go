@@ -114,6 +114,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		);`,
 		`ALTER TABLE runs ADD COLUMN provider TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE runs ADD COLUMN model TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE runs ADD COLUMN working_directory TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE runs ADD COLUMN mcp_servers_json BLOB NOT NULL DEFAULT '[]';`,
 		`ALTER TABLE runs ADD COLUMN skills_json BLOB NOT NULL DEFAULT '[]';`,
 		`ALTER TABLE runs ADD COLUMN subagents_json BLOB NOT NULL DEFAULT '[]';`,
@@ -921,10 +922,10 @@ func insertRunIfAbsent(ctx context.Context, writer runWriter, run Run) (bool, er
 	if err != nil {
 		return false, err
 	}
-	result, err := writer.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	result, err := writer.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, working_directory, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO NOTHING`,
-		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, mcpServers, skills, subagents, enabledTools, disabledTools, contextBlocks, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, run.WorkingDirectory, mcpServers, skills, subagents, enabledTools, disabledTools, contextBlocks, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
 	if err != nil {
 		return false, err
 	}
@@ -964,8 +965,8 @@ func saveRun(ctx context.Context, writer runWriter, run Run) error {
 	if err != nil {
 		return err
 	}
-	_, err = writer.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err = writer.ExecContext(ctx, `INSERT INTO runs (id, session_id, turn_id, status, prompt, provider, model, working_directory, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			session_id=excluded.session_id,
 			turn_id=excluded.turn_id,
@@ -973,6 +974,7 @@ func saveRun(ctx context.Context, writer runWriter, run Run) error {
 			prompt=excluded.prompt,
 			provider=excluded.provider,
 			model=excluded.model,
+			working_directory=excluded.working_directory,
 			mcp_servers_json=excluded.mcp_servers_json,
 			skills_json=excluded.skills_json,
 			subagents_json=excluded.subagents_json,
@@ -985,7 +987,7 @@ func saveRun(ctx context.Context, writer runWriter, run Run) error {
 			error=excluded.error,
 			metadata_json=excluded.metadata_json,
 			updated_at=excluded.updated_at`,
-		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, mcpServers, skills, subagents, enabledTools, disabledTools, contextBlocks, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
+		run.ID, run.SessionID, run.TurnID, run.Status, run.Prompt, run.Provider, run.Model, run.WorkingDirectory, mcpServers, skills, subagents, enabledTools, disabledTools, contextBlocks, run.EventsURL, formatOptionalTime(run.StartedAt), formatOptionalTime(run.EndedAt), run.Error, metadata, formatTime(run.CreatedAt), formatTime(run.UpdatedAt))
 	return err
 }
 
@@ -994,7 +996,7 @@ func (s *SQLiteStore) LoadRun(ctx context.Context, id string) (Run, error) {
 }
 
 func loadRunWithWriter(ctx context.Context, reader runLoader, id string) (Run, error) {
-	row := reader.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
+	row := reader.QueryRowContext(ctx, `SELECT id, session_id, turn_id, status, prompt, provider, model, working_directory, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs WHERE id = ?`, id)
 	return scanRun(row)
 }
 
@@ -1003,7 +1005,7 @@ func (s *SQLiteStore) ListRuns(ctx context.Context, q RunQuery) ([]Run, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	query := `SELECT id, session_id, turn_id, status, prompt, provider, model, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs`
+	query := `SELECT id, session_id, turn_id, status, prompt, provider, model, working_directory, mcp_servers_json, skills_json, subagents_json, enabled_tools_json, disabled_tools_json, context_blocks_json, events_url, started_at, ended_at, error, metadata_json, created_at, updated_at FROM runs`
 	args := []any{}
 	where := []string{}
 	if q.SessionID != "" {
@@ -1163,7 +1165,7 @@ func scanRun(scanner runScanner) (Run, error) {
 	var run Run
 	var started, ended, created, updated string
 	var metadata, mcpServers, skills, subagents, enabledTools, disabledTools, contextBlocks []byte
-	if err := scanner.Scan(&run.ID, &run.SessionID, &run.TurnID, &run.Status, &run.Prompt, &run.Provider, &run.Model, &mcpServers, &skills, &subagents, &enabledTools, &disabledTools, &contextBlocks, &run.EventsURL, &started, &ended, &run.Error, &metadata, &created, &updated); err != nil {
+	if err := scanner.Scan(&run.ID, &run.SessionID, &run.TurnID, &run.Status, &run.Prompt, &run.Provider, &run.Model, &run.WorkingDirectory, &mcpServers, &skills, &subagents, &enabledTools, &disabledTools, &contextBlocks, &run.EventsURL, &started, &ended, &run.Error, &metadata, &created, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Run{}, fmt.Errorf("run not found")
 		}

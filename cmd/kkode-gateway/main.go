@@ -264,7 +264,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if err != nil {
 			return nil, err
 		}
-		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
+		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot, req.WorkingDirectory), providerOptions)
 		providerHandle, err := app.BuildProviderWithResolvedOptions(providerName, absRoot, effectiveProviderOptions)
 		if err != nil {
 			return nil, err
@@ -286,7 +286,7 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if runID == "" {
 			runID = session.NewID("run")
 		}
-		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, WorkingDirectory: req.WorkingDirectory, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
 		}
@@ -331,7 +331,7 @@ func syncRunValidator(store session.Store) gateway.RunValidator {
 		if _, absRoot, err := app.NewWorkspace(app.WorkspaceOptions{Root: sess.ProjectRoot}); err != nil {
 			return fmt.Errorf("workspace preflight failed: %w", err)
 		} else {
-			effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
+			effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot, req.WorkingDirectory), providerOptions)
 			handle, err := app.BuildProviderWithResolvedOptions(providerName, absRoot, effectiveProviderOptions)
 			if err != nil {
 				return fmt.Errorf("provider preflight failed: %w", err)
@@ -365,7 +365,7 @@ func syncRunPreviewer(store session.Store, opts runOptions) gateway.RunPreviewer
 		if err != nil {
 			return nil, err
 		}
-		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot), providerOptions)
+		effectiveProviderOptions := app.MergeProviderOptions(app.DefaultProviderOptions(absRoot, req.WorkingDirectory), providerOptions)
 		handle, err := app.BuildProviderWithResolvedOptions(providerName, absRoot, effectiveProviderOptions)
 		if err != nil {
 			return nil, err

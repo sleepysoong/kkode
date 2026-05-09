@@ -68,6 +68,8 @@ func TestRunRequestShapeIsValidated(t *testing.T) {
 		{name: "prompt", mutate: func(req *RunStartRequest) { req.Prompt = strings.Repeat("x", maxRunPromptBytes+1) }, want: "prompt"},
 		{name: "provider", mutate: func(req *RunStartRequest) { req.Provider = strings.Repeat("x", maxRunProviderModelBytes+1) }, want: "provider"},
 		{name: "model", mutate: func(req *RunStartRequest) { req.Model = strings.Repeat("x", maxRunProviderModelBytes+1) }, want: "model"},
+		{name: "working directory escape", mutate: func(req *RunStartRequest) { req.WorkingDirectory = "../outside" }, want: "working_directory"},
+		{name: "working directory nested escape", mutate: func(req *RunStartRequest) { req.WorkingDirectory = "services/../../outside" }, want: "working_directory"},
 		{name: "mcp count", mutate: func(req *RunStartRequest) { req.MCPServers = repeatedRunValues("mcp", maxRunSelectorItems+1) }, want: "mcp_servers"},
 		{name: "mcp item", mutate: func(req *RunStartRequest) { req.MCPServers = []string{strings.Repeat("x", maxRunSelectorItemBytes+1)} }, want: "mcp_servers[0]"},
 		{name: "mcp id", mutate: func(req *RunStartRequest) { req.MCPServers = []string{"bad id"} }, want: "mcp_servers[0]"},

@@ -1602,7 +1602,7 @@ func (s *Server) retryRun(w http.ResponseWriter, r *http.Request, runID string) 
 	metadata["retried_from"] = original.ID
 	metadata = withRequestIDMetadata(metadata, requestIDFromRequest(r))
 	metadata = withDefaultMCPMetadata(metadata, s.cfg.DefaultMCPServers)
-	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), EnabledTools: cloneStringSlice(original.EnabledTools), DisabledTools: cloneStringSlice(original.DisabledTools), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
+	req := RunStartRequest{SessionID: original.SessionID, Prompt: original.Prompt, Provider: original.Provider, Model: original.Model, WorkingDirectory: original.WorkingDirectory, Metadata: metadata, MCPServers: cloneStringSlice(original.MCPServers), Skills: cloneStringSlice(original.Skills), Subagents: cloneStringSlice(original.Subagents), EnabledTools: cloneStringSlice(original.EnabledTools), DisabledTools: cloneStringSlice(original.DisabledTools), ContextBlocks: cloneStringSlice(original.ContextBlocks)}
 	req = sanitizeRunStartRequest(req)
 	if err := validateRunStartRequest(req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_run", err.Error())

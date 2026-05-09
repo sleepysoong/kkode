@@ -24,8 +24,8 @@ type DefaultMCPDiagnostic struct {
 
 // DefaultProviderOptions는 kkode가 기본으로 붙일 provider 확장 자산을 만들어요.
 // 지금은 project instruction context와 Serena/Context7 MCP를 기본 설계값으로 삼아요.
-func DefaultProviderOptions(root string) ProviderOptions {
-	opts := ProviderOptions{ContextBlocks: ProjectInstructionBlocks(root)}
+func DefaultProviderOptions(root string, scopes ...string) ProviderOptions {
+	opts := ProviderOptions{ContextBlocks: ProjectInstructionBlocks(root, scopes...)}
 	if EnvBoolDefault("KKODE_DEFAULT_MCP", true) {
 		opts.MCPServers = DefaultMCPServers(root)
 	}

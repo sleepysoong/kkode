@@ -489,6 +489,12 @@ func TestSyncRunPreviewerLoadsProjectInstructions(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("프로젝트 규칙 token=ghp_123456789012345678901234567890123456"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "services", "api"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "services", "AGENTS.md"), []byte("서비스 규칙"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
 	if err != nil {
 		t.Fatal(err)
@@ -499,14 +505,14 @@ func TestSyncRunPreviewerLoadsProjectInstructions(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview project instructions"})
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview project instructions", WorkingDirectory: "services/api"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview.ContextBlocks) != 1 || !strings.Contains(preview.ContextBlocks[0], "AGENTS.md") || !strings.Contains(preview.ContextBlocks[0], "[REDACTED]") || strings.Contains(preview.ContextBlocks[0], "ghp_") {
+	if len(preview.ContextBlocks) != 2 || !strings.Contains(preview.ContextBlocks[0], "AGENTS.md") || !strings.Contains(preview.ContextBlocks[0], "[REDACTED]") || strings.Contains(preview.ContextBlocks[0], "ghp_") || !strings.Contains(preview.ContextBlocks[1], "서비스 규칙") {
 		t.Fatalf("project instruction context block이 필요해요: %+v", preview.ContextBlocks)
 	}
-	if preview.ProviderRequest == nil || !strings.Contains(preview.ProviderRequest.BodyJSON, "프로젝트 규칙") || strings.Contains(preview.ProviderRequest.BodyJSON, "ghp_") {
+	if preview.ProviderRequest == nil || !strings.Contains(preview.ProviderRequest.BodyJSON, "프로젝트 규칙") || !strings.Contains(preview.ProviderRequest.BodyJSON, "서비스 규칙") || strings.Contains(preview.ProviderRequest.BodyJSON, "ghp_") {
 		t.Fatalf("provider preview에 project instruction이 redacted 상태로 포함되어야 해요: %+v", preview.ProviderRequest)
 	}
 }

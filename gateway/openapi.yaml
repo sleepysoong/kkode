@@ -3851,6 +3851,10 @@ components:
         model:
           type: string
           maxLength: 128
+        working_directory:
+          type: string
+          maxLength: 262144
+          description: project_root 기준 subdir scoped AGENTS/CLAUDE/KKODE instruction을 고르는 힌트예요.
         metadata:
           type: object
           maxProperties: 64
@@ -3962,6 +3966,8 @@ components:
         provider:
           type: string
         model:
+          type: string
+        working_directory:
           type: string
         mcp_servers:
           type: array
@@ -4764,6 +4770,8 @@ components:
         provider:
           type: string
         model:
+          type: string
+        working_directory:
           type: string
         mcp_servers:
           type: array

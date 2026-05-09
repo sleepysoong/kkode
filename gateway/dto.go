@@ -154,14 +154,16 @@ type TodoListResponse struct {
 
 // RunStartRequest는 gateway RunStarter가 실제 agent 실행에 넘기는 요청이에요.
 type RunStartRequest struct {
-	SessionID  string            `json:"session_id"`
-	Prompt     string            `json:"prompt"`
-	Provider   string            `json:"provider,omitempty"`
-	Model      string            `json:"model,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
-	MCPServers []string          `json:"mcp_servers,omitempty"`
-	Skills     []string          `json:"skills,omitempty"`
-	Subagents  []string          `json:"subagents,omitempty"`
+	SessionID string `json:"session_id"`
+	Prompt    string `json:"prompt"`
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// WorkingDirectory는 project root 기준 subdir scoped project instruction을 고르는 힌트예요.
+	WorkingDirectory string            `json:"working_directory,omitempty"`
+	Metadata         map[string]string `json:"metadata,omitempty"`
+	MCPServers       []string          `json:"mcp_servers,omitempty"`
+	Skills           []string          `json:"skills,omitempty"`
+	Subagents        []string          `json:"subagents,omitempty"`
 	// EnabledTools가 비어 있지 않으면 이번 run의 local tool surface를 이 목록으로 제한해요.
 	EnabledTools []string `json:"enabled_tools,omitempty"`
 	// DisabledTools는 이번 run의 local tool surface에서 제외할 tool 이름 목록이에요.
@@ -177,16 +179,18 @@ type RunStartRequest struct {
 
 // RunDTO는 gateway에서 관리하는 실행 단위예요. gateway RunStarter가 실행을 접수하거나 완료했을 때 생성해요.
 type RunDTO struct {
-	ID         string   `json:"id"`
-	SessionID  string   `json:"session_id"`
-	TurnID     string   `json:"turn_id,omitempty"`
-	Status     string   `json:"status"`
-	Prompt     string   `json:"prompt,omitempty"`
-	Provider   string   `json:"provider,omitempty"`
-	Model      string   `json:"model,omitempty"`
-	MCPServers []string `json:"mcp_servers,omitempty"`
-	Skills     []string `json:"skills,omitempty"`
-	Subagents  []string `json:"subagents,omitempty"`
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	TurnID    string `json:"turn_id,omitempty"`
+	Status    string `json:"status"`
+	Prompt    string `json:"prompt,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// WorkingDirectory는 실행 당시 적용한 project root 기준 작업 subdir 힌트예요.
+	WorkingDirectory string   `json:"working_directory,omitempty"`
+	MCPServers       []string `json:"mcp_servers,omitempty"`
+	Skills           []string `json:"skills,omitempty"`
+	Subagents        []string `json:"subagents,omitempty"`
 	// EnabledTools/DisabledTools는 실행 당시 local tool surface 선택이에요.
 	EnabledTools  []string `json:"enabled_tools,omitempty"`
 	DisabledTools []string `json:"disabled_tools,omitempty"`

@@ -225,7 +225,16 @@ func TestProjectInstructionBlocksLoadRootFiles(t *testing.T) {
 	if err := os.WriteFile(root+"/AGENTS.md", []byte("repo rule token=ghp_123456789012345678901234567890123456"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(root+"/services/api", 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(root+"/CLAUDE.md", []byte("claude rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root+"/services/AGENTS.md", []byte("service rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root+"/services/api/KKODE.md", []byte("api rule"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	blocks := ProjectInstructionBlocks(root)
@@ -234,6 +243,10 @@ func TestProjectInstructionBlocksLoadRootFiles(t *testing.T) {
 	}
 	if !strings.Contains(blocks[0], "AGENTS.md") || !strings.Contains(blocks[0], "[REDACTED]") || strings.Contains(blocks[0], "ghp_") || !strings.Contains(blocks[1], "CLAUDE.md") {
 		t.Fatalf("project instruction block redaction/labels가 이상해요: %+v", blocks)
+	}
+	blocks = ProjectInstructionBlocks(root, "services/api")
+	if len(blocks) != 4 || !strings.Contains(blocks[2], "service rule") || !strings.Contains(blocks[3], "api rule") {
+		t.Fatalf("scoped project instruction block이 이상해요: %+v", blocks)
 	}
 	t.Setenv("KKODE_PROJECT_INSTRUCTIONS", "off")
 	if blocks := ProjectInstructionBlocks(root); len(blocks) != 0 {

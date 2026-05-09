@@ -20,11 +20,11 @@ type ProjectInstruction struct {
 	Truncated bool
 }
 
-func LoadProjectInstructions(root string) []ProjectInstruction {
+func LoadProjectInstructions(root string, scopes ...string) []ProjectInstruction {
 	if !EnvBoolDefault("KKODE_PROJECT_INSTRUCTIONS", true) {
 		return nil
 	}
-	paths := projectInstructionPaths(root)
+	paths := projectInstructionPaths(root, scopes...)
 	out := make([]ProjectInstruction, 0, len(paths))
 	seen := map[string]bool{}
 	for _, path := range paths {
@@ -49,8 +49,8 @@ func LoadProjectInstructions(root string) []ProjectInstruction {
 	return out
 }
 
-func ProjectInstructionBlocks(root string) []string {
-	instructions := LoadProjectInstructions(root)
+func ProjectInstructionBlocks(root string, scopes ...string) []string {
+	instructions := LoadProjectInstructions(root, scopes...)
 	if len(instructions) == 0 {
 		return nil
 	}
@@ -65,7 +65,7 @@ func ProjectInstructionBlocks(root string) []string {
 	return blocks
 }
 
-func projectInstructionPaths(root string) []string {
+func projectInstructionPaths(root string, scopes ...string) []string {
 	paths := []string{}
 	if EnvBoolDefault("KKODE_GLOBAL_PROJECT_INSTRUCTIONS", false) {
 		home, err := os.UserHomeDir()
@@ -81,13 +81,51 @@ func projectInstructionPaths(root string) []string {
 		root = "."
 	}
 	if absRoot, err := filepath.Abs(root); err == nil {
-		paths = append(paths,
-			filepath.Join(absRoot, "AGENTS.md"),
-			filepath.Join(absRoot, "CLAUDE.md"),
-			filepath.Join(absRoot, "KKODE.md"),
-		)
+		for _, dir := range projectInstructionDirs(absRoot, scopes...) {
+			paths = append(paths,
+				filepath.Join(dir, "AGENTS.md"),
+				filepath.Join(dir, "CLAUDE.md"),
+				filepath.Join(dir, "KKODE.md"),
+			)
+		}
 	}
 	return paths
+}
+
+func projectInstructionDirs(root string, scopes ...string) []string {
+	root = filepath.Clean(root)
+	dirs := []string{root}
+	seen := map[string]bool{root: true}
+	for _, scope := range scopes {
+		scope = strings.TrimSpace(scope)
+		if scope == "" || scope == "." {
+			continue
+		}
+		target := scope
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(root, target)
+		}
+		target = filepath.Clean(target)
+		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
+			continue
+		}
+		rel, err := filepath.Rel(root, target)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		current := root
+		for _, part := range strings.Split(rel, string(os.PathSeparator)) {
+			if part == "" || part == "." {
+				continue
+			}
+			current = filepath.Join(current, part)
+			if !seen[current] {
+				seen[current] = true
+				dirs = append(dirs, current)
+			}
+		}
+	}
+	return dirs
 }
 
 func readProjectInstruction(path string) (ProjectInstruction, bool) {
