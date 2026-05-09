@@ -123,4 +123,4 @@ go run ./cmd/kkode-agent \
 - [x] command 실행 결과에 exit code, stderr, elapsed time을 구조화해서 남겨야해요.
 - [x] output guardrail을 substring에서 schema/policy 함수 기반으로 확장해야해요.
 - [x] Copilot custom agent definition과 `agent.Config` 사이 변환 helper를 추가해야해요.
-- [ ] OpenAI hosted MCP tool과 local MCP client tool을 같은 설정 파일에서 붙일 수 있게 해야해요.
+- [x] OpenAI hosted MCP tool과 local MCP client tool을 같은 설정 파일에서 붙일 수 있게 해야해요.

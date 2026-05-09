@@ -5,7 +5,21 @@ import (
 
 	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/providers/openai"
+	ktools "github.com/sleepysoong/kkode/tools"
 )
+
+type MCPToolSurfaces struct {
+	Hosted []llm.Tool
+	Local  llm.ToolSet
+}
+
+func MCPToolsFromProviderOptions(opts ProviderOptions) MCPToolSurfaces {
+	defs, handlers := ktools.MCPTools(opts.MCPServers)
+	return MCPToolSurfaces{
+		Hosted: openAICompatibleMCPTools(opts),
+		Local:  llm.NewToolSet(defs, handlers),
+	}
+}
 
 // openAICompatibleMCPTools는 HTTP MCP server만 OpenAI-compatible built-in MCP tool로 바꿔요.
 // stdio MCP는 Copilot 같은 session provider config로 전달하고, OpenAI Responses에는 직접 붙이지 않아요.

@@ -267,10 +267,11 @@ func TestMergeProviderOptionsLetsExplicitMCPOverrideDefaults(t *testing.T) {
 
 func TestBuildProviderWithOptionsMapsHTTPMCPToOpenAITools(t *testing.T) {
 	t.Setenv("KKODE_DEFAULT_MCP", "off")
-	handle, err := BuildProviderWithOptions("openai", t.TempDir(), ProviderOptions{MCPServers: map[string]llm.MCPServer{
+	opts := ProviderOptions{MCPServers: map[string]llm.MCPServer{
 		"context7": {Kind: llm.MCPHTTP, Name: "context7", URL: "https://mcp.context7.com/mcp", Headers: map[string]string{"CONTEXT7_API_KEY": "test"}},
 		"serena":   {Kind: llm.MCPStdio, Name: "serena", Command: "uvx"},
-	}})
+	}}
+	handle, err := BuildProviderWithOptions("openai", t.TempDir(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,6 +281,17 @@ func TestBuildProviderWithOptionsMapsHTTPMCPToOpenAITools(t *testing.T) {
 	tool := handle.BaseRequest.Tools[0]
 	if tool.Kind != llm.ToolBuiltin || tool.Name != "mcp" || tool.ProviderOptions["server_label"] != "context7" || tool.ProviderOptions["server_url"] != "https://mcp.context7.com/mcp" {
 		t.Fatalf("OpenAI-compatible MCP tool 변환이 이상해요: %+v", tool)
+	}
+	surfaces := MCPToolsFromProviderOptions(opts)
+	if len(surfaces.Hosted) != 1 || surfaces.Hosted[0].ProviderOptions["server_label"] != "context7" {
+		t.Fatalf("hosted MCP surface가 provider 기본 request와 같아야 해요: %+v", surfaces.Hosted)
+	}
+	localDefs, localHandlers := surfaces.Local.Parts()
+	if len(localDefs) != 1 || localDefs[0].Name != "mcp_call" {
+		t.Fatalf("local MCP surface는 같은 manifest에서 mcp_call을 노출해야 해요: %+v", localDefs)
+	}
+	if _, ok := localHandlers["mcp_call"]; !ok {
+		t.Fatal("local MCP surface에는 mcp_call handler가 필요해요")
 	}
 }
 
