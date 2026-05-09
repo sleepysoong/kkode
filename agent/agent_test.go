@@ -23,6 +23,14 @@ func (p *fakeProvider) Generate(ctx context.Context, req llm.Request) (*llm.Resp
 	return &llm.Response{Text: "완료했어요", Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: "완료했어요"}}}, nil
 }
 
+type staticProvider struct{ text string }
+
+func (p staticProvider) Name() string                   { return "static" }
+func (p staticProvider) Capabilities() llm.Capabilities { return llm.Capabilities{} }
+func (p staticProvider) Generate(ctx context.Context, req llm.Request) (*llm.Response, error) {
+	return &llm.Response{Text: p.text, Output: []llm.Item{{Type: llm.ItemMessage, Role: llm.RoleAssistant, Content: p.text}}}, nil
+}
+
 func TestAgentRunWithWorkspaceTool(t *testing.T) {
 	ws, err := workspace.New(t.TempDir())
 	if err != nil {
@@ -104,3 +112,42 @@ func TestOutputGuardrailBlocks(t *testing.T) {
 		t.Fatalf("response=%#v", res)
 	}
 }
+
+func TestGuardrailPolicies(t *testing.T) {
+	ag, err := New(Config{Provider: staticProvider{text: `{"status":"ok"}`}, Model: "fake", Guardrails: Guardrails{
+		InputPolicies: []GuardrailPolicy{
+			GuardrailPolicyFunc("no-debug", func(text string) error {
+				if strings.Contains(text, "debug") {
+					return errPolicy("debug prompt")
+				}
+				return nil
+			}),
+		},
+		OutputPolicies: []GuardrailPolicy{JSONRequiredFieldsPolicy("run-result", "status", "summary")},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ag.Run(context.Background(), "debug this"); err == nil || !strings.Contains(err.Error(), "no-debug") {
+		t.Fatalf("input policy should block debug prompt: %v", err)
+	}
+	res, err := ag.Run(context.Background(), "return json")
+	if err == nil || !strings.Contains(err.Error(), "run-result") || !strings.Contains(err.Error(), "summary") {
+		t.Fatalf("output schema policy should block missing field: res=%+v err=%v", res, err)
+	}
+
+	ag, err = New(Config{Provider: staticProvider{text: `{"status":"ok","summary":"done"}`}, Model: "fake", Guardrails: Guardrails{
+		OutputPolicies: []GuardrailPolicy{JSONRequiredFieldsPolicy("run-result", "status", "summary")},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = ag.Run(context.Background(), "return json")
+	if err != nil || res == nil || res.Response.Text == "" {
+		t.Fatalf("valid schema policy should pass: res=%+v err=%v", res, err)
+	}
+}
+
+type errPolicy string
+
+func (e errPolicy) Error() string { return string(e) }

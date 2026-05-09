@@ -121,6 +121,6 @@ go run ./cmd/kkode-agent \
 - [ ] `TraceEvent`를 OpenTelemetry span으로 내보내는 exporter를 추가해야해요.
 - [ ] `workspace_apply_patch` tool을 별도로 추가해서 큰 파일 전체 쓰기보다 안전한 patch 흐름을 제공해야해요.
 - [x] command 실행 결과에 exit code, stderr, elapsed time을 구조화해서 남겨야해요.
-- [ ] output guardrail을 substring에서 schema/policy 함수 기반으로 확장해야해요.
+- [x] output guardrail을 substring에서 schema/policy 함수 기반으로 확장해야해요.
 - [ ] Copilot custom agent definition과 `agent.Config` 사이 변환 helper를 추가해야해요.
 - [ ] OpenAI hosted MCP tool과 local MCP client tool을 같은 설정 파일에서 붙일 수 있게 해야해요.

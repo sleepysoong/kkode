@@ -423,6 +423,8 @@ type TraceEvent struct {
 type Guardrails struct {
     BlockedSubstrings       []string
     BlockedOutputSubstrings []string
+    InputPolicies           []GuardrailPolicy
+    OutputPolicies          []GuardrailPolicy
     RedactTranscript        bool
 }
 
@@ -468,6 +470,9 @@ ag, err := agent.New(agent.Config{
     Guardrails: agent.Guardrails{
         BlockedSubstrings:       []string{"비밀키 출력"},
         BlockedOutputSubstrings: []string{"sk-"},
+        OutputPolicies: []agent.GuardrailPolicy{
+            agent.JSONRequiredFieldsPolicy("run-result", "summary", "status"),
+        },
         RedactTranscript:        true,
     },
     Observer: agent.ObserverFunc(func(ctx context.Context, ev agent.TraceEvent) {
@@ -1186,7 +1191,7 @@ resp, err := router.Generate(ctx, llm.Request{
 
 - 기본 CLI는 write/replace/apply_patch/shell을 바로 실행할 수 있어요.
 - workspace path는 root 바깥으로 탈출할 수 없게 막지만, root 안 보호 경로 차단은 하지 않아요.
-- `agent.Guardrails`는 입력/출력 substring 차단을 제공하고, 더 정교한 정책은 별도 guardrail 구현체로 확장해야해요.
+- `agent.Guardrails`는 입력/출력 substring 차단과 `GuardrailPolicy` hook을 제공해서 adapter가 JSON 필수 field 같은 schema형 검사나 조직별 policy 함수를 agent loop 바깥에서 재사용할 수 있게 해요.
 - transcript는 `SaveRedacted`로 token/API key 패턴을 지워 저장할 수 있어요.
 - provider OAuth/token 저장은 provider package가 소유해야해요.
 - MCP tool은 session/tool attachment로 취급하고, core provider method로 섞지 않아야해요.

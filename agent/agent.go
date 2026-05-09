@@ -57,6 +57,8 @@ type TraceEvent struct {
 type Guardrails struct {
 	BlockedSubstrings       []string
 	BlockedOutputSubstrings []string
+	InputPolicies           []GuardrailPolicy
+	OutputPolicies          []GuardrailPolicy
 	RedactTranscript        bool
 }
 
