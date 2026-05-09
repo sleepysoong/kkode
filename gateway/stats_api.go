@@ -3,6 +3,7 @@ package gateway
 import (
 	"net/http"
 
+	"github.com/sleepysoong/kkode/llm"
 	"github.com/sleepysoong/kkode/session"
 )
 
@@ -16,6 +17,7 @@ type StatsResponse struct {
 	Artifacts      int            `json:"artifacts"`
 	TotalRuns      int            `json:"total_runs"`
 	Runs           map[string]int `json:"runs"`
+	RunUsage       UsageDTO       `json:"run_usage"`
 	TotalResources int            `json:"total_resources"`
 	Resources      map[string]int `json:"resources"`
 }
@@ -48,9 +50,14 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		Artifacts:      stats.Artifacts,
 		TotalRuns:      sumIntMap(stats.Runs),
 		Runs:           cloneIntMap(stats.Runs),
+		RunUsage:       usageDTOFromLLM(stats.RunUsage),
 		TotalResources: sumIntMap(stats.Resources),
 		Resources:      cloneIntMap(stats.Resources),
 	}
+}
+
+func usageDTOFromLLM(usage llm.Usage) UsageDTO {
+	return UsageDTO{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, TotalTokens: usage.TotalTokens, ReasoningTokens: usage.ReasoningTokens}
 }
 
 func sumIntMap(in map[string]int) int {

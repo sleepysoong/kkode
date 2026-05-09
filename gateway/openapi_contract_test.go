@@ -271,7 +271,7 @@ func TestOpenAPISchemaContractCoversGatewayDTOs(t *testing.T) {
 
 func TestOpenAPIStatsResponseRequiresDashboardTotals(t *testing.T) {
 	required := readOpenAPISchemaRequired(t, "StatsResponse")
-	for _, field := range []string{"sessions", "turns", "events", "todos", "checkpoints", "artifacts", "total_runs", "runs", "total_resources", "resources"} {
+	for _, field := range []string{"sessions", "turns", "events", "todos", "checkpoints", "artifacts", "total_runs", "runs", "run_usage", "total_resources", "resources"} {
 		if !required[field] {
 			t.Fatalf("StatsResponse OpenAPI required에 %s 필드가 필요해요: %+v", field, sortedKeys(required))
 		}

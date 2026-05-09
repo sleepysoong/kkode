@@ -659,6 +659,8 @@ CLI와 gateway run prompt는 공통 `app.MaxAgentPromptBytes` 262144 byte envelo
 
 Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provider `llm.Request.MaxOutputTokens`로 전달하며 SQLite run record와 retry 요청에 보존해요. 완료된 run은 provider `llm.Response.Usage`를 `runs.usage_json`과 `RunDTO.usage`에 보존해서 run list/detail/event/export 응답만으로 adapter가 token dashboard와 비용 ledger를 만들 수 있어요. Provider live smoke의 `max_output_tokens`는 최대 8192 token, `timeout_ms`는 최대 300000ms로 제한하고 `/capabilities.limits`에 노출해서 provider debug 호출이 장시간 generation으로 runtime slot을 오래 점유하지 않게 해요.
 
+`GET /api/v1/stats`는 `runs.usage_json`의 input/output/total/reasoning token 합계를 `run_usage`로 반환해요. Dashboard adapter는 전체 run page를 스캔하지 않고 저장소 규모, run 상태 분포, resource 분포, token 사용량을 한 응답에서 그릴 수 있어요.
+
 파일 content preview의 `max_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한하고, `workspace.ReadFileRange`는 `max_bytes` 생략 시에도 최대 8388608 byte까지만 읽으며 더 큰 명시값은 거부하고 UTF-8 안전 경계에서 잘라요.
 
 Workspace write는 최종 content를 8388608 byte 이하로 제한하고, `ApplyPatch` 입력은 1048576 byte 이하로 제한하며, patch 결과 파일도 write envelope를 넘으면 적용 전에 거부해요.

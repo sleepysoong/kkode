@@ -567,6 +567,14 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 	if err := scanGroupedCounts(ctx, s.db, `SELECT kind, COUNT(1) FROM resources GROUP BY kind`, stats.Resources); err != nil {
 		return stats, err
 	}
+	if err := s.db.QueryRowContext(ctx, `SELECT
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.InputTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.OutputTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.TotalTokens') AS INTEGER)), 0),
+		COALESCE(SUM(CAST(json_extract(CAST(usage_json AS TEXT), '$.ReasoningTokens') AS INTEGER)), 0)
+		FROM runs`).Scan(&stats.RunUsage.InputTokens, &stats.RunUsage.OutputTokens, &stats.RunUsage.TotalTokens, &stats.RunUsage.ReasoningTokens); err != nil {
+		return stats, err
+	}
 	return stats, nil
 }
 

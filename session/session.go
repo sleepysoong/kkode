@@ -148,6 +148,7 @@ type StoreStats struct {
 	Checkpoints int
 	Artifacts   int
 	Runs        map[string]int
+	RunUsage    llm.Usage
 	Resources   map[string]int
 }
 

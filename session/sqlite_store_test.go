@@ -114,7 +114,7 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go"}); err != nil {
+	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(ctx, Checkpoint{ID: "cp_stats", SessionID: sess.ID, TurnID: turn.ID}); err != nil {
@@ -135,6 +135,9 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	}
 	if stats.Runs["completed"] != 1 || stats.Resources[string(ResourceSkill)] != 1 {
 		t.Fatalf("grouped stats가 이상해요: %+v", stats)
+	}
+	if stats.RunUsage.InputTokens != 11 || stats.RunUsage.OutputTokens != 7 || stats.RunUsage.TotalTokens != 18 || stats.RunUsage.ReasoningTokens != 3 {
+		t.Fatalf("run usage stats가 이상해요: %+v", stats.RunUsage)
 	}
 }
 

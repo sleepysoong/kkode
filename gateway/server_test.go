@@ -295,7 +295,7 @@ func TestGatewayStatsEndpoint(t *testing.T) {
 	if err := store.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveRun(ctx, session.Run{ID: "run_stats", SessionID: sess.ID, Status: "running", Prompt: "go"}); err != nil {
+	if _, err := store.SaveRun(ctx, session.Run{ID: "run_stats", SessionID: sess.ID, Status: "running", Prompt: "go", Usage: llm.Usage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9, ReasoningTokens: 2}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveTodos(ctx, sess.ID, []session.Todo{{ID: "todo_stats", Content: "status", Status: session.TodoPending, UpdatedAt: time.Now().UTC()}}); err != nil {
@@ -318,7 +318,7 @@ func TestGatewayStatsEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &stats); err != nil {
 		t.Fatal(err)
 	}
-	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.TotalRuns != 1 || stats.Runs["running"] != 1 || stats.TotalResources != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.TotalRuns != 1 || stats.Runs["running"] != 1 || stats.RunUsage.TotalTokens != 9 || stats.RunUsage.ReasoningTokens != 2 || stats.TotalResources != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
 		t.Fatalf("stats 응답이 이상해요: %+v", stats)
 	}
 }
