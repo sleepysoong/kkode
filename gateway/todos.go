@@ -151,7 +151,12 @@ func (s *Server) saveTodos(ctx context.Context, sessionID string, todos []sessio
 }
 
 func todoListResponse(w http.ResponseWriter, r *http.Request, todos []session.Todo) (TodoListResponse, bool) {
-	out := todoDTOs(todos)
+	status := session.TodoStatus(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !validTodoStatus(status) {
+		writeError(w, r, http.StatusBadRequest, "invalid_todo_list", "status는 pending, in_progress, completed, cancelled 중 하나여야 해요")
+		return TodoListResponse{}, false
+	}
+	out := todoDTOs(filterTodosByStatus(todos, status))
 	limit, ok := queryLimitParam(w, r, "limit", len(out), 5000, "invalid_todo_list")
 	if !ok {
 		return TodoListResponse{}, false
@@ -162,6 +167,19 @@ func todoListResponse(w http.ResponseWriter, r *http.Request, todos []session.To
 	}
 	page, returned, truncated := pageSlice(out, limit, offset)
 	return TodoListResponse{Todos: page, TotalTodos: len(out), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated}, true
+}
+
+func filterTodosByStatus(todos []session.Todo, status session.TodoStatus) []session.Todo {
+	if status == "" {
+		return todos
+	}
+	filtered := make([]session.Todo, 0, len(todos))
+	for _, todo := range todos {
+		if todo.Status == status {
+			filtered = append(filtered, todo)
+		}
+	}
+	return filtered
 }
 
 func todosFromDTOs(dtos []TodoDTO, now time.Time) ([]session.Todo, error) {

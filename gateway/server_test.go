@@ -4936,13 +4936,27 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
+	listed = TodoListResponse{}
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
 	if len(listed.Todos) != 1 || listed.TotalTodos != 2 || listed.Limit != 1 || listed.NextOffset != 1 || !listed.ResultTruncated {
 		t.Fatalf("todo list pagination metadata가 이상해요: %+v", listed)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/todos?status=pending&limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = TodoListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Todos) != 1 || listed.Todos[0].ID != "todo_2" || listed.TotalTodos != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
+		t.Fatalf("todo status filter가 이상해요: %+v", listed)
+	}
+	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc", "status=invalid"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/todos?"+query, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
@@ -4954,6 +4968,9 @@ func TestGatewayMutatesSessionTodos(t *testing.T) {
 		}
 		if strings.Contains(query, "offset") && !strings.Contains(rec.Body.String(), "offset") {
 			t.Fatalf("todo list offset 오류는 offset을 설명해야 해요: query=%s body=%s", query, rec.Body.String())
+		}
+		if strings.Contains(query, "status") && !strings.Contains(rec.Body.String(), "status") {
+			t.Fatalf("todo list status 오류는 status를 설명해야 해요: query=%s body=%s", query, rec.Body.String())
 		}
 	}
 

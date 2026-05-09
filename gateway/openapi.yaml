@@ -1145,6 +1145,12 @@ paths:
       summary: session todo 목록을 반환해요.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, in_progress, completed, cancelled]
+          description: todo status 값으로 좁혀요.
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
