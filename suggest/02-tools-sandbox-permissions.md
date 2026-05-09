@@ -43,9 +43,11 @@ workspace_read_file(path, offset_line?, limit_lines?, max_bytes?)
 workspace_list(path, recursive?, max_entries?)
 workspace_glob(pattern, include_ignored?)
 workspace_grep(pattern, path_glob?, regex?, case_sensitive?, include_ignored?)
-workspace_apply_patch(patch_text)
-workspace_edit(path, old, new, expected_replacements?)
-workspace_write_file(path, content, overwrite?)
+file_apply_patch(patch_text)
+file_edit(path, old, new, expected_replacements?)
+file_write(path, content)
+file_delete(path, recursive?)
+file_move(source, destination, overwrite?)
 workspace_run_command(command, args, timeout_ms?, env?)
 workspace_diagnostics(path?)
 workspace_lsp(operation, path, line, character, query?)
@@ -58,8 +60,6 @@ question(header, question, options)
 ```text
 web_fetch(url, max_bytes?)
 web_search(query, recency?, domains?)
-workspace_move_file(old_path, new_path)
-workspace_delete_file(path)
 git_status()
 git_diff(path?)
 git_apply_reverse(checkpoint_id)
@@ -237,7 +237,7 @@ type FileSnapshot struct {
 }
 ```
 
-`workspace_apply_patch`, `workspace_edit`, `workspace_write_file`, `workspace_delete_file`, `workspace_move_file`은 실행 전후 snapshot을 남겨야해요.
+`file_apply_patch`, `file_edit`, `file_write`, `file_delete`, `file_move`는 실행 전후 snapshot을 남겨야해요.
 
 CLI는 이렇게 가요.
 
@@ -269,7 +269,7 @@ type LSPClient interface {
 
 ## 테스트 제안
 
-- YOLO 모드에서 `file_write`, `file_apply_patch`, `shell_run`이 별도 승인 없이 실행되는지 테스트해요.
+- YOLO 모드에서 `file_write`, `file_delete`, `file_move`, `file_apply_patch`, `shell_run`이 별도 승인 없이 실행되는지 테스트해요.
 - `workspace` root 밖 path escape가 의도한 경계 정책대로 처리되는지 테스트해요.
 - `file_apply_patch` 실패 시 파일 내용이 부분 적용으로 망가지지 않는지 테스트해요.
 - line range read가 `max_bytes`를 지키는지 테스트해요.
@@ -281,7 +281,7 @@ type LSPClient interface {
 
 한때 `permission/` 패키지와 deny/ask/allow rule engine을 실험했지만, 사용자 지시에 따라 제거했어요. 현재 코드에는 `permission/` 디렉터리, `workspace.NewWithPermission`, protected path 차단, ask/deny UX가 존재하지 않아요. 앞으로도 이 프로젝트의 기본 정책은 “권한 기능 자체가 없는 YOLO 실행”이에요.
 
-남긴 것은 권한이 아니라 실행 도구의 품질 개선이에요. `file_read` range 옵션, `file_glob`, `file_grep`, `file_apply_patch`, `file_edit.expected_replacements`, 구조화 `shell_run` 결과는 계속 유지해요.
+남긴 것은 권한이 아니라 실행 도구의 품질 개선이에요. `file_read` range 옵션, `file_glob`, `file_grep`, `file_delete`, `file_move`, `file_apply_patch`, `file_edit.expected_replacements`, 구조화 `shell_run` 결과는 계속 유지해요.
 
 ## 현재 구현 상태: YOLO 실행
 

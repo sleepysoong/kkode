@@ -47,11 +47,9 @@
 
 ### 작업
 
-- `permission/` package 추가해요.
-- `allow/ask/deny` rule과 wildcard를 지원해요.
-- protected path 기본 deny/ask를 추가해요.
+- 권한 기능은 만들지 않고 YOLO 실행 정책을 유지해요.
 - `workspace_read_file` line range를 지원해요.
-- `workspace_glob`, `workspace_grep`, `workspace_apply_patch`를 추가해요.
+- `file_glob`, `file_grep`, `file_apply_patch`, `file_delete`, `file_move`를 유지해요.
 - command result를 구조화해요.
 
 ### 완료 기준
@@ -193,7 +191,6 @@ kkode/
 ├── cmd/kkode/
 ├── runtime/
 ├── session/
-├── permission/
 ├── sandbox/
 ├── workspace/
 ├── codeintel/
@@ -213,9 +210,9 @@ kkode/
 ## P0 issue 초안
 
 1. `session: add JSON-backed session store and resume support`
-2. `permission: add allow/ask/deny rule engine`
-3. `workspace: add grep/glob/read-range/apply-patch tools`
-4. `checkpoint: snapshot file edits and implement undo`
+2. `tools: keep YOLO execution bounded and observable`
+3. `checkpoint: snapshot file edits and implement undo`
+4. `workspace: maintain grep/glob/read-range/apply-patch/delete/move tools`
 5. `context: load AGENTS.md/CLAUDE.md/KKODE.md into requests`
 6. `mcp: implement stdio client and tool registry adapter`
 7. `cli: replace kkode-agent with kkode run/session/auth/models`

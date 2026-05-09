@@ -536,9 +536,12 @@ Run metadata에 다음을 저장해요.
 - `GET /sessions/{id}`
 - `POST /runs`
 - `GET /runs/{id}/events`
-- `GET /files/list`
-- `GET /files`
-- `PUT /files`
+- `GET /api/v1/files`
+- `GET /api/v1/files/content`
+- `PUT /api/v1/files/content`
+- `POST /api/v1/files/delete`
+- `POST /api/v1/files/move`
+- `POST /api/v1/files/patch`
 - `GET /artifacts`
 - `GET /todos`
 
