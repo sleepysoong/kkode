@@ -112,6 +112,9 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	if err := ws.WriteFile("main.go", "package main\n\n// Run executes work.\nfunc Run() {}\n"); err != nil {
 		t.Fatal(err)
 	}
+	if err := ws.WriteFile("extra.go", "package main\n"); err != nil {
+		t.Fatal(err)
+	}
 	defs, handlers := StandardTools(SurfaceOptions{Workspace: ws, WebMaxBytes: 1024})
 	if _, ok := handlers["file_read"]; !ok {
 		t.Fatal("file_read handler는 표준 surface에 있어야 해요")
@@ -135,6 +138,20 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	}
 	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_symbols", Arguments: []byte(`{"query":"Run","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("negative lsp_symbols limit은 거부해야 해요: %v", err)
+	}
+	result, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "file_list", Arguments: []byte(`{"path":".","limit":1}`)})
+	if err != nil || !strings.Contains(result.Output, "[result_truncated]") {
+		t.Fatalf("file_list limit truncation metadata가 필요해요: result=%+v err=%v", result, err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "file_list", Arguments: []byte(`{"path":".","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative file_list limit은 거부해야 해요: %v", err)
+	}
+	result, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "file_glob", Arguments: []byte(`{"pattern":"*.go","limit":1}`)})
+	if err != nil || !strings.Contains(result.Output, "[result_truncated]") {
+		t.Fatalf("file_glob limit truncation metadata가 필요해요: result=%+v err=%v", result, err)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "file_glob", Arguments: []byte(`{"pattern":"*.go","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative file_glob limit은 거부해야 해요: %v", err)
 	}
 	if err := ws.WriteFile("outline.go", "package main\n\ntype Worker struct{}\nfunc (Worker) Run() {}\nfunc (Worker) Stop() {}\n"); err != nil {
 		t.Fatal(err)

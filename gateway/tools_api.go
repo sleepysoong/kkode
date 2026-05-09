@@ -599,9 +599,9 @@ func toolExampleArguments(name string) map[string]any {
 	case "file_prune_checkpoints":
 		return map[string]any{"keep_latest": 50}
 	case "file_list":
-		return map[string]any{"path": "."}
+		return map[string]any{"path": ".", "limit": 100}
 	case "file_glob":
-		return map[string]any{"pattern": "**/*.go"}
+		return map[string]any{"pattern": "**/*.go", "limit": 100}
 	case "file_grep":
 		return map[string]any{"pattern": "TODO", "path_glob": "**/*.go", "max_matches": 20}
 	case "shell_run":
