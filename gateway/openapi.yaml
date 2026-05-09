@@ -5069,6 +5069,10 @@ components:
         ended_at:
           type: string
           format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          description: ended_at와 started_at 차이를 millisecond로 계산한 실행 시간이에요. 아직 끝나지 않았거나 timestamp가 부족하면 생략돼요.
         error:
           type: string
         usage:

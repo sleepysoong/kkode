@@ -201,6 +201,7 @@ type RunDTO struct {
 	EventsURL     string            `json:"events_url,omitempty"`
 	StartedAt     time.Time         `json:"started_at,omitempty"`
 	EndedAt       time.Time         `json:"ended_at,omitempty"`
+	DurationMS    int64             `json:"duration_ms,omitempty"`
 	Error         string            `json:"error,omitempty"`
 	Usage         *UsageDTO         `json:"usage,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`

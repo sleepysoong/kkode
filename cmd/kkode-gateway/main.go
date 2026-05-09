@@ -289,7 +289,8 @@ func syncRunStarter(store session.Store, opts runOptions) gateway.RunStarter {
 		if runID == "" {
 			runID = session.NewID("run")
 		}
-		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, WorkingDirectory: req.WorkingDirectory, MaxOutputTokens: req.MaxOutputTokens, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: time.Now().UTC(), Metadata: req.Metadata}
+		ended := time.Now().UTC()
+		run := &gateway.RunDTO{ID: runID, SessionID: req.SessionID, Prompt: req.Prompt, Provider: providerName, Model: model, WorkingDirectory: req.WorkingDirectory, MaxOutputTokens: req.MaxOutputTokens, MCPServers: cloneStringSlice(req.MCPServers), Skills: cloneStringSlice(req.Skills), Subagents: cloneStringSlice(req.Subagents), EnabledTools: cloneStringSlice(req.EnabledTools), DisabledTools: cloneStringSlice(req.DisabledTools), ContextBlocks: cloneStringSlice(req.ContextBlocks), Status: "completed", StartedAt: started, EndedAt: ended, DurationMS: ended.Sub(started).Milliseconds(), Metadata: req.Metadata}
 		if result != nil {
 			run.TurnID = result.Turn.ID
 			if result.Turn.Response != nil {

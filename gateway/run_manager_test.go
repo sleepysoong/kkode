@@ -363,6 +363,15 @@ func TestAsyncRunManagerPersistsRunState(t *testing.T) {
 	}
 }
 
+func TestRunDTOFromSessionIncludesDuration(t *testing.T) {
+	started := time.Unix(10, 0).UTC()
+	ended := started.Add(1500 * time.Millisecond)
+	run := runDTOFromSession(session.Run{ID: "run_duration", SessionID: "sess_1", Status: "completed", StartedAt: started, EndedAt: ended})
+	if run.DurationMS != 1500 {
+		t.Fatalf("duration_ms = %d", run.DurationMS)
+	}
+}
+
 func TestAsyncRunManagerUsesDurableClaimForDuplicateRunID(t *testing.T) {
 	ctx := context.Background()
 	store, err := session.OpenSQLite(t.TempDir() + "/state.db")

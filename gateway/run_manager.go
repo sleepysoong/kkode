@@ -738,7 +738,9 @@ func sessionRunFromDTO(run RunDTO) session.Run {
 }
 
 func runDTOFromSession(run session.Run) *RunDTO {
-	return &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MaxOutputTokens: run.MaxOutputTokens, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Usage: toUsageDTO(run.Usage), Metadata: cloneMap(run.Metadata)}
+	dto := &RunDTO{ID: run.ID, SessionID: run.SessionID, TurnID: run.TurnID, Status: run.Status, Prompt: run.Prompt, Provider: run.Provider, Model: run.Model, WorkingDirectory: run.WorkingDirectory, MaxOutputTokens: run.MaxOutputTokens, MCPServers: cloneStringSlice(run.MCPServers), Skills: cloneStringSlice(run.Skills), Subagents: cloneStringSlice(run.Subagents), EnabledTools: cloneStringSlice(run.EnabledTools), DisabledTools: cloneStringSlice(run.DisabledTools), ContextBlocks: cloneStringSlice(run.ContextBlocks), EventsURL: run.EventsURL, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Usage: toUsageDTO(run.Usage), Metadata: cloneMap(run.Metadata)}
+	applyRunDerivedFields(dto)
+	return dto
 }
 
 func usageFromDTO(usage *UsageDTO) llm.Usage {
@@ -776,7 +778,22 @@ func cloneRun(run *RunDTO) *RunDTO {
 		usage := *run.Usage
 		out.Usage = &usage
 	}
+	applyRunDerivedFields(&out)
 	return &out
+}
+
+func applyRunDerivedFields(run *RunDTO) {
+	if run == nil {
+		return
+	}
+	run.DurationMS = runDurationMS(run.StartedAt, run.EndedAt)
+}
+
+func runDurationMS(started time.Time, ended time.Time) int64 {
+	if started.IsZero() || ended.IsZero() || ended.Before(started) {
+		return 0
+	}
+	return ended.Sub(started).Milliseconds()
 }
 
 func cloneStringSlice(in []string) []string {

@@ -657,7 +657,7 @@ Run preview와 provider test의 `max_preview_bytes`/`max_result_bytes`도 최대
 
 CLI와 gateway run prompt는 공통 `app.MaxAgentPromptBytes` 262144 byte envelope를 써요. gateway는 `/capabilities.limits.max_run_prompt_bytes`로 노출하고, `kkode-agent`는 stdin prompt를 같은 크기 + 1 byte까지만 읽은 뒤 초과를 거부해서 pipe 입력이 unbounded memory read가 되지 않게 해요.
 
-Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provider `llm.Request.MaxOutputTokens`로 전달하며 SQLite run record와 retry 요청에 보존해요. 완료된 run은 provider `llm.Response.Usage`를 `runs.usage_json`과 `RunDTO.usage`에 보존해서 run list/detail/event/export 응답만으로 adapter가 token dashboard와 비용 ledger를 만들 수 있어요. Provider live smoke의 `max_output_tokens`는 최대 8192 token, `timeout_ms`는 최대 300000ms로 제한하고 `/capabilities.limits`에 노출해서 provider debug 호출이 장시간 generation으로 runtime slot을 오래 점유하지 않게 해요.
+Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provider `llm.Request.MaxOutputTokens`로 전달하며 SQLite run record와 retry 요청에 보존해요. 완료된 run은 provider `llm.Response.Usage`를 `runs.usage_json`과 `RunDTO.usage`에 보존하고, `started_at`/`ended_at`에서 계산한 `duration_ms`를 `RunDTO`에 노출해서 run list/detail/event/export 응답만으로 adapter가 token dashboard, 비용 ledger, latency view를 만들 수 있어요. Provider live smoke의 `max_output_tokens`는 최대 8192 token, `timeout_ms`는 최대 300000ms로 제한하고 `/capabilities.limits`에 노출해서 provider debug 호출이 장시간 generation으로 runtime slot을 오래 점유하지 않게 해요.
 
 `GET /api/v1/stats`는 `runs.usage_json`의 input/output/total/reasoning token 합계를 `run_usage`로 반환하고 provider/model 기준 합계를 `run_usage_by_provider`, `run_usage_by_model`로 반환해요. Dashboard adapter는 전체 run page를 스캔하지 않고 저장소 규모, run 상태 분포, resource 분포, token 사용량을 한 응답에서 그릴 수 있어요.
 
