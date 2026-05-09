@@ -545,7 +545,7 @@ func (s *SQLiteStore) LoadSession(ctx context.Context, id string) (*Session, err
 }
 
 func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
-	stats := StoreStats{Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
+	stats := StoreStats{RunEventsByType: map[string]int{}, Runs: map[string]int{}, RunDurationByProvider: map[string]RunDurationStats{}, RunDurationByModel: map[string]RunDurationStats{}, RunUsageByProvider: map[string]llm.Usage{}, RunUsageByModel: map[string]llm.Usage{}, Resources: map[string]int{}}
 	counts := []struct {
 		query string
 		out   *int
@@ -564,6 +564,9 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		}
 	}
 	if err := scanGroupedCounts(ctx, s.db, `SELECT status, COUNT(1) FROM runs GROUP BY status`, stats.Runs); err != nil {
+		return stats, err
+	}
+	if err := scanGroupedCounts(ctx, s.db, `SELECT type, COUNT(1) FROM run_events GROUP BY type`, stats.RunEventsByType); err != nil {
 		return stats, err
 	}
 	if err := loadRunDurationStats(ctx, s.db, &stats); err != nil {

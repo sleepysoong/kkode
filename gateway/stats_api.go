@@ -13,6 +13,7 @@ type StatsResponse struct {
 	Turns                 int                            `json:"turns"`
 	Events                int                            `json:"events"`
 	RunEvents             int                            `json:"run_events"`
+	RunEventsByType       map[string]int                 `json:"run_events_by_type"`
 	Todos                 int                            `json:"todos"`
 	Checkpoints           int                            `json:"checkpoints"`
 	Artifacts             int                            `json:"artifacts"`
@@ -61,6 +62,7 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		Turns:                 stats.Turns,
 		Events:                stats.Events,
 		RunEvents:             stats.RunEvents,
+		RunEventsByType:       cloneIntMap(stats.RunEventsByType),
 		Todos:                 stats.Todos,
 		Checkpoints:           stats.Checkpoints,
 		Artifacts:             stats.Artifacts,

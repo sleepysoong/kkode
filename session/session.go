@@ -145,6 +145,7 @@ type StoreStats struct {
 	Turns                 int
 	Events                int
 	RunEvents             int
+	RunEventsByType       map[string]int
 	Todos                 int
 	Checkpoints           int
 	Artifacts             int
