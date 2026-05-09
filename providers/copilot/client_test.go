@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	ghcopilot "github.com/github/copilot-sdk/go"
+	kagent "github.com/sleepysoong/kkode/agent"
 	"github.com/sleepysoong/kkode/llm"
 )
 
@@ -78,6 +79,42 @@ func TestToCopilotMCPServerAndAgent(t *testing.T) {
 	agent := ToCopilotAgent(llm.Agent{Name: "researcher", Prompt: "inspect files", Tools: []string{"view"}, MCPServers: map[string]llm.MCPServer{"x": {Kind: llm.MCPHTTP, URL: "https://example.test/mcp"}}})
 	if agent.Name != "researcher" || len(agent.MCPServers) != 1 {
 		t.Fatalf("agent=%#v", agent)
+	}
+}
+
+func TestAgentFromConfigBuildsCopilotCustomAgent(t *testing.T) {
+	infer := true
+	cfg := kagent.Config{
+		Name:          "planner",
+		Instructions:  "plan carefully",
+		ContextBlocks: []string{"skill context", "  ", "subagent context"},
+		ToolSet:       llm.NewToolSet([]llm.Tool{{Name: "file_read"}, {Name: "shell_run"}}, nil),
+		Tools:         []llm.Tool{{Name: "file_read"}, {Name: "lsp_symbols"}},
+	}
+	agent := AgentFromConfig(cfg, AgentConfigOptions{
+		DisplayName: "Planner",
+		Description: "Plans repo edits",
+		Skills:      []string{"review", "", "test"},
+		Infer:       &infer,
+		MCPServers: map[string]llm.MCPServer{
+			"context7": {Kind: llm.MCPHTTP, URL: "https://mcp.context7.com/mcp", Tools: []string{"resolve-library-id"}},
+		},
+	})
+	if agent.Name != "planner" || agent.DisplayName != "Planner" || agent.Description != "Plans repo edits" || agent.Infer == nil || !*agent.Infer {
+		t.Fatalf("agent identity가 이상해요: %+v", agent)
+	}
+	if agent.Prompt != "plan carefully\n\nskill context\n\n---\n\nsubagent context" {
+		t.Fatalf("prompt가 이상해요: %q", agent.Prompt)
+	}
+	if len(agent.Tools) != 3 || agent.Tools[0] != "file_read" || agent.Tools[1] != "shell_run" || agent.Tools[2] != "lsp_symbols" {
+		t.Fatalf("tool 이름은 순서 보존 + 중복 제거가 필요해요: %+v", agent.Tools)
+	}
+	if len(agent.Skills) != 2 || agent.Skills[0] != "review" || agent.Skills[1] != "test" {
+		t.Fatalf("skill 목록 정리가 이상해요: %+v", agent.Skills)
+	}
+	copilotAgent := CustomAgentConfigFromAgentConfig(cfg, AgentConfigOptions{MCPServers: agent.MCPServers})
+	if copilotAgent.Name != "planner" || len(copilotAgent.MCPServers) != 1 {
+		t.Fatalf("Copilot custom agent 변환이 이상해요: %+v", copilotAgent)
 	}
 }
 

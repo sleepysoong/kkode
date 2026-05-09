@@ -221,7 +221,7 @@ erDiagram
 - `providers/copilot`
   - GitHub Copilot SDK session adapter예요.
   - `SessionConverter`가 표준 request를 SDK session prompt payload로 바꾸고, `Client`가 SDK caller 역할을 해요.
-  - session, streaming event 변환도 공통 `AdaptedProvider` 경로로 처리하고, custom tool, MCP/custom agent/skill mapping을 제공해요.
+  - session, streaming event 변환도 공통 `AdaptedProvider` 경로로 처리하고, custom tool, MCP/custom agent/skill mapping을 제공해요. `AgentFromConfig`와 `CustomAgentConfigFromAgentConfig`로 provider-neutral `agent.Config`를 Copilot custom agent 정의로 재사용할 수 있어요.
   - SDK session send에서 누적하는 final response text는 최대 8388608 byte envelope로 제한해요.
 - `providers/codexcli`
   - `codex exec --json` subprocess adapter예요.

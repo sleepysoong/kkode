@@ -946,9 +946,11 @@ func (SessionConverter) ConvertResponse(ctx context.Context, result llm.Provider
 func ToCopilotTool(tool llm.Tool, handler llm.ToolHandler) copilot.Tool
 func ToCopilotMCPServer(server llm.MCPServer) copilot.MCPServerConfig
 func ToCopilotAgent(agent llm.Agent) copilot.CustomAgentConfig
+func AgentFromConfig(cfg agent.Config, opts AgentConfigOptions) llm.Agent
+func CustomAgentConfigFromAgentConfig(cfg agent.Config, opts AgentConfigOptions) copilot.CustomAgentConfig
 ```
 
-`Generate`는 `llm.AdaptedProvider`를 통해 `SessionConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter와 `ProviderStreamCaller`를 통해 표준 request를 SDK session prompt payload로 먼저 바꾼 뒤 Copilot session event stream에 전달해요. converter는 표준 request를 SDK session prompt payload로 만들고, caller는 Copilot session 생성, send, close lifetime을 관리해요. SDK session send에서 누적하는 final response text는 8388608 byte envelope로 제한하고, SDK가 요청하는 실행 확인은 별도 권한 시스템으로 끌어올리지 않고 기존 YOLO 승인 handler로 즉시 승인해요.
+`Generate`는 `llm.AdaptedProvider`를 통해 `SessionConverter`와 `Client.CallProvider`를 연결해요. `Stream`도 같은 adapter와 `ProviderStreamCaller`를 통해 표준 request를 SDK session prompt payload로 먼저 바꾼 뒤 Copilot session event stream에 전달해요. converter는 표준 request를 SDK session prompt payload로 만들고, caller는 Copilot session 생성, send, close lifetime을 관리해요. `AgentFromConfig`는 provider-neutral `agent.Config`의 이름, 지침/context block, tool 정의를 Copilot custom agent용 `llm.Agent`로 옮기고, `CustomAgentConfigFromAgentConfig`는 SDK config까지 바로 만들어서 앱/gateway가 Copilot SDK type을 직접 조립하지 않아도 돼요. SDK session send에서 누적하는 final response text는 8388608 byte envelope로 제한하고, SDK가 요청하는 실행 확인은 별도 권한 시스템으로 끌어올리지 않고 기존 YOLO 승인 handler로 즉시 승인해요.
 
 예제는 이렇게 써요.
 
