@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sleepysoong/kkode/providers/httpjson"
@@ -36,6 +38,8 @@ type RunRuntimeStatsGetter func() RunRuntimeStats
 // Config는 gateway HTTP server 구성값이에요.
 type Config struct {
 	Store                session.Store
+	StatePath            string
+	MinStateFreeBytes    int64
 	Version              string
 	Commit               string
 	APIKey               string
@@ -844,6 +848,9 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 		ok = false
 	}
 	checks = append(checks, providerAuthChecks...)
+	if check, ok := stateDiskDiagnosticCheck(s.cfg.StatePath, s.cfg.MinStateFreeBytes); ok {
+		checks = append(checks, check)
+	}
 	checks = append(checks, s.cfg.DiagnosticChecks...)
 	failingChecks := failingDiagnosticCheckNames(checks)
 	if len(failingChecks) > 0 {
@@ -855,6 +862,26 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, parts
 		resp.RunRuntime = &stats
 	}
 	writeJSON(w, resp)
+}
+
+func stateDiskDiagnosticCheck(statePath string, minFreeBytes int64) (DiagnosticCheckDTO, bool) {
+	statePath = strings.TrimSpace(statePath)
+	if statePath == "" || minFreeBytes <= 0 {
+		return DiagnosticCheckDTO{}, false
+	}
+	dir := filepath.Dir(statePath)
+	if dir == "" {
+		dir = "."
+	}
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(dir, &stat); err != nil {
+		return DiagnosticCheckDTO{Name: "state_disk", Status: "error", Message: err.Error()}, true
+	}
+	freeBytes := int64(stat.Bavail) * int64(stat.Bsize)
+	if freeBytes < minFreeBytes {
+		return DiagnosticCheckDTO{Name: "state_disk", Status: "warning", Message: fmt.Sprintf("state path free bytes %d below %d", freeBytes, minFreeBytes)}, true
+	}
+	return DiagnosticCheckDTO{Name: "state_disk", Status: "ok", Message: fmt.Sprintf("state path free bytes %d", freeBytes)}, true
 }
 
 func (s *Server) missingRuntimeWiring() []string {

@@ -1741,8 +1741,11 @@ func TestResourceDTORedactionMasksSecretConfig(t *testing.T) {
 
 func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	store := openTestStore(t)
+	statePath := filepath.Join(t.TempDir(), "state.db")
 	srv, err := New(Config{
 		Store:             store,
+		StatePath:         statePath,
+		MinStateFreeBytes: 1,
 		Version:           "test",
 		MaxRequestBytes:   123,
 		MaxConcurrentRuns: 2,
@@ -1807,10 +1810,13 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 	if diagnostics.RunRuntime == nil || diagnostics.RunRuntime.TrackedRuns != 3 || diagnostics.RunRuntime.QueuedRuns != 1 || diagnostics.RunRuntime.RunningRuns != 1 || diagnostics.RunRuntime.AvailableRunSlots != 1 || diagnostics.RunRuntime.RunTimeoutSeconds != 60 {
 		t.Fatalf("runtime diagnostics가 이상해요: %+v", diagnostics.RunRuntime)
 	}
-	var sawStore, sawDefaultMCP, sawRunValidator, sawProviderTester, sawProviderAuth bool
+	var sawStore, sawStateDisk, sawDefaultMCP, sawRunValidator, sawProviderTester, sawProviderAuth bool
 	for _, check := range diagnostics.Checks {
 		if check.Name == "store" && check.Status == "ok" {
 			sawStore = true
+		}
+		if check.Name == "state_disk" && check.Status == "ok" {
+			sawStateDisk = true
 		}
 		if check.Name == "default_mcp.context7" && check.Status == "configured" {
 			sawDefaultMCP = true
@@ -1825,7 +1831,7 @@ func TestGatewayDiagnosticsReportsRuntimeWiring(t *testing.T) {
 			sawProviderAuth = true
 		}
 	}
-	if !sawStore || !sawDefaultMCP || !sawRunValidator || !sawProviderTester || !sawProviderAuth {
+	if !sawStore || !sawStateDisk || !sawDefaultMCP || !sawRunValidator || !sawProviderTester || !sawProviderAuth {
 		t.Fatalf("store/default MCP/runtime wiring/provider auth check가 필요해요: %+v", diagnostics.Checks)
 	}
 }
@@ -1969,9 +1975,11 @@ func TestGatewayDiagnosticsMarksInjectedFailingCheckUnhealthy(t *testing.T) {
 func TestGatewayDiagnosticsTreatsWarningsAsHealthy(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{
-		Store:            store,
-		Version:          "test",
-		DiagnosticChecks: []DiagnosticCheckDTO{{Name: "default_mcp.serena", Status: "warning", Message: "uvx가 없어요"}},
+		Store:             store,
+		StatePath:         filepath.Join(t.TempDir(), "state.db"),
+		MinStateFreeBytes: 1 << 60,
+		Version:           "test",
+		DiagnosticChecks:  []DiagnosticCheckDTO{{Name: "default_mcp.serena", Status: "warning", Message: "uvx가 없어요"}},
 		RunStarter: func(ctx context.Context, req RunStartRequest) (*RunDTO, error) {
 			return &RunDTO{}, nil
 		},
@@ -2023,12 +2031,20 @@ func TestGatewayDiagnosticsTreatsWarningsAsHealthy(t *testing.T) {
 	if !diagnostics.OK || len(diagnostics.FailingChecks) != 0 {
 		t.Fatalf("warning diagnostics should not make gateway unhealthy: %+v", diagnostics)
 	}
+	sawInjectedWarning := false
+	sawStateDiskWarning := false
 	for _, check := range diagnostics.Checks {
 		if check.Name == "default_mcp.serena" && check.Status == "warning" {
-			return
+			sawInjectedWarning = true
+			continue
+		}
+		if check.Name == "state_disk" && check.Status == "warning" {
+			sawStateDiskWarning = true
 		}
 	}
-	t.Fatalf("warning diagnostics check should remain visible: %+v", diagnostics.Checks)
+	if !sawInjectedWarning || !sawStateDiskWarning {
+		t.Fatalf("warning diagnostics check should remain visible: %+v", diagnostics.Checks)
+	}
 }
 
 func TestGatewayDiagnosticsMarksMissingRuntimeWiringUnhealthy(t *testing.T) {

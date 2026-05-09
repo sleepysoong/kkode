@@ -44,6 +44,7 @@ func run(args []string) error {
 	corsOrigins := fs.String("cors-origins", app.EnvDefault("KKODE_CORS_ORIGINS", ""), "쉼표로 구분한 허용 CORS origin 목록이에요")
 	accessLog := fs.Bool("access-log", app.EnvBool("KKODE_ACCESS_LOG"), "JSONL access log를 stderr로 출력해요")
 	maxBodyBytes := fs.Int64("max-body-bytes", app.EnvInt64("KKODE_MAX_BODY_BYTES", 32<<20), "gateway API 요청 body 최대 byte 수예요. 음수면 비활성화해요")
+	minStateFreeBytes := fs.Int64("min-state-free-bytes", app.EnvInt64("KKODE_MIN_STATE_FREE_BYTES", 100<<20), "diagnostics에서 warning으로 표시할 state DB filesystem 최소 여유 byte예요. 0이면 비활성화해요")
 	maxConcurrentRuns := fs.Int("max-concurrent-runs", app.EnvInt("KKODE_MAX_CONCURRENT_RUNS", 4), "동시에 running 상태로 실행할 background run 최대 개수예요. 0 이하면 제한하지 않아요")
 	runTimeout := fs.Duration("run-timeout", envDuration("KKODE_RUN_TIMEOUT", 0), "background run 실행 timeout이에요. 0이면 제한하지 않아요")
 	readHeaderTimeout := fs.Duration("read-header-timeout", envDuration("KKODE_READ_HEADER_TIMEOUT", 10*time.Second), "HTTP read header timeout이에요")
@@ -87,6 +88,8 @@ func run(args []string) error {
 	}
 	srv, err := gateway.New(gateway.Config{
 		Store:                store,
+		StatePath:            *statePath,
+		MinStateFreeBytes:    *minStateFreeBytes,
 		Version:              *version,
 		APIKey:               *apiKey,
 		AllowLocalhostNoAuth: *allowLocalhostNoAuth,
