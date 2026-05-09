@@ -4546,6 +4546,19 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 	if !page.ResultTruncated && page.NextOffset != 0 {
 		t.Fatalf("tool page next offset이 없어야 해요: %+v", page)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tools?limit=0", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("zero-limit tool page status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var emptyPage ToolListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &emptyPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(emptyPage.Tools) != 0 || emptyPage.TotalTools != listed.TotalTools || emptyPage.Limit != 0 || emptyPage.NextOffset != 0 || emptyPage.ResultTruncated {
+		t.Fatalf("limit=0 tool page는 stale cursor를 내면 안 돼요: %+v", emptyPage)
+	}
 	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/tools?"+query, nil)
 		rec = httptest.NewRecorder()

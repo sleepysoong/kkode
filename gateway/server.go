@@ -2157,6 +2157,9 @@ func nextOffset(offset int, returned int, truncated bool) int {
 	if !truncated {
 		return 0
 	}
+	if returned <= 0 {
+		return 0
+	}
 	return offset + returned
 }
 

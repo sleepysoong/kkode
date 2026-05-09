@@ -260,11 +260,11 @@ func (s *Server) listMCPServerToolsLike(w http.ResponseWriter, r *http.Request, 
 }
 
 func pageSlice[T any](items []T, limit int, offset int) ([]T, int, bool) {
-	if limit < 0 {
-		limit = 0
-	}
 	if offset < 0 {
 		offset = 0
+	}
+	if limit <= 0 {
+		return []T{}, 0, false
 	}
 	if offset >= len(items) {
 		return []T{}, 0, false
