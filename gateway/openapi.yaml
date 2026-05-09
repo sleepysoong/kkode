@@ -5051,6 +5051,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Resource'
+        total_resources:
+          type: integer
+          description: 현재 필터에 매칭되는 resource 총개수예요.
         limit:
           type: integer
         offset:

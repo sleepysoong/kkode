@@ -40,3 +40,7 @@ type ResourceStore interface {
 	ListResources(ctx context.Context, q ResourceQuery) ([]Resource, error)
 	DeleteResource(ctx context.Context, kind ResourceKind, id string) error
 }
+
+type ResourceCounter interface {
+	CountResources(ctx context.Context, q ResourceQuery) (int, error)
+}

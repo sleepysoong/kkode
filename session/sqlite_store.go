@@ -1579,20 +1579,7 @@ func (s *SQLiteStore) ListResources(ctx context.Context, q ResourceQuery) ([]Res
 		limit = 100
 	}
 	query := `SELECT id, kind, name, description, enabled, config_json, created_at, updated_at FROM resources`
-	args := []any{}
-	where := []string{}
-	if q.Kind != "" {
-		where = append(where, `kind = ?`)
-		args = append(args, string(q.Kind))
-	}
-	if q.Name != "" {
-		where = append(where, `name = ?`)
-		args = append(args, q.Name)
-	}
-	if q.Enabled != nil {
-		where = append(where, `enabled = ?`)
-		args = append(args, boolInt(*q.Enabled))
-	}
+	where, args := resourceQueryWhere(q)
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
@@ -1616,6 +1603,35 @@ func (s *SQLiteStore) ListResources(ctx context.Context, q ResourceQuery) ([]Res
 		out = append(out, resource)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteStore) CountResources(ctx context.Context, q ResourceQuery) (int, error) {
+	query := `SELECT COUNT(*) FROM resources`
+	where, args := resourceQueryWhere(q)
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func resourceQueryWhere(q ResourceQuery) ([]string, []any) {
+	where := []string{}
+	args := []any{}
+	if q.Kind != "" {
+		where = append(where, `kind = ?`)
+		args = append(args, string(q.Kind))
+	}
+	if q.Name != "" {
+		where = append(where, `name = ?`)
+		args = append(args, q.Name)
+	}
+	if q.Enabled != nil {
+		where = append(where, `enabled = ?`)
+		args = append(args, boolInt(*q.Enabled))
+	}
+	return where, args
 }
 
 func (s *SQLiteStore) DeleteResource(ctx context.Context, kind ResourceKind, id string) error {

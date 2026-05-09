@@ -387,6 +387,13 @@ func TestResourceStorePersistsManifests(t *testing.T) {
 	if len(byName) != 1 || byName[0].ID != saved.ID {
 		t.Fatalf("resource name list가 이상해요: %+v", byName)
 	}
+	count, err := store.CountResources(ctx, ResourceQuery{Kind: ResourceMCPServer, Name: "fs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("resource count가 이상해요: %d", count)
+	}
 	second, err := store.SaveResource(ctx, Resource{Kind: ResourceMCPServer, Name: "ctx", Enabled: enabled, Config: []byte(`{"url":"https://example.test/mcp"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -401,6 +408,13 @@ func TestResourceStorePersistsManifests(t *testing.T) {
 	}
 	if len(firstPage) != 1 || len(offsetPage) != 1 || firstPage[0].ID == offsetPage[0].ID {
 		t.Fatalf("resource offset list가 이상해요: first=%+v offset=%+v", firstPage, offsetPage)
+	}
+	count, err = store.CountResources(ctx, ResourceQuery{Kind: ResourceMCPServer, Enabled: &enabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("resource enabled count가 이상해요: %d", count)
 	}
 	if err := store.DeleteResource(ctx, ResourceMCPServer, saved.ID); err != nil {
 		t.Fatal(err)

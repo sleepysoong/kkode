@@ -37,6 +37,7 @@ type ResourceDTO struct {
 
 type ResourceListResponse struct {
 	Resources       []ResourceDTO `json:"resources"`
+	TotalResources  int           `json:"total_resources,omitempty"`
 	Limit           int           `json:"limit,omitempty"`
 	Offset          int           `json:"offset,omitempty"`
 	NextOffset      int           `json:"next_offset,omitempty"`
@@ -210,7 +211,20 @@ func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store ses
 		value := raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
 		enabled = &value
 	}
-	resources, err := store.ListResources(r.Context(), session.ResourceQuery{Kind: route.Kind, Name: name, Enabled: enabled, Limit: limit + 1, Offset: offset})
+	query := session.ResourceQuery{Kind: route.Kind, Name: name, Enabled: enabled}
+	totalResources := 0
+	if counter, ok := store.(session.ResourceCounter); ok {
+		total, err := counter.CountResources(r.Context(), query)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "count_resources_failed", err.Error())
+			return
+		}
+		totalResources = total
+	}
+	pageQuery := query
+	pageQuery.Limit = limit + 1
+	pageQuery.Offset = offset
+	resources, err := store.ListResources(r.Context(), pageQuery)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_resources_failed", err.Error())
 		return
@@ -220,7 +234,7 @@ func (s *Server) listResources(w http.ResponseWriter, r *http.Request, store ses
 	for _, resource := range resources {
 		out = append(out, publicResourceDTO(resource))
 	}
-	writeJSON(w, ResourceListResponse{Resources: out, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+	writeJSON(w, ResourceListResponse{Resources: out, TotalResources: totalResources, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) saveResource(w http.ResponseWriter, r *http.Request, store session.ResourceStore, route resourceRoute, id string) {

@@ -2867,8 +2867,27 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	if listed.Resources[0].Name != "planner" {
 		t.Fatalf("subagent name filter가 이상해요: %+v", listed)
 	}
-	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
+	if listed.TotalResources != 1 {
+		t.Fatalf("resource name filter total이 이상해요: %+v", listed)
+	}
+	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("resource list metadata가 이상해요: %+v", listed)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?limit=1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	listed = ResourceListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Resources) != 1 || listed.TotalResources != 2 {
+		t.Fatalf("subagent first page가 이상해요: %+v", listed)
+	}
+	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
+		t.Fatalf("resource first page metadata가 이상해요: %+v", listed)
 	}
 	firstPageID := listed.Resources[0].ID
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/subagents?limit=1&offset=1", nil)
@@ -2883,6 +2902,9 @@ func TestGatewayResourceManifestLifecycle(t *testing.T) {
 	}
 	if len(listed.Resources) != 1 || listed.Resources[0].ID == firstPageID {
 		t.Fatalf("subagent offset page가 이상해요: %+v", listed)
+	}
+	if listed.TotalResources != 2 {
+		t.Fatalf("resource total이 이상해요: %+v", listed)
 	}
 	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("resource offset metadata가 이상해요: %+v", listed)
