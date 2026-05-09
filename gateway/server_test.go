@@ -3048,12 +3048,17 @@ func (r *Runner) Run() {}
 	if len(symbols.Symbols) != 1 || symbols.Limit != 1 || !symbols.ResultTruncated {
 		t.Fatalf("LSP symbol limit metadata가 이상해요: %+v", symbols)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc"} {
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+root+"&query=run&"+query, nil)
+	for _, query := range []string{"limit=-1", "limit=abc", "query=" + strings.Repeat("x", maxLSPQueryTextBytes+1)} {
+		target := "/api/v1/lsp/symbols?project_root=" + root + "&query=run&" + query
+		if strings.HasPrefix(query, "query=") {
+			target = "/api/v1/lsp/symbols?project_root=" + root + "&" + query
+		}
+		req = httptest.NewRequest(http.MethodGet, target, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 LSP symbol limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 LSP symbol query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -3162,12 +3167,17 @@ func main() {
 	if defs.Limit != 50 || defs.ResultTruncated {
 		t.Fatalf("definition limit metadata가 이상해요: %+v", defs)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc"} {
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/definitions?project_root="+root+"&symbol=Runner&"+query, nil)
+	for _, query := range []string{"limit=-1", "limit=abc", "symbol=" + strings.Repeat("x", maxLSPQueryTextBytes+1)} {
+		target := "/api/v1/lsp/definitions?project_root=" + root + "&symbol=Runner&" + query
+		if strings.HasPrefix(query, "symbol=") {
+			target = "/api/v1/lsp/definitions?project_root=" + root + "&" + query
+		}
+		req = httptest.NewRequest(http.MethodGet, target, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 definition limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 definition query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -3260,12 +3270,17 @@ func main() {
 	if rename.Symbol != "Run" || rename.NewName != "Execute" || len(rename.Edits) < 2 || rename.Limit != 20 {
 		t.Fatalf("rename preview 결과가 이상해요: %+v", rename)
 	}
-	for _, query := range []string{"limit=-1", "limit=abc"} {
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/lsp/rename-preview?project_root="+root+"&path=main.go&line=11&column=4&new_name=Execute&"+query, nil)
+	for _, query := range []string{"limit=-1", "limit=abc", "new_name=" + strings.Repeat("x", maxLSPQueryTextBytes+1)} {
+		target := "/api/v1/lsp/rename-preview?project_root=" + root + "&path=main.go&line=11&column=4&new_name=Execute&" + query
+		if strings.HasPrefix(query, "new_name=") {
+			target = "/api/v1/lsp/rename-preview?project_root=" + root + "&path=main.go&line=11&column=4&" + query
+		}
+		req = httptest.NewRequest(http.MethodGet, target, nil)
 		rec = httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "limit") {
-			t.Fatalf("잘못된 rename preview limit은 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("잘못된 rename preview query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 

@@ -21,6 +21,7 @@ import (
 const defaultLSPFormatPreviewBytes = 1 << 20
 const maxLSPFormatPreviewBytes = 8 << 20
 const maxLSPFormatInputBytes = 8 << 20
+const maxLSPQueryTextBytes = 256
 
 var errLSPFileTooLarge = errors.New("LSP Go file is too large")
 
@@ -134,7 +135,12 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 		if !ok {
 			return
 		}
-		symbols, err := scanGoSymbols(root, strings.TrimSpace(r.URL.Query().Get("query")), limit+1)
+		query, err := lspQueryText(r, "query")
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_lsp_query", err.Error())
+			return
+		}
+		symbols, err := scanGoSymbols(root, query, limit+1)
 		if err != nil {
 			writeError(w, r, http.StatusInternalServerError, "scan_symbols_failed", err.Error())
 			return
@@ -193,7 +199,11 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 			writeError(w, r, http.StatusBadRequest, "invalid_lsp_position", err.Error())
 			return
 		}
-		newName := strings.TrimSpace(r.URL.Query().Get("new_name"))
+		newName, err := lspQueryText(r, "new_name")
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_lsp_query", err.Error())
+			return
+		}
 		limit, ok := queryLimitParam(w, r, "limit", 1000, 5000, "invalid_lsp_limit")
 		if !ok {
 			return
@@ -250,7 +260,9 @@ func (s *Server) handleLSP(w http.ResponseWriter, r *http.Request, parts []strin
 }
 
 func lspSymbolFromQuery(root string, r *http.Request) (string, error) {
-	if symbol := strings.TrimSpace(r.URL.Query().Get("symbol")); symbol != "" {
+	if symbol, err := lspQueryText(r, "symbol"); err != nil {
+		return "", err
+	} else if symbol != "" {
 		return symbol, nil
 	}
 	relPath := strings.TrimSpace(r.URL.Query().Get("path"))
@@ -274,6 +286,14 @@ func lspSymbolFromQuery(root string, r *http.Request) (string, error) {
 		column = 1
 	}
 	return scanGoIdentifierAt(root, relPath, line, column)
+}
+
+func lspQueryText(r *http.Request, key string) (string, error) {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if len(value) > maxLSPQueryTextBytes {
+		return "", fmt.Errorf("%s는 %d byte 이하여야 해요", key, maxLSPQueryTextBytes)
+	}
+	return value, nil
 }
 
 func scanGoIdentifierAt(root string, relPath string, line int, column int) (string, error) {
