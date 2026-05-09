@@ -6060,6 +6060,9 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if len(listed.Entries) != workspace.MaxListEntries || listed.TotalEntries != workspace.MaxListEntries || listed.NextOffset != 0 || !listed.EntriesTruncated {
 		t.Fatalf("files list workspace envelope metadata가 이상해요: %+v", listed)
 	}
+	if listed.Entries[0].Name != "entry-00000.txt" || listed.Entries[len(listed.Entries)-1].Name != fmt.Sprintf("entry-%05d.txt", workspace.MaxListEntries-1) {
+		t.Fatalf("files list workspace envelope should be lexically deterministic: first=%q last=%q", listed.Entries[0].Name, listed.Entries[len(listed.Entries)-1].Name)
+	}
 	invalidListParams := []struct {
 		name  string
 		query string

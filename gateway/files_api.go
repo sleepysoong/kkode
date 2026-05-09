@@ -1,9 +1,7 @@
 package gateway
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -307,22 +305,15 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func readBoundedDirEntries(path string, maxEntries int) ([]os.DirEntry, bool, error) {
-	dir, err := os.Open(path)
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil, false, err
 	}
-	defer dir.Close()
-	entries, err := dir.ReadDir(maxEntries + 1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, false, err
-	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	if len(entries) <= maxEntries {
-		sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 		return entries, false, nil
 	}
-	entries = entries[:maxEntries]
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	return entries, true, nil
+	return entries[:maxEntries], true, nil
 }
 
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
