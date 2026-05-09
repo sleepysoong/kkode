@@ -1825,7 +1825,7 @@ func TestGatewayCapabilitiesDiscovery(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &caps); err != nil {
 		t.Fatal(err)
 	}
-	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.RunMaxIterations != 8 || caps.Limits.RunWebMaxBytes != 1<<20 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxMCPProbeNameBytes != maxMCPProbeNameBytes || caps.Limits.MaxMCPProbeURIBytes != maxMCPProbeURIBytes || caps.Limits.MaxMCPProbeArgumentBytes != maxMCPProbeArgumentsBytes || caps.Limits.MaxMCPProbeOutputBytes != maxMCPProbeOutputBytes || caps.Limits.MaxFileContentBytes != maxFileContentBytes || caps.Limits.MaxSkillPreviewBytes != maxSkillPreviewBytes || caps.Limits.MaxSubagentPreviewBytes != maxSubagentPreviewPromptBytes || caps.Limits.MaxPromptTextBytes != maxPromptTextBytes || caps.Limits.MaxTranscriptMarkdownBytes != maxTranscriptMarkdownBytes || caps.Limits.MaxGitDiffBytes != maxGitDiffBytes || caps.Limits.MaxRunPreviewBytes != MaxRunPreviewBytes || caps.Limits.MaxRunOutputTokens != MaxRunOutputTokens || caps.Limits.MaxProviderTestPreviewBytes != MaxProviderTestPreviewBytes || caps.Limits.MaxProviderTestResultBytes != MaxProviderTestResultBytes || caps.Limits.MaxProviderTestOutputTokens != MaxProviderTestOutputTokens || caps.Limits.MaxProviderTestTimeoutMS != MaxProviderTestTimeoutMS || caps.Limits.MaxHTTPJSONResponseBytes != httpjson.MaxResponseBytes || caps.Limits.MaxWorkspaceFileReadBytes != workspace.MaxFileReadBytes || caps.Limits.MaxWorkspaceFileWriteBytes != workspace.MaxFileWriteBytes || caps.Limits.MaxWorkspaceListEntries != workspace.MaxListEntries || caps.Limits.MaxWorkspaceGlobMatches != workspace.MaxGlobMatches || caps.Limits.MaxWorkspaceGrepMatches != workspace.MaxGrepMatches || caps.Limits.MaxWorkspacePatchBytes != workspace.MaxPatchBytes || caps.Limits.MaxLSPFormatInputBytes != maxLSPFormatInputBytes || caps.Limits.MaxLSPFormatPreviewBytes != maxLSPFormatPreviewBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks || caps.Limits.MaxRequestIDBytes != maxRequestIDBytes || caps.Limits.MaxIdempotencyKeyBytes != maxIdempotencyKeyBytes || caps.Limits.MaxToolCallNameBytes != maxToolCallNameBytes || caps.Limits.MaxToolCallIDBytes != maxToolCallIDBytes || caps.Limits.MaxToolCallArgumentBytes != maxToolCallArgumentsBytes || caps.Limits.MaxToolCallOutputBytes != maxToolCallOutputBytes || caps.Limits.MaxToolCallWebBytes != maxToolCallWebBytes || caps.Limits.MaxShellTimeoutMS != workspace.MaxCommandTimeout.Milliseconds() || caps.Limits.MaxShellOutputBytes != workspace.MaxCommandOutputBytes || caps.Limits.MaxShellStderrBytes != workspace.MaxCommandStderrBytes {
+	if caps.Version != "test" || len(caps.Providers) != 1 || len(caps.Features) == 0 || len(caps.DefaultMCPServers) != 1 || caps.Limits.MaxRequestBytes != 1234 || caps.Limits.MaxConcurrentRuns != 3 || caps.Limits.RunTimeoutSeconds != 120 || caps.Limits.RunMaxIterations != 8 || caps.Limits.RunWebMaxBytes != 1<<20 || caps.Limits.MaxMCPHTTPResponseBytes != maxMCPHTTPResponseBytes || caps.Limits.MaxMCPProbeNameBytes != maxMCPProbeNameBytes || caps.Limits.MaxMCPProbeURIBytes != maxMCPProbeURIBytes || caps.Limits.MaxMCPProbeArgumentBytes != maxMCPProbeArgumentsBytes || caps.Limits.MaxMCPProbeOutputBytes != maxMCPProbeOutputBytes || caps.Limits.MaxFileContentBytes != maxFileContentBytes || caps.Limits.MaxFilePathBytes != maxFilePathBytes || caps.Limits.MaxFilePatternBytes != maxFilePatternBytes || caps.Limits.MaxSkillPreviewBytes != maxSkillPreviewBytes || caps.Limits.MaxSubagentPreviewBytes != maxSubagentPreviewPromptBytes || caps.Limits.MaxPromptTextBytes != maxPromptTextBytes || caps.Limits.MaxTranscriptMarkdownBytes != maxTranscriptMarkdownBytes || caps.Limits.MaxGitDiffBytes != maxGitDiffBytes || caps.Limits.MaxRunPreviewBytes != MaxRunPreviewBytes || caps.Limits.MaxRunOutputTokens != MaxRunOutputTokens || caps.Limits.MaxProviderTestPreviewBytes != MaxProviderTestPreviewBytes || caps.Limits.MaxProviderTestResultBytes != MaxProviderTestResultBytes || caps.Limits.MaxProviderTestOutputTokens != MaxProviderTestOutputTokens || caps.Limits.MaxProviderTestTimeoutMS != MaxProviderTestTimeoutMS || caps.Limits.MaxHTTPJSONResponseBytes != httpjson.MaxResponseBytes || caps.Limits.MaxWorkspaceFileReadBytes != workspace.MaxFileReadBytes || caps.Limits.MaxWorkspaceFileWriteBytes != workspace.MaxFileWriteBytes || caps.Limits.MaxWorkspaceListEntries != workspace.MaxListEntries || caps.Limits.MaxWorkspaceGlobMatches != workspace.MaxGlobMatches || caps.Limits.MaxWorkspaceGrepMatches != workspace.MaxGrepMatches || caps.Limits.MaxWorkspacePatchBytes != workspace.MaxPatchBytes || caps.Limits.MaxLSPFormatInputBytes != maxLSPFormatInputBytes || caps.Limits.MaxLSPFormatPreviewBytes != maxLSPFormatPreviewBytes || caps.Limits.MaxRunPromptBytes != maxRunPromptBytes || caps.Limits.MaxRunSelectorItems != maxRunSelectorItems || caps.Limits.MaxRunContextBlocks != maxRunContextBlocks || caps.Limits.MaxRequestIDBytes != maxRequestIDBytes || caps.Limits.MaxIdempotencyKeyBytes != maxIdempotencyKeyBytes || caps.Limits.MaxToolCallNameBytes != maxToolCallNameBytes || caps.Limits.MaxToolCallIDBytes != maxToolCallIDBytes || caps.Limits.MaxToolCallArgumentBytes != maxToolCallArgumentsBytes || caps.Limits.MaxToolCallOutputBytes != maxToolCallOutputBytes || caps.Limits.MaxToolCallWebBytes != maxToolCallWebBytes || caps.Limits.MaxShellTimeoutMS != workspace.MaxCommandTimeout.Milliseconds() || caps.Limits.MaxShellOutputBytes != workspace.MaxCommandOutputBytes || caps.Limits.MaxShellStderrBytes != workspace.MaxCommandStderrBytes {
 		t.Fatalf("capability discovery가 이상해요: %+v", caps)
 	}
 	capKeys := map[string]bool{}
@@ -6377,6 +6377,12 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 			t.Fatalf("%s file list param은 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
 		}
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files?project_root="+root+"&path="+strings.Repeat("x", maxFilePathBytes+1), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "path") {
+		t.Fatalf("긴 file list path는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path=docs/a.md&offset_line=2&limit_lines=1", nil)
 	rec = httptest.NewRecorder()
@@ -6413,6 +6419,14 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if content.ProjectRoot != root || content.Path != "docs/b.md" || content.CheckpointID == "" {
 		t.Fatalf("file write 응답은 canonical project/path를 반환해야 해요: %+v", content)
 	}
+	body = `{"project_root":"` + root + `","path":"` + strings.Repeat("x", maxFilePathBytes+1) + `","content":"new"}`
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/files/content", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "path") {
+		t.Fatalf("긴 file write path는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 
 	body = `{"project_root":" ` + root + ` ","source":" docs/b.md ","destination":" docs/moved.md "}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/move", bytes.NewBufferString(body))
@@ -6435,6 +6449,14 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	data, err = os.ReadFile(filepath.Join(root, "docs", "moved.md"))
 	if err != nil || string(data) != "new" {
 		t.Fatalf("file move 결과가 이상해요: content=%q err=%v", data, err)
+	}
+	body = `{"project_root":"` + root + `","source":"docs/moved.md","destination":"` + strings.Repeat("x", maxFilePathBytes+1) + `"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/files/move", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "destination") {
+		t.Fatalf("긴 file move destination은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	body = `{"project_root":"` + root + `","path":"docs/moved.md"}`
@@ -6512,6 +6534,12 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_file_checkpoint_list") {
 		t.Fatalf("workspace 밖 checkpoint path filter는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints?project_root="+url.QueryEscape(root)+"&path="+url.QueryEscape(strings.Repeat("x", maxFilePathBytes+1)), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "path") {
+		t.Fatalf("긴 checkpoint path filter는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints/"+deleted.CheckpointID+"?project_root="+url.QueryEscape(root), nil)
 	rec = httptest.NewRecorder()
@@ -6641,6 +6669,12 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 			t.Fatalf("%s file content range는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
 		}
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/content?project_root="+root+"&path="+strings.Repeat("x", maxFilePathBytes+1), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "path") {
+		t.Fatalf("긴 file content path는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
@@ -6703,6 +6737,18 @@ func TestGatewayFilesAPIGrepsWorkspace(t *testing.T) {
 		want := strings.Split(query, "=")[0]
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("잘못된 grep query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
+		}
+	}
+	for _, query := range []string{"pattern=" + strings.Repeat("x", maxFilePatternBytes+1), "path_glob=" + strings.Repeat("x", maxFilePatternBytes+1)} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&pattern=todo&"+query, nil)
+		if strings.HasPrefix(query, "pattern=") {
+			req = httptest.NewRequest(http.MethodGet, "/api/v1/files/grep?project_root="+url.QueryEscape(root)+"&"+query, nil)
+		}
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		want := strings.Split(query, "=")[0]
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("긴 grep query는 400이어야 해요: query=%s status=%d body=%s", query, rec.Code, rec.Body.String())
 		}
 	}
 }
@@ -6790,6 +6836,12 @@ func TestGatewayFilesAPIGlobsWorkspace(t *testing.T) {
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
 			t.Fatalf("%s glob param은 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
 		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/glob?project_root="+url.QueryEscape(root)+"&pattern="+strings.Repeat("x", maxFilePatternBytes+1), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "pattern") {
+		t.Fatalf("긴 glob pattern은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

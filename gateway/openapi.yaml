@@ -2715,6 +2715,10 @@ components:
           type: integer
         max_file_content_bytes:
           type: integer
+        max_file_path_bytes:
+          type: integer
+        max_file_pattern_bytes:
+          type: integer
         max_skill_preview_bytes:
           type: integer
         max_subagent_preview_prompt_bytes:

@@ -819,6 +819,8 @@ func gatewayLimits(cfg Config) LimitDTO {
 		MaxMCPProbeArgumentBytes:    maxMCPProbeArgumentsBytes,
 		MaxMCPProbeOutputBytes:      maxMCPProbeOutputBytes,
 		MaxFileContentBytes:         maxFileContentBytes,
+		MaxFilePathBytes:            maxFilePathBytes,
+		MaxFilePatternBytes:         maxFilePatternBytes,
 		MaxSkillPreviewBytes:        maxSkillPreviewBytes,
 		MaxSubagentPreviewBytes:     maxSubagentPreviewPromptBytes,
 		MaxPromptTextBytes:          maxPromptTextBytes,
