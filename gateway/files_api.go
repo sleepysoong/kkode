@@ -13,6 +13,7 @@ import (
 )
 
 const defaultFileContentBytes = 1 << 20
+const maxProjectRootBytes = 4096
 const maxFileContentBytes = workspace.MaxFileReadBytes
 const maxFilePathBytes = 4096
 const maxFilePatternBytes = 4096
@@ -833,9 +834,19 @@ func newWorkspace(projectRoot string) (*workspace.Workspace, string, error) {
 	if projectRoot == "" {
 		return nil, "", os.ErrInvalid
 	}
+	if err := validateProjectRootText(projectRoot); err != nil {
+		return nil, "", err
+	}
 	ws, err := workspace.New(projectRoot)
 	if err != nil {
 		return nil, "", err
 	}
 	return ws, ws.Root, nil
+}
+
+func validateProjectRootText(value string) error {
+	if len(value) > maxProjectRootBytes {
+		return fmt.Errorf("project_root는 %d byte 이하여야 해요", maxProjectRootBytes)
+	}
+	return nil
 }

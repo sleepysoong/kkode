@@ -502,6 +502,7 @@ type LimitDTO struct {
 	RunTimeoutSeconds           int   `json:"run_timeout_seconds,omitempty"`
 	RunMaxIterations            int   `json:"run_max_iterations,omitempty"`
 	RunWebMaxBytes              int64 `json:"run_web_max_bytes,omitempty"`
+	MaxProjectRootBytes         int   `json:"max_project_root_bytes,omitempty"`
 	MaxMCPHTTPResponseBytes     int   `json:"max_mcp_http_response_bytes,omitempty"`
 	MaxMCPProbeNameBytes        int   `json:"max_mcp_probe_name_bytes,omitempty"`
 	MaxMCPProbeURIBytes         int   `json:"max_mcp_probe_uri_bytes,omitempty"`

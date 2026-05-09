@@ -813,6 +813,7 @@ func gatewayLimits(cfg Config) LimitDTO {
 		RunTimeoutSeconds:           durationSeconds(cfg.RunTimeout),
 		RunMaxIterations:            cfg.RunMaxIterations,
 		RunWebMaxBytes:              cfg.RunWebMaxBytes,
+		MaxProjectRootBytes:         maxProjectRootBytes,
 		MaxMCPHTTPResponseBytes:     maxMCPHTTPResponseBytes,
 		MaxMCPProbeNameBytes:        maxMCPProbeNameBytes,
 		MaxMCPProbeURIBytes:         maxMCPProbeURIBytes,
@@ -1135,6 +1136,10 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projectRoot := strings.TrimSpace(r.URL.Query().Get("project_root"))
+	if err := validateProjectRootText(projectRoot); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_session_list", err.Error())
+		return
+	}
 	provider, model, ok := queryRunProviderModel(w, r, "invalid_session_list")
 	if !ok {
 		return
@@ -1183,6 +1188,10 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	req.Metadata = sanitizeRunMetadata(req.Metadata)
 	if req.ProjectRoot == "" || req.Provider == "" || req.Model == "" {
 		writeError(w, r, http.StatusBadRequest, "invalid_session", "project_root, provider, model이 필요해요")
+		return
+	}
+	if err := validateProjectRootText(req.ProjectRoot); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_session", err.Error())
 		return
 	}
 	if err := validateRunMetadata(req.Metadata); err != nil {
