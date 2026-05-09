@@ -154,6 +154,11 @@ func (s *Server) validateCheckpointTarget(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) getSessionCheckpoint(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string, checkpointID string) {
+	checkpointID = strings.TrimSpace(checkpointID)
+	if err := validateCheckpointIDText(checkpointID); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", err.Error())
+		return
+	}
 	cp, err := store.LoadCheckpoint(r.Context(), sessionID, checkpointID)
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, "checkpoint_not_found", err.Error())
@@ -173,15 +178,25 @@ func toCheckpointDTO(cp session.Checkpoint) CheckpointDTO {
 
 func validateCheckpointDTO(dto CheckpointDTO) error {
 	if dto.ID != "" {
-		if len(dto.ID) > maxCheckpointIDBytes {
-			return fmt.Errorf("checkpoint id는 %d byte 이하여야 해요", maxCheckpointIDBytes)
-		}
-		if !validRunMetadataKey(dto.ID) {
-			return fmt.Errorf("checkpoint id는 영문/숫자/._- 문자만 쓸 수 있어요")
+		if err := validateCheckpointIDText(dto.ID); err != nil {
+			return err
 		}
 	}
 	if len(dto.Payload) > maxCheckpointPayloadBytes {
 		return fmt.Errorf("checkpoint payload는 %d byte 이하여야 해요", maxCheckpointPayloadBytes)
+	}
+	return nil
+}
+
+func validateCheckpointIDText(id string) error {
+	if id == "" {
+		return fmt.Errorf("checkpoint id가 필요해요")
+	}
+	if len(id) > maxCheckpointIDBytes {
+		return fmt.Errorf("checkpoint id는 %d byte 이하여야 해요", maxCheckpointIDBytes)
+	}
+	if !validRunMetadataKey(id) {
+		return fmt.Errorf("checkpoint id는 영문/숫자/._- 문자만 쓸 수 있어요")
 	}
 	return nil
 }

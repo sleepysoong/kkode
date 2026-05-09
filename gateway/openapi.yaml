@@ -512,6 +512,8 @@ paths:
           schema:
             type: string
             maxLength: 128
+            pattern: '^[A-Za-z0-9_.-]+$'
+            maxLength: 128
         - in: query
           name: project_root
           required: true
@@ -2732,6 +2734,8 @@ components:
         max_file_pattern_bytes:
           type: integer
         max_file_checkpoint_id_bytes:
+          type: integer
+        max_checkpoint_id_bytes:
           type: integer
         max_resource_id_bytes:
           type: integer
