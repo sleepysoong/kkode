@@ -6190,6 +6190,30 @@ func TestGatewayFilesAPIListsReadsAndWrites(t *testing.T) {
 	if len(checkpointList.Checkpoints) != 1 || checkpointList.TotalCheckpoints == 0 || checkpointList.Limit != 1 || checkpointList.Checkpoints[0].ID == "" || checkpointList.Checkpoints[0].Entries == 0 {
 		t.Fatalf("file checkpoint list가 이상해요: %+v", checkpointList)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints?project_root="+url.QueryEscape(root)+"&path="+url.QueryEscape("docs/moved.md")+"&limit=10", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("checkpoint path list status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	checkpointList = FileCheckpointListResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpointList); err != nil {
+		t.Fatal(err)
+	}
+	if len(checkpointList.Checkpoints) == 0 || checkpointList.TotalCheckpoints != len(checkpointList.Checkpoints) || checkpointList.Limit != 10 || checkpointList.ResultTruncated {
+		t.Fatalf("file checkpoint path list가 이상해요: %+v", checkpointList)
+	}
+	for _, cp := range checkpointList.Checkpoints {
+		if !containsString(cp.Paths, "docs/moved.md") {
+			t.Fatalf("path filter는 matching checkpoint만 반환해야 해요: %+v", checkpointList)
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints?project_root="+url.QueryEscape(root)+"&path="+url.QueryEscape("../outside"), nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_file_checkpoint_list") {
+		t.Fatalf("workspace 밖 checkpoint path filter는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/files/checkpoints/"+deleted.CheckpointID+"?project_root="+url.QueryEscape(root), nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

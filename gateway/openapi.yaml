@@ -453,6 +453,11 @@ paths:
           schema:
             type: string
         - in: query
+          name: path
+          schema:
+            type: string
+          description: checkpoint metadata의 path 목록에 이 workspace path가 포함된 항목만 반환해요.
+        - in: query
           name: limit
           schema:
             type: integer

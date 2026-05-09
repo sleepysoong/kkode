@@ -653,7 +653,7 @@ POST /api/v1/runs/{run_id}/retry
 
 Session checkpoint 목록 API는 `turn_id`, `limit`, `offset` query를 받아서 외부 adapter가 session 전체 checkpoint를 스캔하지 않고 turn-scoped restore/debug view를 만들게 해요.
 
-파일 쓰기 전용 API와 표준 `file_write`/`file_edit`/`file_delete`/`file_move`/`file_apply_patch` tool은 실행 전에 `.kkode/checkpoints` file snapshot을 만들고 `checkpoint_id`를 반환해요. `POST /api/v1/files/restore`와 `file_restore_checkpoint` tool은 같은 checkpoint payload를 복구해서 외부 adapter가 권한 프롬프트 없이도 undo UI를 붙일 수 있게 해요. `GET /api/v1/files/checkpoints` 계열은 snapshot 원문 content 없이 id, 생성 시각, entry 수, path metadata만 노출하고, delete/prune endpoint와 `file_prune_checkpoints` tool로 오래된 file checkpoint를 정리해요.
+파일 쓰기 전용 API와 표준 `file_write`/`file_edit`/`file_delete`/`file_move`/`file_apply_patch` tool은 실행 전에 `.kkode/checkpoints` file snapshot을 만들고 `checkpoint_id`를 반환해요. `POST /api/v1/files/restore`와 `file_restore_checkpoint` tool은 같은 checkpoint payload를 복구해서 외부 adapter가 권한 프롬프트 없이도 undo UI를 붙일 수 있게 해요. `GET /api/v1/files/checkpoints` 계열은 snapshot 원문 content 없이 id, 생성 시각, entry 수, path metadata만 노출하고 `path`, `limit`, `offset`으로 특정 파일의 checkpoint history만 page처럼 좁히며, delete/prune endpoint와 `file_prune_checkpoints` tool로 오래된 file checkpoint를 정리해요.
 
 Skill preview의 `max_bytes`는 기본 65536 byte, 최대 1048576 byte로 제한해서 저장된 SKILL.md/README.md를 외부 adapter용 bounded preview로만 반환해요.
 

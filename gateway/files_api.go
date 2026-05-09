@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -316,9 +317,12 @@ func readBoundedDirEntries(path string, maxEntries int) ([]os.DirEntry, bool, er
 		return nil, false, err
 	}
 	if len(entries) <= maxEntries {
+		sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 		return entries, false, nil
 	}
-	return entries[:maxEntries], true, nil
+	entries = entries[:maxEntries]
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	return entries, true, nil
 }
 
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
@@ -517,10 +521,17 @@ func (s *Server) listFileCheckpoints(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	pathFilter, ok := fileCheckpointPathFilter(w, r, ws)
+	if !ok {
+		return
+	}
 	items, err := ws.ListCheckpoints()
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "list_file_checkpoints_failed", err.Error())
 		return
+	}
+	if pathFilter != "" {
+		items = filterFileCheckpointsByPath(items, pathFilter)
 	}
 	total := len(items)
 	page, returned, truncated := pageSlice(items, limit, offset)
@@ -584,6 +595,43 @@ func fileCheckpointDTOs(items []workspace.FileCheckpointSummary) []FileCheckpoin
 
 func fileCheckpointDTO(item workspace.FileCheckpointSummary) FileCheckpointDTO {
 	return FileCheckpointDTO{ID: item.ID, CreatedAt: item.CreatedAt, Entries: item.Entries, Paths: item.Paths}
+}
+
+func fileCheckpointPathFilter(w http.ResponseWriter, r *http.Request, ws *workspace.Workspace) (string, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("path"))
+	if raw == "" {
+		return "", true
+	}
+	abs, err := ws.Resolve(raw)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint_list", err.Error())
+		return "", false
+	}
+	rel, err := filepath.Rel(ws.Root, abs)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint_list", err.Error())
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
+
+func filterFileCheckpointsByPath(items []workspace.FileCheckpointSummary, path string) []workspace.FileCheckpointSummary {
+	out := items[:0]
+	for _, item := range items {
+		if fileCheckpointContainsPath(item, path) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func fileCheckpointContainsPath(item workspace.FileCheckpointSummary, path string) bool {
+	for _, candidate := range item.Paths {
+		if candidate == path {
+			return true
+		}
+	}
+	return false
 }
 
 func fileCheckpointPaths(cp workspace.FileCheckpoint) []string {
