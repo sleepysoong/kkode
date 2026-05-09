@@ -2725,6 +2725,8 @@ components:
           type: integer
         max_subagent_preview_prompt_bytes:
           type: integer
+        max_prompt_template_name_bytes:
+          type: integer
         max_prompt_text_bytes:
           type: integer
         max_transcript_markdown_bytes:

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -40,8 +41,9 @@ type PromptRenderResponse struct {
 }
 
 const (
-	defaultPromptTextBytes = 65536
-	maxPromptTextBytes     = 1 << 20
+	defaultPromptTextBytes     = 65536
+	maxPromptTextBytes         = 1 << 20
+	maxPromptTemplateNameBytes = 128
 )
 
 func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, parts []string) {
@@ -54,6 +56,10 @@ func (s *Server) handlePrompts(w http.ResponseWriter, r *http.Request, parts []s
 		return
 	}
 	name := strings.TrimSpace(parts[1])
+	if err := validatePromptTemplateName(name); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_prompt", err.Error())
+		return
+	}
 	if len(parts) == 2 && r.Method == http.MethodGet {
 		s.getPromptTemplate(w, r, name)
 		return
@@ -136,4 +142,14 @@ func promptRenderTextLimit(limit int) int {
 		return maxPromptTextBytes
 	}
 	return limit
+}
+
+func validatePromptTemplateName(name string) error {
+	if name == "" {
+		return fmt.Errorf("prompt template 이름이 필요해요")
+	}
+	if len(name) > maxPromptTemplateNameBytes {
+		return fmt.Errorf("prompt template 이름은 %d byte 이하여야 해요", maxPromptTemplateNameBytes)
+	}
+	return nil
 }

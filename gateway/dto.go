@@ -513,6 +513,7 @@ type LimitDTO struct {
 	MaxFilePatternBytes         int   `json:"max_file_pattern_bytes,omitempty"`
 	MaxSkillPreviewBytes        int   `json:"max_skill_preview_bytes,omitempty"`
 	MaxSubagentPreviewBytes     int   `json:"max_subagent_preview_prompt_bytes,omitempty"`
+	MaxPromptTemplateNameBytes  int   `json:"max_prompt_template_name_bytes,omitempty"`
 	MaxPromptTextBytes          int   `json:"max_prompt_text_bytes,omitempty"`
 	MaxTranscriptMarkdownBytes  int   `json:"max_transcript_markdown_bytes,omitempty"`
 	MaxGitDiffBytes             int   `json:"max_git_diff_bytes,omitempty"`
