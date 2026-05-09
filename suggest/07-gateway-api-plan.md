@@ -817,16 +817,16 @@ cmd/kkode-gateway/main.go
 
 ## P0 체크리스트
 
-- [ ] `gateway.Server`와 `Config`를 만든다.
-- [ ] health/version endpoint를 만든다.
-- [ ] session list/create/get endpoint를 만든다.
-- [ ] run start endpoint를 만든다.
-- [ ] event list endpoint를 만든다.
-- [ ] SSE stream endpoint를 만든다.
-- [ ] API key middleware를 만든다.
-- [ ] `cmd/kkode-gateway` 또는 `kkode serve`를 만든다.
-- [ ] `gateway/openapi.yaml`을 작성한다.
-- [ ] curl smoke script를 만든다.
+- [x] `gateway.Server`와 `Config`를 만든다.
+- [x] health/version endpoint를 만든다.
+- [x] session list/create/get endpoint를 만든다.
+- [x] run start endpoint를 만든다.
+- [x] event list endpoint를 만든다.
+- [x] SSE stream endpoint를 만든다.
+- [x] API key middleware를 만든다.
+- [x] `cmd/kkode-gateway` 또는 `kkode serve`를 만든다.
+- [x] `gateway/openapi.yaml`을 작성한다.
+- [x] curl smoke script를 만든다.
 
 ## 결론
 

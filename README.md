@@ -342,6 +342,12 @@ go run ./cmd/kkode-gateway \
   -state .kkode/state.db
 ```
 
+로컬 gateway bootstrap 계약만 빠르게 확인하려면 smoke script를 실행해요.
+
+```bash
+./scripts/gateway-smoke.sh
+```
+
 원격 bind는 file/shell/web tool surface를 외부에 여는 것이므로 API key가 필요해요.
 
 ```bash

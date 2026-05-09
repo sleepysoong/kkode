@@ -66,7 +66,7 @@
 
 ### Vibe-coding app layer
 
-- [x] workspace abstraction: 파일 read/write/list/search/shell tool. patch는 다음 단계에서 unified diff 적용기로 확장.
+- [x] workspace abstraction: 파일 read/write/list/search/shell/apply_patch/delete/move tool.
 - [x] approval policy: deny/read-only/trusted-writes/allow-all.
 - [x] transcript/state persistence.
 - [x] provider selection: `llm.Router` provider/model routing.
