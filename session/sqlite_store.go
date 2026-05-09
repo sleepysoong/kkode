@@ -553,6 +553,7 @@ func (s *SQLiteStore) LoadStats(ctx context.Context) (StoreStats, error) {
 		{query: `SELECT COUNT(1) FROM sessions`, out: &stats.Sessions},
 		{query: `SELECT COUNT(1) FROM turns`, out: &stats.Turns},
 		{query: `SELECT COUNT(1) FROM events`, out: &stats.Events},
+		{query: `SELECT COUNT(1) FROM run_events`, out: &stats.RunEvents},
 		{query: `SELECT COUNT(1) FROM todos`, out: &stats.Todos},
 		{query: `SELECT COUNT(1) FROM checkpoints`, out: &stats.Checkpoints},
 		{query: `SELECT COUNT(1) FROM artifacts`, out: &stats.Artifacts},

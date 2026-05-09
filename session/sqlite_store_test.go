@@ -116,10 +116,14 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	startedAt := time.Unix(100, 0).UTC()
-	if _, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", StartedAt: startedAt, EndedAt: startedAt.Add(1500 * time.Millisecond), Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}}); err != nil {
+	copilotRun, err := store.SaveRun(ctx, Run{ID: "run_stats", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", StartedAt: startedAt, EndedAt: startedAt.Add(1500 * time.Millisecond), Usage: llm.Usage{InputTokens: 11, OutputTokens: 7, TotalTokens: 18, ReasoningTokens: 3}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SaveRun(ctx, Run{ID: "run_stats_openai", SessionID: sess.ID, Status: "completed", Prompt: "go", Provider: "openai", Model: "gpt-5-mini", StartedAt: startedAt, EndedAt: startedAt.Add(2500 * time.Millisecond), Usage: llm.Usage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AppendRunEvent(ctx, RunEvent{ID: "run_ev_stats", RunID: copilotRun.ID, Type: "run.completed", Message: "done", Run: copilotRun}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveCheckpoint(ctx, Checkpoint{ID: "cp_stats", SessionID: sess.ID, TurnID: turn.ID}); err != nil {
@@ -135,7 +139,7 @@ func TestSQLiteStoreLoadsDashboardStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.Artifacts != 1 {
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.RunEvents != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.Artifacts != 1 {
 		t.Fatalf("기본 stats가 이상해요: %+v", stats)
 	}
 	if stats.Runs["completed"] != 2 || stats.Resources[string(ResourceSkill)] != 1 {

@@ -12,6 +12,7 @@ type StatsResponse struct {
 	Sessions              int                            `json:"sessions"`
 	Turns                 int                            `json:"turns"`
 	Events                int                            `json:"events"`
+	RunEvents             int                            `json:"run_events"`
 	Todos                 int                            `json:"todos"`
 	Checkpoints           int                            `json:"checkpoints"`
 	Artifacts             int                            `json:"artifacts"`
@@ -59,6 +60,7 @@ func statsResponseFromSession(stats session.StoreStats) StatsResponse {
 		Sessions:              stats.Sessions,
 		Turns:                 stats.Turns,
 		Events:                stats.Events,
+		RunEvents:             stats.RunEvents,
 		Todos:                 stats.Todos,
 		Checkpoints:           stats.Checkpoints,
 		Artifacts:             stats.Artifacts,

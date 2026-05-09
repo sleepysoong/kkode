@@ -296,7 +296,11 @@ func TestGatewayStatsEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	runStartedAt := time.Unix(200, 0).UTC()
-	if _, err := store.SaveRun(ctx, session.Run{ID: "run_stats", SessionID: sess.ID, Status: "running", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", StartedAt: runStartedAt, EndedAt: runStartedAt.Add(1200 * time.Millisecond), Usage: llm.Usage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9, ReasoningTokens: 2}}); err != nil {
+	run, err := store.SaveRun(ctx, session.Run{ID: "run_stats", SessionID: sess.ID, Status: "running", Prompt: "go", Provider: "copilot", Model: "gpt-5-mini", StartedAt: runStartedAt, EndedAt: runStartedAt.Add(1200 * time.Millisecond), Usage: llm.Usage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9, ReasoningTokens: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AppendRunEvent(ctx, session.RunEvent{ID: "run_ev_stats", RunID: run.ID, Type: "run.running", Message: "started", Run: run}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveTodos(ctx, sess.ID, []session.Todo{{ID: "todo_stats", Content: "status", Status: session.TodoPending, UpdatedAt: time.Now().UTC()}}); err != nil {
@@ -319,7 +323,7 @@ func TestGatewayStatsEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &stats); err != nil {
 		t.Fatal(err)
 	}
-	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.TotalRuns != 1 || stats.Runs["running"] != 1 || stats.RunDuration.Count != 1 || stats.RunDuration.SumMS != 1200 || stats.RunDuration.AvgMS != 1200 || stats.RunDuration.MaxMS != 1200 || stats.RunDuration.P95MS != 1200 || stats.RunDurationByProvider["copilot"].P95MS != 1200 || stats.RunDurationByModel["gpt-5-mini"].P95MS != 1200 || stats.RunUsage.TotalTokens != 9 || stats.RunUsage.ReasoningTokens != 2 || stats.RunUsageByProvider["copilot"].TotalTokens != 9 || stats.RunUsageByModel["gpt-5-mini"].TotalTokens != 9 || stats.TotalResources != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
+	if stats.Sessions != 1 || stats.Turns != 1 || stats.Events != 1 || stats.RunEvents != 1 || stats.Todos != 1 || stats.Checkpoints != 1 || stats.TotalRuns != 1 || stats.Runs["running"] != 1 || stats.RunDuration.Count != 1 || stats.RunDuration.SumMS != 1200 || stats.RunDuration.AvgMS != 1200 || stats.RunDuration.MaxMS != 1200 || stats.RunDuration.P95MS != 1200 || stats.RunDurationByProvider["copilot"].P95MS != 1200 || stats.RunDurationByModel["gpt-5-mini"].P95MS != 1200 || stats.RunUsage.TotalTokens != 9 || stats.RunUsage.ReasoningTokens != 2 || stats.RunUsageByProvider["copilot"].TotalTokens != 9 || stats.RunUsageByModel["gpt-5-mini"].TotalTokens != 9 || stats.TotalResources != 1 || stats.Resources[string(session.ResourceMCPServer)] != 1 {
 		t.Fatalf("stats 응답이 이상해요: %+v", stats)
 	}
 }

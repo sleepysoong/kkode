@@ -144,6 +144,7 @@ type StoreStats struct {
 	Sessions              int
 	Turns                 int
 	Events                int
+	RunEvents             int
 	Todos                 int
 	Checkpoints           int
 	Artifacts             int
