@@ -4137,6 +4137,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Checkpoint'
+        total_checkpoints:
+          type: integer
+          description: 현재 필터에 매칭되는 checkpoint 총개수예요.
         limit:
           type: integer
         offset:
@@ -4170,6 +4173,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Artifact'
+        total_artifacts:
+          type: integer
+          description: 현재 필터에 매칭되는 artifact 총개수예요.
         limit:
           type: integer
         offset:

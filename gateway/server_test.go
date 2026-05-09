@@ -5267,7 +5267,7 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if len(listed.Checkpoints) != 1 {
 		t.Fatalf("checkpoint 목록이 이상해요: %+v", listed)
 	}
-	if listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
+	if listed.TotalCheckpoints != 2 || listed.Limit != 1 || listed.Offset != 0 || listed.NextOffset != 1 || !listed.ResultTruncated {
 		t.Fatalf("checkpoint list metadata가 이상해요: %+v", listed)
 	}
 	firstPageID := listed.Checkpoints[0].ID
@@ -5284,7 +5284,7 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if len(listed.Checkpoints) != 1 || listed.Checkpoints[0].ID == firstPageID {
 		t.Fatalf("checkpoint offset 목록이 이상해요: %+v", listed)
 	}
-	if listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
+	if listed.TotalCheckpoints != 2 || listed.Limit != 1 || listed.Offset != 1 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("checkpoint offset metadata가 이상해요: %+v", listed)
 	}
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sess.ID+"/checkpoints?turn_id=turn_1&limit=10", nil)
@@ -5300,7 +5300,7 @@ func TestGatewayCreatesAndReadsCheckpoints(t *testing.T) {
 	if len(listed.Checkpoints) != 1 || listed.Checkpoints[0].ID != created.ID || listed.Checkpoints[0].TurnID != "turn_1" {
 		t.Fatalf("checkpoint turn_id 목록이 이상해요: %+v", listed)
 	}
-	if listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
+	if listed.TotalCheckpoints != 1 || listed.Limit != 10 || listed.Offset != 0 || listed.NextOffset != 0 || listed.ResultTruncated {
 		t.Fatalf("checkpoint turn_id metadata가 이상해요: %+v", listed)
 	}
 	for _, query := range []string{"limit=-1", "limit=abc", "offset=-1", "offset=abc"} {
@@ -5377,7 +5377,7 @@ func TestGatewayCreatesListsReadsAndDeletesArtifacts(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Artifacts) != 1 || listed.Artifacts[0].ID != "artifact_1" || listed.Limit != 1 {
+	if len(listed.Artifacts) != 1 || listed.Artifacts[0].ID != "artifact_1" || listed.TotalArtifacts != 1 || listed.Limit != 1 {
 		t.Fatalf("artifact 목록이 이상해요: %+v", listed)
 	}
 
@@ -5427,7 +5427,7 @@ func TestGatewayCreatesListsReadsAndDeletesArtifacts(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Artifacts) != 1 {
+	if len(listed.Artifacts) != 1 || listed.TotalArtifacts != 1 {
 		t.Fatalf("artifact prune 후 목록이 이상해요: %+v", listed)
 	}
 	remainingID := listed.Artifacts[0].ID

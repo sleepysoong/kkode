@@ -22,11 +22,12 @@ type CheckpointDTO struct {
 }
 
 type CheckpointListResponse struct {
-	Checkpoints     []CheckpointDTO `json:"checkpoints"`
-	Limit           int             `json:"limit,omitempty"`
-	Offset          int             `json:"offset,omitempty"`
-	NextOffset      int             `json:"next_offset,omitempty"`
-	ResultTruncated bool            `json:"result_truncated,omitempty"`
+	Checkpoints      []CheckpointDTO `json:"checkpoints"`
+	TotalCheckpoints int             `json:"total_checkpoints,omitempty"`
+	Limit            int             `json:"limit,omitempty"`
+	Offset           int             `json:"offset,omitempty"`
+	NextOffset       int             `json:"next_offset,omitempty"`
+	ResultTruncated  bool            `json:"result_truncated,omitempty"`
 }
 
 func (s *Server) handleSessionCheckpoints(w http.ResponseWriter, r *http.Request, sessionID string, rest []string) {
@@ -67,7 +68,20 @@ func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
-	items, err := store.ListCheckpoints(r.Context(), session.CheckpointQuery{SessionID: sessionID, TurnID: turnID, Limit: limit + 1, Offset: offset})
+	query := session.CheckpointQuery{SessionID: sessionID, TurnID: turnID}
+	totalCheckpoints := 0
+	if counter, ok := store.(session.CheckpointCounter); ok {
+		total, err := counter.CountCheckpoints(r.Context(), query)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "count_checkpoints_failed", err.Error())
+			return
+		}
+		totalCheckpoints = total
+	}
+	pageQuery := query
+	pageQuery.Limit = limit + 1
+	pageQuery.Offset = offset
+	items, err := store.ListCheckpoints(r.Context(), pageQuery)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_checkpoints_failed", err.Error())
 		return
@@ -77,7 +91,7 @@ func (s *Server) listSessionCheckpoints(w http.ResponseWriter, r *http.Request, 
 	for _, item := range items {
 		out = append(out, toCheckpointDTO(item))
 	}
-	writeJSON(w, CheckpointListResponse{Checkpoints: out, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+	writeJSON(w, CheckpointListResponse{Checkpoints: out, TotalCheckpoints: totalCheckpoints, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) createSessionCheckpoint(w http.ResponseWriter, r *http.Request, store session.CheckpointStore, sessionID string) {

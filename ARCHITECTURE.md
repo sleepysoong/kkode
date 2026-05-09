@@ -655,7 +655,7 @@ POST /api/v1/runs/{run_id}/retry
 
 Legacy `workspace_*` tool surface도 `workspace_list`, `workspace_glob`, `workspace_search`의 `limit`과 `[result_truncated]` marker를 지원해서 오래된 caller가 표준 `file_*` surface로 완전히 이동하기 전에도 큰 text list를 bounded output으로 다루게 해요.
 
-Session checkpoint 목록 API는 `turn_id`, `limit`, `offset` query를 받아서 외부 adapter가 session 전체 checkpoint를 스캔하지 않고 turn-scoped restore/debug view를 만들게 해요.
+Session checkpoint 목록 API는 `turn_id`, `limit`, `offset` query와 `total_checkpoints` 응답값을 제공해서 외부 adapter가 session 전체 checkpoint를 스캔하지 않고 turn-scoped restore/debug view를 만들게 해요.
 
 파일 쓰기 전용 API와 표준 `file_write`/`file_edit`/`file_delete`/`file_move`/`file_apply_patch` tool은 실행 전에 `.kkode/checkpoints` file snapshot을 만들고 `checkpoint_id`를 반환해요. `POST /api/v1/files/restore`와 `file_restore_checkpoint` tool은 같은 checkpoint payload를 복구해서 외부 adapter가 권한 프롬프트 없이도 undo UI를 붙일 수 있게 해요. `GET /api/v1/files/checkpoints` 계열은 snapshot 원문 content 없이 id, 생성 시각, entry 수, path metadata만 노출하고 `path`, `limit`, `offset`으로 특정 파일의 checkpoint history만 page처럼 좁히며, delete/prune endpoint와 `file_prune_checkpoints` tool로 오래된 file checkpoint를 정리해요.
 
@@ -685,7 +685,7 @@ Provider live smoke의 `max_result_bytes`를 생략해도 결과 text와 streami
 
 OmniRoute A2A helper는 artifact content를 합칠 때 최대 8388608 byte envelope 안에서만 text를 보존해서 bounded HTTP body를 다시 unbounded provider text로 복제하지 않아요.
 
-Gateway artifact API는 큰 tool output, diff, generated preview를 session event payload와 분리해서 SQLite `artifacts` table에 저장해요. `session.ArtifactStore`는 `SaveArtifact`, `LoadArtifact`, `ListArtifacts`, `DeleteArtifact`를 노출하고, SQLite store는 `ArtifactPruneStore`로 session별 최신 N개 retention을 제공해요. gateway는 `GET/POST /api/v1/sessions/{session_id}/artifacts`, `POST /api/v1/sessions/{session_id}/artifacts/prune`, `GET/DELETE /api/v1/artifacts/{artifact_id}`로 session/run/turn scoped JSON content를 다뤄요. List 응답은 metadata와 `content_bytes`만 반환하고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해요. Direct `POST /api/v1/tools/call`도 `artifact_session_id`가 있고 output이 잘렸거나 `store_artifact=true`면 전체 tool output을 artifact로 승격해서 외부 adapter가 짧은 응답과 원본 조회 경로를 동시에 갖게 해요. Session export/import도 `artifacts`와 `artifact_limit`/`artifacts_truncated`를 포함해서 복구 bundle이 산출물을 잃지 않게 해요.
+Gateway artifact API는 큰 tool output, diff, generated preview를 session event payload와 분리해서 SQLite `artifacts` table에 저장해요. `session.ArtifactStore`는 `SaveArtifact`, `LoadArtifact`, `ListArtifacts`, `DeleteArtifact`를 노출하고, SQLite store는 `ArtifactPruneStore`로 session별 최신 N개 retention을 제공해요. gateway는 `GET/POST /api/v1/sessions/{session_id}/artifacts`, `POST /api/v1/sessions/{session_id}/artifacts/prune`, `GET/DELETE /api/v1/artifacts/{artifact_id}`로 session/run/turn scoped JSON content를 다뤄요. List 응답은 metadata와 `content_bytes`, `total_artifacts`를 반환하고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해요. Direct `POST /api/v1/tools/call`도 `artifact_session_id`가 있고 output이 잘렸거나 `store_artifact=true`면 전체 tool output을 artifact로 승격해서 외부 adapter가 짧은 응답과 원본 조회 경로를 동시에 갖게 해요. Session export/import도 `artifacts`와 `artifact_limit`/`artifacts_truncated`를 포함해서 복구 bundle이 산출물을 잃지 않게 해요.
 
 `web_fetch` tool argument의 `max_bytes`는 `WebConfig.MaxBytes`로 정해진 configured envelope를 넘으면 거부해서 agent run과 direct tool call 모두 배포자가 정한 web body 상한을 우회하지 못하게 해요. body truncation은 UTF-8 안전 byte 경계를 보존해서 외부 adapter가 한글/이모지 web 응답을 깨진 문자열로 받지 않게 해요.
 

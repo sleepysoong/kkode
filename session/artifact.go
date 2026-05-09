@@ -38,6 +38,10 @@ type ArtifactStore interface {
 	DeleteArtifact(ctx context.Context, id string) error
 }
 
+type ArtifactCounter interface {
+	CountArtifacts(ctx context.Context, q ArtifactQuery) (int, error)
+}
+
 type ArtifactPruneStore interface {
 	PruneArtifacts(ctx context.Context, sessionID string, keepLatest int) (int, error)
 }

@@ -232,6 +232,13 @@ func TestSQLiteStorePersistsArtifacts(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != "artifact_1" {
 		t.Fatalf("artifact 목록이 이상해요: %+v", listed)
 	}
+	count, err := store.CountArtifacts(ctx, ArtifactQuery{SessionID: sess.ID, RunID: "run_1", Kind: "tool_output"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("artifact count가 이상해요: %d", count)
+	}
 	for _, id := range []string{"artifact_2", "artifact_3"} {
 		if _, err := store.SaveArtifact(ctx, Artifact{ID: id, SessionID: sess.ID, RunID: "run_1", TurnID: turn.ID, Kind: "tool_output", Content: json.RawMessage(`{"matches":2}`)}); err != nil {
 			t.Fatal(err)
@@ -732,6 +739,13 @@ func TestCheckpointStoreListsAndLoads(t *testing.T) {
 	if len(items) != 1 || items[0].ID != cp.ID {
 		t.Fatalf("checkpoint list가 이상해요: %+v", items)
 	}
+	count, err := store.CountCheckpoints(ctx, CheckpointQuery{SessionID: sess.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("checkpoint count가 이상해요: %d", count)
+	}
 	cp2 := Checkpoint{ID: "cp_2", SessionID: sess.ID, TurnID: "turn_2", Payload: []byte(`{"summary":"next"}`)}
 	if err := store.SaveCheckpoint(ctx, cp2); err != nil {
 		t.Fatal(err)
@@ -753,6 +767,13 @@ func TestCheckpointStoreListsAndLoads(t *testing.T) {
 	}
 	if len(filtered) != 1 || filtered[0].ID != cp.ID || filtered[0].TurnID != "turn_1" {
 		t.Fatalf("checkpoint turn_id filter가 이상해요: %+v", filtered)
+	}
+	count, err = store.CountCheckpoints(ctx, CheckpointQuery{SessionID: sess.ID, TurnID: "turn_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("checkpoint turn_id count가 이상해요: %d", count)
 	}
 }
 

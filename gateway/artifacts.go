@@ -36,6 +36,7 @@ type ArtifactDTO struct {
 
 type ArtifactListResponse struct {
 	Artifacts       []ArtifactDTO `json:"artifacts"`
+	TotalArtifacts  int           `json:"total_artifacts,omitempty"`
 	Limit           int           `json:"limit,omitempty"`
 	Offset          int           `json:"offset,omitempty"`
 	NextOffset      int           `json:"next_offset,omitempty"`
@@ -116,7 +117,20 @@ func (s *Server) listSessionArtifacts(w http.ResponseWriter, r *http.Request, st
 		writeError(w, r, http.StatusBadRequest, "invalid_artifact_list", err.Error())
 		return
 	}
-	items, err := store.ListArtifacts(r.Context(), session.ArtifactQuery{SessionID: sessionID, RunID: runID, TurnID: turnID, Kind: kind, Limit: limit + 1, Offset: offset})
+	query := session.ArtifactQuery{SessionID: sessionID, RunID: runID, TurnID: turnID, Kind: kind}
+	totalArtifacts := 0
+	if counter, ok := store.(session.ArtifactCounter); ok {
+		total, err := counter.CountArtifacts(r.Context(), query)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "count_artifacts_failed", err.Error())
+			return
+		}
+		totalArtifacts = total
+	}
+	pageQuery := query
+	pageQuery.Limit = limit + 1
+	pageQuery.Offset = offset
+	items, err := store.ListArtifacts(r.Context(), pageQuery)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "list_artifacts_failed", err.Error())
 		return
@@ -126,7 +140,7 @@ func (s *Server) listSessionArtifacts(w http.ResponseWriter, r *http.Request, st
 	for _, item := range items {
 		out = append(out, toArtifactDTO(item, -1))
 	}
-	writeJSON(w, ArtifactListResponse{Artifacts: out, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
+	writeJSON(w, ArtifactListResponse{Artifacts: out, TotalArtifacts: totalArtifacts, Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
 }
 
 func (s *Server) createSessionArtifact(w http.ResponseWriter, r *http.Request, store session.ArtifactStore, sessionID string) {

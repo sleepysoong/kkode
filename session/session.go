@@ -224,6 +224,10 @@ type CheckpointStore interface {
 	ListCheckpoints(ctx context.Context, q CheckpointQuery) ([]Checkpoint, error)
 }
 
+type CheckpointCounter interface {
+	CountCheckpoints(ctx context.Context, q CheckpointQuery) (int, error)
+}
+
 func NewSession(projectRoot, providerName, model, agentName string, mode AgentMode) *Session {
 	now := time.Now().UTC()
 	if mode == "" {

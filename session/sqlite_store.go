@@ -844,12 +844,7 @@ func (s *SQLiteStore) ListCheckpoints(ctx context.Context, q CheckpointQuery) ([
 	if limit <= 0 {
 		limit = 50
 	}
-	where := []string{`session_id = ?`}
-	args := []any{q.SessionID}
-	if q.TurnID != "" {
-		where = append(where, `turn_id = ?`)
-		args = append(args, q.TurnID)
-	}
+	where, args := checkpointQueryWhere(q)
 	query := `SELECT id, session_id, turn_id, created_at, payload_json FROM checkpoints WHERE ` + strings.Join(where, " AND ") + ` ORDER BY created_at DESC LIMIT ?`
 	args = append(args, limit)
 	if q.Offset > 0 {
@@ -870,6 +865,24 @@ func (s *SQLiteStore) ListCheckpoints(ctx context.Context, q CheckpointQuery) ([
 		out = append(out, cp)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteStore) CountCheckpoints(ctx context.Context, q CheckpointQuery) (int, error) {
+	where, args := checkpointQueryWhere(q)
+	query := `SELECT COUNT(*) FROM checkpoints WHERE ` + strings.Join(where, " AND ")
+	var count int
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func checkpointQueryWhere(q CheckpointQuery) ([]string, []any) {
+	where := []string{`session_id = ?`}
+	args := []any{q.SessionID}
+	if q.TurnID != "" {
+		where = append(where, `turn_id = ?`)
+		args = append(args, q.TurnID)
+	}
+	return where, args
 }
 
 type checkpointScanner interface {
@@ -930,24 +943,7 @@ func (s *SQLiteStore) ListArtifacts(ctx context.Context, q ArtifactQuery) ([]Art
 		limit = 50
 	}
 	query := `SELECT id, session_id, run_id, turn_id, kind, name, mime_type, content_json, metadata_json, created_at, updated_at FROM artifacts`
-	args := []any{}
-	where := []string{}
-	if q.SessionID != "" {
-		where = append(where, `session_id = ?`)
-		args = append(args, q.SessionID)
-	}
-	if q.RunID != "" {
-		where = append(where, `run_id = ?`)
-		args = append(args, q.RunID)
-	}
-	if q.TurnID != "" {
-		where = append(where, `turn_id = ?`)
-		args = append(args, q.TurnID)
-	}
-	if q.Kind != "" {
-		where = append(where, `kind = ?`)
-		args = append(args, q.Kind)
-	}
+	where, args := artifactQueryWhere(q)
 	if len(where) > 0 {
 		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
@@ -971,6 +967,39 @@ func (s *SQLiteStore) ListArtifacts(ctx context.Context, q ArtifactQuery) ([]Art
 		out = append(out, artifact)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteStore) CountArtifacts(ctx context.Context, q ArtifactQuery) (int, error) {
+	query := `SELECT COUNT(*) FROM artifacts`
+	where, args := artifactQueryWhere(q)
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
+	}
+	var count int
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func artifactQueryWhere(q ArtifactQuery) ([]string, []any) {
+	args := []any{}
+	where := []string{}
+	if q.SessionID != "" {
+		where = append(where, `session_id = ?`)
+		args = append(args, q.SessionID)
+	}
+	if q.RunID != "" {
+		where = append(where, `run_id = ?`)
+		args = append(args, q.RunID)
+	}
+	if q.TurnID != "" {
+		where = append(where, `turn_id = ?`)
+		args = append(args, q.TurnID)
+	}
+	if q.Kind != "" {
+		where = append(where, `kind = ?`)
+		args = append(args, q.Kind)
+	}
+	return where, args
 }
 
 func (s *SQLiteStore) DeleteArtifact(ctx context.Context, id string) error {
