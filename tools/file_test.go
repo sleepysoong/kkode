@@ -136,6 +136,27 @@ func TestStandardToolsComposesFileAndWebSurface(t *testing.T) {
 	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_symbols", Arguments: []byte(`{"query":"Run","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("negative lsp_symbols limit은 거부해야 해요: %v", err)
 	}
+	if err := ws.WriteFile("outline.go", "package main\n\ntype Worker struct{}\nfunc (Worker) Run() {}\nfunc (Worker) Stop() {}\n"); err != nil {
+		t.Fatal(err)
+	}
+	result, err = handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_document_symbols", Arguments: []byte(`{"path":"outline.go","limit":1}`)})
+	if err != nil {
+		t.Fatalf("lsp_document_symbols limit 실행 실패: %v", err)
+	}
+	var outline struct {
+		Symbols         []struct{ Name string } `json:"symbols"`
+		Limit           int                     `json:"limit"`
+		ResultTruncated bool                    `json:"result_truncated"`
+	}
+	if err := json.Unmarshal([]byte(result.Output), &outline); err != nil {
+		t.Fatal(err)
+	}
+	if len(outline.Symbols) != 1 || outline.Limit != 1 || !outline.ResultTruncated {
+		t.Fatalf("lsp_document_symbols limit metadata가 이상해요: %+v output=%s", outline, result.Output)
+	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "lsp_document_symbols", Arguments: []byte(`{"path":"outline.go","limit":-1}`)}); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("negative lsp_document_symbols limit은 거부해야 해요: %v", err)
+	}
 	largePath := filepath.Join(ws.Root, "large.go")
 	large, err := os.Create(largePath)
 	if err != nil {

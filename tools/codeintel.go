@@ -88,7 +88,7 @@ func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 	cursorOrSymbol := map[string]any{"symbol": StringSchema(), "path": StringSchema(), "line": NonNegativeIntegerSchema(), "column": NonNegativeIntegerSchema(), "limit": NonNegativeIntegerSchema()}
 	defs := []llm.Tool{
 		{Kind: llm.ToolFunction, Name: "lsp_symbols", Description: "Go workspace symbol 목록을 검색해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"query": StringSchema(), "limit": NonNegativeIntegerSchema()}, nil)},
-		{Kind: llm.ToolFunction, Name: "lsp_document_symbols", Description: "Go 파일 하나의 symbol outline을 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"path": StringSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "lsp_document_symbols", Description: "Go 파일 하나의 symbol outline을 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(map[string]any{"path": StringSchema(), "limit": NonNegativeIntegerSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "lsp_definitions", Description: "Go symbol 또는 cursor 위치의 definition을 찾아요", Strict: &strict, Parameters: ObjectSchemaRequired(cursorOrSymbol, nil)},
 		{Kind: llm.ToolFunction, Name: "lsp_references", Description: "Go symbol 또는 cursor 위치의 reference를 찾아요", Strict: &strict, Parameters: ObjectSchemaRequired(cursorOrSymbol, nil)},
 		{Kind: llm.ToolFunction, Name: "lsp_hover", Description: "Go symbol 또는 cursor 위치의 signature와 doc comment를 반환해요", Strict: &strict, Parameters: ObjectSchemaRequired(cursorOrSymbol, nil)},
@@ -114,16 +114,22 @@ func CodeIntelTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			return marshalCodeIntel(codeIntelSymbolList{Symbols: symbols, Limit: limit, ResultTruncated: truncated})
 		}),
 		"lsp_document_symbols": llm.JSONToolHandler(func(ctx context.Context, in struct {
-			Path string `json:"path"`
+			Path  string `json:"path"`
+			Limit int    `json:"limit"`
 		}) (string, error) {
 			if ws == nil {
 				return "", fmt.Errorf("workspace is nil")
 			}
-			symbols, err := codeIntelDocumentSymbols(ws, in.Path)
+			limit, err := codeIntelLimit(in.Limit, 200)
 			if err != nil {
 				return "", err
 			}
-			return marshalCodeIntel(codeIntelSymbolList{Symbols: symbols})
+			symbols, err := codeIntelDocumentSymbols(ws, in.Path, limit+1)
+			if err != nil {
+				return "", err
+			}
+			symbols, truncated := limitCodeIntelSymbols(symbols, limit)
+			return marshalCodeIntel(codeIntelSymbolList{Symbols: symbols, Limit: limit, ResultTruncated: truncated})
 		}),
 		"lsp_definitions": llm.JSONToolHandler(func(ctx context.Context, in codeIntelCursorArgs) (string, error) {
 			if ws == nil {
@@ -232,10 +238,13 @@ func codeIntelSymbols(root string, query string, limit int) ([]codeIntelSymbol, 
 	return out, err
 }
 
-func codeIntelDocumentSymbols(ws *workspace.Workspace, relPath string) ([]codeIntelSymbol, error) {
+func codeIntelDocumentSymbols(ws *workspace.Workspace, relPath string, limit int) ([]codeIntelSymbol, error) {
 	path, err := ws.Resolve(relPath)
 	if err != nil {
 		return nil, err
+	}
+	if limit <= 0 {
+		limit = 200
 	}
 	fset := token.NewFileSet()
 	file, err := parseCodeIntelGoFile(fset, path, parser.ParseComments)
@@ -246,12 +255,12 @@ func codeIntelDocumentSymbols(ws *workspace.Workspace, relPath string) ([]codeIn
 	out := []codeIntelSymbol{}
 	ast.Inspect(file, func(node ast.Node) bool {
 		name, kind, container, ok := codeIntelNodeSymbol(node)
-		if !ok {
+		if !ok || len(out) >= limit {
 			return true
 		}
 		p := fset.Position(node.Pos())
 		out = append(out, codeIntelSymbol{Name: name, Kind: kind, File: filepath.ToSlash(rel), Line: p.Line, Column: p.Column, Container: container})
-		return true
+		return len(out) < limit
 	})
 	return out, nil
 }
