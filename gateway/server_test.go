@@ -4509,6 +4509,15 @@ func TestGatewayListsAndCallsStandardTools(t *testing.T) {
 		t.Fatalf("non-zero shell_run result가 이상해요: response=%+v command=%+v", called, command)
 	}
 
+	body = `{"project_root":"` + root + `","tool":"shell_run","arguments":{"command":"definitely-missing-kkode-command","timeout_ms":1000}}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "definitely-missing-kkode-command") {
+		t.Fatalf("missing shell command should remain a tool error: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	body = `{"project_root":"` + root + `","tool":"file_read","arguments":{"path":"notes/todo.md","max_bytes":-1}}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/tools/call", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

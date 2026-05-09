@@ -49,6 +49,19 @@ type CommandResult struct {
 	TimedOut        bool      `json:"timed_out"`
 }
 
+// IsProcessOutcome reports whether err came from a command process that produced
+// an inspectable outcome. Argument/preflight failures should remain tool errors.
+func (r CommandResult) IsProcessOutcome(err error) bool {
+	if err == nil {
+		return true
+	}
+	if r.TimedOut {
+		return true
+	}
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr)
+}
+
 type GrepOptions struct {
 	Regex         bool
 	CaseSensitive bool
@@ -641,7 +654,7 @@ func (w *Workspace) Tools() (defs []llm.Tool, handlers llm.ToolRegistry) {
 		}) (string, error) {
 			res, err := w.RunDetailed(ctx, in.Command, in.Args, CommandOptions{Timeout: time.Duration(in.TimeoutMS) * time.Millisecond})
 			b, _ := json.MarshalIndent(res, "", "  ")
-			if err != nil && res.EndedAt.IsZero() {
+			if err != nil && !res.IsProcessOutcome(err) {
 				return "", err
 			}
 			return string(b), nil

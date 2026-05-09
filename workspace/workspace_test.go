@@ -154,6 +154,9 @@ func TestWorkspaceWriteReplaceAndCommandTool(t *testing.T) {
 	if cmd.ExitCode != 7 || cmd.Stdout != "out\n" || !strings.Contains(cmd.Stderr, "err") || cmd.DurationMS < 0 {
 		t.Fatalf("failed command result가 이상해요: %#v", cmd)
 	}
+	if _, err := handlers.Execute(context.Background(), llm.ToolCall{Name: "workspace_run_command", CallID: "5", Arguments: []byte(`{"command":"definitely-missing-kkode-command","timeout_ms":1000}`)}); err == nil || !strings.Contains(err.Error(), "definitely-missing-kkode-command") {
+		t.Fatalf("missing command should remain a tool error: %v", err)
+	}
 }
 
 func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
@@ -220,6 +223,16 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	}
 	if res.ExitCode != 7 || res.Stdout != "out\n" || !strings.Contains(res.Stderr, "err") || res.DurationMS < 0 || res.StartedAt.IsZero() || res.EndedAt.IsZero() {
 		t.Fatalf("structured command failure가 이상해요: %#v err=%v", res, err)
+	}
+	if !res.IsProcessOutcome(err) {
+		t.Fatalf("non-zero exit should be reportable as a process outcome: %#v err=%v", res, err)
+	}
+	missing, err := w.RunDetailed(context.Background(), "definitely-missing-kkode-command", nil, CommandOptions{Timeout: time.Second})
+	if err == nil {
+		t.Fatal("missing executable should return an error")
+	}
+	if missing.IsProcessOutcome(err) {
+		t.Fatalf("missing executable should not be reported as a process outcome: %#v err=%v", missing, err)
 	}
 	patch := `*** Begin Patch
 *** Update File: src/a.txt
