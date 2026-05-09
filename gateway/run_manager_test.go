@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -551,6 +552,42 @@ func TestAsyncRunManagerRecoversStaleRuns(t *testing.T) {
 	}
 	if len(replay) == 0 || replay[len(replay)-1].Type != "run.failed" {
 		t.Fatalf("stale recovery event가 필요해요: %+v", replay)
+	}
+}
+
+func TestAsyncRunManagerRecoversStaleRunsPastListBatch(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sess := session.NewSession("/repo", "openai", "gpt", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 1001; i++ {
+		if _, err := store.SaveRun(ctx, session.Run{ID: fmt.Sprintf("run_stale_%04d", i), SessionID: sess.ID, Status: "running", Prompt: "go"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := NewAsyncRunManagerWithStore(nil, store)
+	if err := manager.RecoverStaleRuns(ctx); err != nil {
+		t.Fatal(err)
+	}
+	totalRunning, err := store.CountRuns(ctx, session.RunQuery{Status: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totalRunning != 0 {
+		t.Fatalf("batch boundary 뒤 stale run도 모두 닫혀야 해요: running=%d", totalRunning)
+	}
+	last, err := store.LoadRun(ctx, "run_stale_1000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last.Status != "failed" || !strings.Contains(last.Error, "gateway restarted") {
+		t.Fatalf("마지막 stale run 복구가 이상해요: %+v", last)
 	}
 }
 

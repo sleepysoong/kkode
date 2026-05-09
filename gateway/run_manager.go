@@ -201,22 +201,27 @@ func (m *AsyncRunManager) RecoverStaleRuns(ctx context.Context) error {
 	}
 	statuses := []string{"queued", "running", "cancelling"}
 	for _, status := range statuses {
-		runs, err := m.runStore.ListRuns(ctx, session.RunQuery{Status: status, Limit: 1000})
-		if err != nil {
-			return err
-		}
-		for _, run := range runs {
-			if isTerminalRunStatus(run.Status) {
-				continue
-			}
-			run.Status = "failed"
-			run.EndedAt = m.timestamp()
-			run.Error = "gateway restarted before this run completed"
-			dto := runDTOFromSession(run)
-			if err := m.persist(ctx, dto); err != nil {
+		for {
+			runs, err := m.runStore.ListRuns(ctx, session.RunQuery{Status: status, Limit: 1000})
+			if err != nil {
 				return err
 			}
-			m.publish(*dto)
+			if len(runs) == 0 {
+				break
+			}
+			for _, run := range runs {
+				if isTerminalRunStatus(run.Status) {
+					continue
+				}
+				run.Status = "failed"
+				run.EndedAt = m.timestamp()
+				run.Error = "gateway restarted before this run completed"
+				dto := runDTOFromSession(run)
+				if err := m.persist(ctx, dto); err != nil {
+					return err
+				}
+				m.publish(*dto)
+			}
 		}
 	}
 	return nil
