@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -216,6 +217,39 @@ func TestDefaultMCPServersExposeSerenaAndContext7(t *testing.T) {
 	context7 := servers["context7"]
 	if context7.Kind != llm.MCPHTTP || context7.URL != defaultContext7URL || context7.Headers["CONTEXT7_API_KEY"] != "ctx7sk-test" {
 		t.Fatalf("Context7 기본 MCP manifest가 이상해요: %+v", context7)
+	}
+}
+
+func TestProjectInstructionBlocksLoadRootFiles(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(root+"/AGENTS.md", []byte("repo rule token=ghp_123456789012345678901234567890123456"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root+"/CLAUDE.md", []byte("claude rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	blocks := ProjectInstructionBlocks(root)
+	if len(blocks) != 2 {
+		t.Fatalf("root instruction blocks=%+v", blocks)
+	}
+	if !strings.Contains(blocks[0], "AGENTS.md") || !strings.Contains(blocks[0], "[REDACTED]") || strings.Contains(blocks[0], "ghp_") || !strings.Contains(blocks[1], "CLAUDE.md") {
+		t.Fatalf("project instruction block redaction/labels가 이상해요: %+v", blocks)
+	}
+	t.Setenv("KKODE_PROJECT_INSTRUCTIONS", "off")
+	if blocks := ProjectInstructionBlocks(root); len(blocks) != 0 {
+		t.Fatalf("KKODE_PROJECT_INSTRUCTIONS=off면 project instruction을 붙이면 안 돼요: %+v", blocks)
+	}
+}
+
+func TestDefaultProviderOptionsIncludesProjectInstructionsWithoutMCP(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	if err := os.WriteFile(root+"/KKODE.md", []byte("kkode project rule"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := DefaultProviderOptions(root)
+	if len(opts.MCPServers) != 0 || len(opts.ContextBlocks) != 1 || !strings.Contains(opts.ContextBlocks[0], "kkode project rule") {
+		t.Fatalf("MCP off여도 project instruction은 유지해야 해요: %+v", opts)
 	}
 }
 

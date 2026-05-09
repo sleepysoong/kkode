@@ -483,6 +483,34 @@ func TestSyncRunPreviewerUsesAbsoluteWorkspaceRoot(t *testing.T) {
 	}
 }
 
+func TestSyncRunPreviewerLoadsProjectInstructions(t *testing.T) {
+	t.Setenv("KKODE_DEFAULT_MCP", "off")
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("프로젝트 규칙 token=ghp_123456789012345678901234567890123456"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := session.OpenSQLite(t.TempDir() + "/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	sess := session.NewSession(root, "openai", "gpt-5-mini", "agent", session.AgentModeBuild)
+	if err := store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := syncRunPreviewer(store, runOptions{NoWeb: true})(ctx, gateway.RunStartRequest{SessionID: sess.ID, Prompt: "preview project instructions"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.ContextBlocks) != 1 || !strings.Contains(preview.ContextBlocks[0], "AGENTS.md") || !strings.Contains(preview.ContextBlocks[0], "[REDACTED]") || strings.Contains(preview.ContextBlocks[0], "ghp_") {
+		t.Fatalf("project instruction context block이 필요해요: %+v", preview.ContextBlocks)
+	}
+	if preview.ProviderRequest == nil || !strings.Contains(preview.ProviderRequest.BodyJSON, "프로젝트 규칙") || strings.Contains(preview.ProviderRequest.BodyJSON, "ghp_") {
+		t.Fatalf("provider preview에 project instruction이 redacted 상태로 포함되어야 해요: %+v", preview.ProviderRequest)
+	}
+}
+
 func TestPreviewContextBlocksRedactsAndTruncatesUTF8(t *testing.T) {
 	if runPreviewBytes(0) != 64<<10 || runPreviewBytes(123) != 123 || runPreviewBytes(gateway.MaxRunPreviewBytes+1) != gateway.MaxRunPreviewBytes {
 		t.Fatal("run preview byte 예산 기본값/override가 이상해요")

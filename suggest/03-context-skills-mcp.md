@@ -239,7 +239,7 @@ hooks/*
 
 ## 구현 우선순위
 
-1. `context.Loader`로 AGENTS.md/CLAUDE.md/KKODE.md 읽기
+1. root `AGENTS.md`/`CLAUDE.md`/`KKODE.md` auto-load는 구현됐고, subdir scope와 `/init` 생성을 보강하기
 2. `commands/` parser와 `/init`, `/plan`, `/build`, `/compact`
 3. `skills/` index + progressive load
 4. MCP stdio client

@@ -166,6 +166,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	ag, err := app.NewAgent(provider, ws, app.AgentOptions{
 		Model:         *model,
 		Instructions:  *instructions,
+		ContextBlocks: app.ProjectInstructionBlocks(absRoot),
 		BaseRequest:   base,
 		MaxIterations: *maxIterations,
 		NoWeb:         *noWeb,

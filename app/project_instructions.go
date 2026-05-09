@@ -1,0 +1,124 @@
+package app
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/sleepysoong/kkode/llm"
+)
+
+const MaxProjectInstructionBytes = 32 << 10
+
+type ProjectInstruction struct {
+	Path      string
+	Name      string
+	Text      string
+	Bytes     int
+	Truncated bool
+}
+
+func LoadProjectInstructions(root string) []ProjectInstruction {
+	if !EnvBoolDefault("KKODE_PROJECT_INSTRUCTIONS", true) {
+		return nil
+	}
+	paths := projectInstructionPaths(root)
+	out := make([]ProjectInstruction, 0, len(paths))
+	seen := map[string]bool{}
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			continue
+		}
+		abs = filepath.Clean(abs)
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
+		item, ok := readProjectInstruction(abs)
+		if ok {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func ProjectInstructionBlocks(root string) []string {
+	instructions := LoadProjectInstructions(root)
+	if len(instructions) == 0 {
+		return nil
+	}
+	blocks := make([]string, 0, len(instructions))
+	for _, item := range instructions {
+		parts := []string{"프로젝트 지침 파일이에요: " + item.Name, "경로: " + item.Path, item.Text}
+		if item.Truncated {
+			parts = append(parts, "[프로젝트 지침이 길어서 일부만 포함했어요]")
+		}
+		blocks = append(blocks, strings.Join(parts, "\n\n"))
+	}
+	return blocks
+}
+
+func projectInstructionPaths(root string) []string {
+	paths := []string{}
+	if EnvBoolDefault("KKODE_GLOBAL_PROJECT_INSTRUCTIONS", false) {
+		home, err := os.UserHomeDir()
+		if err == nil && home != "" {
+			paths = append(paths,
+				filepath.Join(home, ".kkode", "KKODE.md"),
+				filepath.Join(home, ".codex", "AGENTS.md"),
+				filepath.Join(home, ".claude", "CLAUDE.md"),
+			)
+		}
+	}
+	if root == "" {
+		root = "."
+	}
+	if absRoot, err := filepath.Abs(root); err == nil {
+		paths = append(paths,
+			filepath.Join(absRoot, "AGENTS.md"),
+			filepath.Join(absRoot, "CLAUDE.md"),
+			filepath.Join(absRoot, "KKODE.md"),
+		)
+	}
+	return paths
+}
+
+func readProjectInstruction(path string) (ProjectInstruction, bool) {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return ProjectInstruction{}, false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return ProjectInstruction{}, false
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, int64(MaxProjectInstructionBytes)+int64(utf8.UTFMax)))
+	if err != nil {
+		return ProjectInstruction{}, false
+	}
+	truncated := len(data) > MaxProjectInstructionBytes
+	text := strings.TrimSpace(llm.RedactSecrets(projectInstructionUTF8(string(data), MaxProjectInstructionBytes)))
+	if text == "" {
+		return ProjectInstruction{}, false
+	}
+	return ProjectInstruction{Path: path, Name: filepath.Base(path), Text: text, Bytes: len(text), Truncated: truncated}, true
+}
+
+func projectInstructionUTF8(text string, maxBytes int) string {
+	if maxBytes <= 0 || len(text) <= maxBytes {
+		return text
+	}
+	end := maxBytes
+	for end > 0 && !utf8.ValidString(text[:end]) {
+		end--
+	}
+	return text[:end]
+}

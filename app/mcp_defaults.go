@@ -23,13 +23,13 @@ type DefaultMCPDiagnostic struct {
 }
 
 // DefaultProviderOptions는 kkode가 기본으로 붙일 provider 확장 자산을 만들어요.
-// 지금은 Serena(code intelligence)와 Context7(live docs) MCP를 기본 설계값으로 삼아요.
-// KKODE_DEFAULT_MCP=0/false/off이면 빈 옵션을 돌려줘요.
+// 지금은 project instruction context와 Serena/Context7 MCP를 기본 설계값으로 삼아요.
 func DefaultProviderOptions(root string) ProviderOptions {
-	if !EnvBoolDefault("KKODE_DEFAULT_MCP", true) {
-		return ProviderOptions{}
+	opts := ProviderOptions{ContextBlocks: ProjectInstructionBlocks(root)}
+	if EnvBoolDefault("KKODE_DEFAULT_MCP", true) {
+		opts.MCPServers = DefaultMCPServers(root)
 	}
-	return ProviderOptions{MCPServers: DefaultMCPServers(root)}
+	return opts
 }
 
 // DefaultMCPServers는 실행 환경에서 바로 붙일 수 있는 기본 MCP server manifest를 만들어요.
