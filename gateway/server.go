@@ -254,19 +254,29 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request, parts []string) {
-	if len(parts) == 3 && parts[2] == "runs" {
-		s.listRunsByRequestID(w, r, parts[1])
+	if len(parts) < 3 {
+		writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
 		return
 	}
-	if len(parts) == 3 && parts[2] == "events" {
-		s.listRunEventsByRequestID(w, r, parts[1])
+	requestID, err := requiredRequestIDValue(parts[1])
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
 		return
 	}
-	if len(parts) == 3 && parts[2] == "transcript" {
-		s.getRequestTranscript(w, r, parts[1])
+	if len(parts) != 3 {
+		writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
 		return
 	}
-	writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
+	switch parts[2] {
+	case "runs":
+		s.listRunsByRequestID(w, r, requestID)
+	case "events":
+		s.listRunEventsByRequestID(w, r, requestID)
+	case "transcript":
+		s.getRequestTranscript(w, r, requestID)
+	default:
+		writeError(w, r, http.StatusNotFound, "not_found", "request correlation endpoint를 찾을 수 없어요")
+	}
 }
 
 func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -276,15 +286,6 @@ func (s *Server) listRunsByRequestID(w http.ResponseWriter, r *http.Request, req
 	}
 	if s.cfg.RunLister == nil {
 		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
-		return
-	}
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
-		return
-	}
-	if err := validateRequestIDValue(requestID); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
 		return
 	}
 	provider, model, ok := queryRunProviderModel(w, r, "invalid_request_runs")
@@ -328,15 +329,6 @@ func (s *Server) listRunEventsByRequestID(w http.ResponseWriter, r *http.Request
 	}
 	if s.cfg.RunLister == nil {
 		writeError(w, r, http.StatusNotImplemented, "run_lister_missing", "이 gateway에는 RunLister가 연결되지 않았어요")
-		return
-	}
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_request_id", "request_id가 필요해요")
-		return
-	}
-	if err := validateRequestIDValue(requestID); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_request_id", err.Error())
 		return
 	}
 	afterSeq, ok := queryAfterSeq(w, r)

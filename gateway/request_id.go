@@ -76,6 +76,17 @@ func validateRequestIDValue(value string) error {
 	return nil
 }
 
+func requiredRequestIDValue(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("request_id가 필요해요")
+	}
+	if err := validateRequestIDValue(value); err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
 func validateIdempotencyKeyValue(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {

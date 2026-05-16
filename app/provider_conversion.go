@@ -228,7 +228,16 @@ func redactStringMap(in map[string]string) map[string]string {
 
 func isSensitivePreviewKey(key string) bool {
 	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "-", "_"), " ", "_"))
-	return strings.Contains(normalized, "api_key") || strings.Contains(normalized, "apikey") || strings.Contains(normalized, "token") || strings.Contains(normalized, "secret") || strings.Contains(normalized, "authorization")
+	if strings.Contains(normalized, "api_key") || strings.Contains(normalized, "apikey") {
+		return true
+	}
+	for _, part := range strings.FieldsFunc(normalized, func(r rune) bool { return r == '_' || r == '.' || r == '/' }) {
+		switch part {
+		case "token", "secret", "authorization":
+			return true
+		}
+	}
+	return false
 }
 
 func typeName(value any) string {

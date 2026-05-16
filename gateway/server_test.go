@@ -1377,11 +1377,13 @@ func TestGatewayRequestCorrelationRunsEndpoint(t *testing.T) {
 			t.Fatalf("긴 request run query는 400이어야 해요: query=%s status=%d body=%s", tc.queryString, rec.Code, rec.Body.String())
 		}
 	}
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+strings.Repeat("x", maxRequestIDBytes+1)+"/runs", nil)
-	rec = httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "request_id") {
-		t.Fatalf("긴 request_id path는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	for _, endpoint := range []string{"runs", "events", "transcript", "unknown"} {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/requests/"+strings.Repeat("x", maxRequestIDBytes+1)+"/"+endpoint, nil)
+		rec = httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "request_id") {
+			t.Fatalf("긴 request_id path는 route에서 400이어야 해요: endpoint=%s status=%d body=%s", endpoint, rec.Code, rec.Body.String())
+		}
 	}
 }
 

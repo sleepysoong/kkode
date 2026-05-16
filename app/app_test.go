@@ -381,6 +381,13 @@ func TestPreviewProviderRequestConvertsAndRedacts(t *testing.T) {
 	if !strings.Contains(preview.BodyJSON, "file_read") || !strings.Contains(preview.BodyJSON, "[REDACTED]") || strings.Contains(preview.BodyJSON, "abc1234567890secretvalue") {
 		t.Fatalf("body preview 변환/마스킹이 이상해요: %s", preview.BodyJSON)
 	}
+	redactedBody, _, err := previewJSON(map[string]any{"max_output_tokens": 123, "access_token": "secret-value"}, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(redactedBody, `"max_output_tokens": 123`) || !strings.Contains(redactedBody, `"access_token": "[REDACTED]"`) {
+		t.Fatalf("preview redaction은 token 수 필드는 보존하고 secret token 키만 숨겨야 해요: %s", redactedBody)
+	}
 	body, truncated, err := previewJSON(map[string]any{"text": "가나다라마바사"}, 15)
 	if err != nil {
 		t.Fatal(err)
