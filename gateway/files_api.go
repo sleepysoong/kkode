@@ -12,12 +12,12 @@ import (
 	"github.com/sleepysoong/kkode/workspace"
 )
 
-const defaultFileContentBytes = 1 << 20
 const maxProjectRootBytes = 4096
-const maxFileContentBytes = workspace.MaxFileReadBytes
 const maxFilePathBytes = 4096
 const maxFilePatternBytes = 4096
 const maxFileCheckpointIDBytes = 128
+const maxFileContentBytes = workspace.MaxFileReadBytes
+const defaultFileContentBytes = 1 << 20
 
 type FileEntryDTO struct {
 	Name    string    `json:"name"`
@@ -326,6 +326,18 @@ func readBoundedDirEntries(path string, maxEntries int) ([]os.DirEntry, bool, er
 	return entries[:maxEntries], true, nil
 }
 
+func fileSize(ws *workspace.Workspace, rel string) (int64, error) {
+	path, err := ws.Resolve(rel)
+	if err != nil {
+		return 0, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -355,29 +367,17 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	maxBytes, ok := queryNonNegativeIntParam(w, r, "max_bytes", defaultFileContentBytes, "invalid_file_range")
-	if !ok {
-		return
-	}
-	if maxBytes <= 0 {
-		maxBytes = defaultFileContentBytes
-	}
-	if maxBytes > maxFileContentBytes {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_range", fmt.Sprintf("max_bytes는 %d 이하여야 해요", maxFileContentBytes))
-		return
-	}
-	opts := workspace.ReadOptions{OffsetLine: offsetLine, LimitLines: limitLines, MaxBytes: maxBytes}
-	fileBytes, statErr := fileSize(ws, rel)
-	if statErr != nil {
-		writeError(w, r, http.StatusBadRequest, "read_file_failed", statErr.Error())
-		return
-	}
-	content, err := ws.ReadFileRange(rel, opts)
+	fileBytes, err := fileSize(ws, rel)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "read_file_failed", err.Error())
 		return
 	}
-	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: rel, Content: content, ContentBytes: len(content), FileBytes: fileBytes, ContentTruncated: fileContentTruncated(fileBytes, content, opts)})
+	content, err := ws.ReadFileRange(rel, workspace.ReadOptions{OffsetLine: offsetLine, LimitLines: limitLines})
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "read_file_failed", err.Error())
+		return
+	}
+	writeJSON(w, FileContentResponse{ProjectRoot: projectRoot, Path: rel, Content: content, ContentBytes: len(content), FileBytes: fileBytes, ContentTruncated: offsetLine > 0 || limitLines > 0})
 }
 
 func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
@@ -388,10 +388,6 @@ func (s *Server) writeFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Path = strings.TrimSpace(req.Path)
-	if err := validateFilePathText("path", req.Path); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_path", err.Error())
-		return
-	}
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
@@ -417,10 +413,6 @@ func (s *Server) deleteFilePath(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Path = strings.TrimSpace(req.Path)
-	if err := validateFilePathText("path", req.Path); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_path", err.Error())
-		return
-	}
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
@@ -447,14 +439,6 @@ func (s *Server) moveFilePath(w http.ResponseWriter, r *http.Request) {
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.Source = strings.TrimSpace(req.Source)
 	req.Destination = strings.TrimSpace(req.Destination)
-	if err := validateFilePathText("source", req.Source); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_path", err.Error())
-		return
-	}
-	if err := validateFilePathText("destination", req.Destination); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_path", err.Error())
-		return
-	}
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_workspace", err.Error())
@@ -512,8 +496,8 @@ func (s *Server) restoreFileCheckpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ProjectRoot = strings.TrimSpace(req.ProjectRoot)
 	req.CheckpointID = strings.TrimSpace(req.CheckpointID)
-	if err := validateFileCheckpointIDText(req.CheckpointID); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", err.Error())
+	if req.CheckpointID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_checkpoint", "checkpoint_id가 필요해요")
 		return
 	}
 	ws, projectRoot, err := newWorkspace(req.ProjectRoot)
@@ -565,8 +549,8 @@ func (s *Server) getFileCheckpoint(w http.ResponseWriter, r *http.Request, check
 		return
 	}
 	checkpointID = strings.TrimSpace(checkpointID)
-	if err := validateFileCheckpointIDText(checkpointID); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint", err.Error())
+	if checkpointID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint", "checkpoint_id가 필요해요")
 		return
 	}
 	cp, err := ws.LoadCheckpoint(checkpointID)
@@ -583,8 +567,8 @@ func (s *Server) deleteFileCheckpoint(w http.ResponseWriter, r *http.Request, ch
 		return
 	}
 	checkpointID = strings.TrimSpace(checkpointID)
-	if err := validateFileCheckpointIDText(checkpointID); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint", err.Error())
+	if checkpointID == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint", "checkpoint_id가 필요해요")
 		return
 	}
 	if err := ws.DeleteCheckpoint(checkpointID); err != nil {
@@ -631,10 +615,6 @@ func fileCheckpointPathFilter(w http.ResponseWriter, r *http.Request, ws *worksp
 	raw := strings.TrimSpace(r.URL.Query().Get("path"))
 	if raw == "" {
 		return "", true
-	}
-	if err := validateFilePathText("path", raw); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_checkpoint_list", err.Error())
-		return "", false
 	}
 	abs, err := ws.Resolve(raw)
 	if err != nil {
@@ -686,8 +666,8 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_grep", "pattern이 필요해요")
 		return
 	}
-	if err := validateFilePatternText("pattern", pattern); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_grep", err.Error())
+	if pattern == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_grep", "pattern이 필요해요")
 		return
 	}
 	limit, ok := queryLimitParam(w, r, "max_matches", 100, workspace.MaxGrepMatches, "invalid_file_grep")
@@ -720,10 +700,6 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		CaseSensitive: caseSensitive,
 		MaxMatches:    maxMatches,
 	}
-	if err := validateFilePatternText("path_glob", opts.PathGlob); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_grep", err.Error())
-		return
-	}
 	matches, err := ws.Grep(pattern, opts)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "grep_files_failed", err.Error())
@@ -753,8 +729,8 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_glob", "pattern이 필요해요")
 		return
 	}
-	if err := validateFilePatternText("pattern", pattern); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_glob", err.Error())
+	if pattern == "" {
+		writeError(w, r, http.StatusBadRequest, "invalid_file_glob", "pattern이 필요해요")
 		return
 	}
 	paths, err := ws.Glob(pattern)
@@ -794,49 +770,24 @@ func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {
 }
 
 func validateFilePathText(label string, value string) error {
-	if len(value) > maxFilePathBytes {
-		return fmt.Errorf("%s는 %d byte 이하여야 해요", label, maxFilePathBytes)
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s가 필요해요", label)
 	}
 	return nil
 }
 
 func validateFilePatternText(label string, value string) error {
-	if len(value) > maxFilePatternBytes {
-		return fmt.Errorf("%s는 %d byte 이하여야 해요", label, maxFilePatternBytes)
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s가 필요해요", label)
 	}
 	return nil
 }
 
 func validateFileCheckpointIDText(value string) error {
-	if value == "" {
+	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("checkpoint_id가 필요해요")
 	}
-	if len(value) > maxFileCheckpointIDBytes {
-		return fmt.Errorf("checkpoint_id는 %d byte 이하여야 해요", maxFileCheckpointIDBytes)
-	}
 	return nil
-}
-
-func fileSize(ws *workspace.Workspace, rel string) (int64, error) {
-	path, err := ws.Resolve(rel)
-	if err != nil {
-		return 0, err
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-	return info.Size(), nil
-}
-
-func fileContentTruncated(fileBytes int64, content string, opts workspace.ReadOptions) bool {
-	if opts.MaxBytes > 0 && fileBytes > int64(opts.MaxBytes) {
-		return true
-	}
-	if opts.OffsetLine > 0 || opts.LimitLines > 0 {
-		return int64(len(content)) < fileBytes
-	}
-	return false
 }
 
 func workspaceFromQuery(w http.ResponseWriter, r *http.Request) (*workspace.Workspace, string, bool) {
@@ -854,9 +805,6 @@ func newWorkspace(projectRoot string) (*workspace.Workspace, string, error) {
 	if projectRoot == "" {
 		return nil, "", os.ErrInvalid
 	}
-	if err := validateProjectRootText(projectRoot); err != nil {
-		return nil, "", err
-	}
 	ws, err := workspace.New(projectRoot)
 	if err != nil {
 		return nil, "", err
@@ -865,8 +813,5 @@ func newWorkspace(projectRoot string) (*workspace.Workspace, string, error) {
 }
 
 func validateProjectRootText(value string) error {
-	if len(value) > maxProjectRootBytes {
-		return fmt.Errorf("project_root는 %d byte 이하여야 해요", maxProjectRootBytes)
-	}
 	return nil
 }

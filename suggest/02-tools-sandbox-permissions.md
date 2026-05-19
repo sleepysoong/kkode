@@ -27,7 +27,7 @@ Codex config reference는 `approval_policy`, `sandbox_mode`, workspace-write wri
 
 | 현재 tool | 평가 | 보완 |
 |---|---|---|
-| `workspace_read_file` | 파일 전체만 읽어요 | line range, max bytes, binary 감지 필요해요 |
+| `workspace_read_file` | 파일 전체만 읽어요 | line range, binary 감지, preview envelope 필요해요 |
 | `workspace_write_file` | 전체 overwrite라 위험해요 | create-only/overwrite 분리, checkpoint 필요해요 |
 | `workspace_replace_in_file` | 첫 match만 교체해요 | 다중 match 정책, expected count 필요해요 |
 | `workspace_list` | 단순 `os.ReadDir`예요 | recursive glob, mtime sort 필요해요 |
@@ -39,7 +39,7 @@ Codex config reference는 `approval_policy`, `sandbox_mode`, workspace-write wri
 ### P0 tool
 
 ```text
-workspace_read_file(path, offset_line?, limit_lines?, max_bytes?)
+workspace_read_file(path, offset_line?, limit_lines?)
 workspace_list(path, recursive?, max_entries?)
 workspace_glob(pattern, include_ignored?)
 workspace_grep(pattern, path_glob?, regex?, case_sensitive?, include_ignored?)
@@ -273,7 +273,7 @@ type LSPClient interface {
 - YOLO 모드에서 `file_write`, `file_delete`, `file_move`, `file_apply_patch`, `shell_run`이 별도 승인 없이 실행되는지 테스트해요.
 - `workspace` root 밖 path escape가 의도한 경계 정책대로 처리되는지 테스트해요.
 - `file_apply_patch` 실패 시 파일 내용이 부분 적용으로 망가지지 않는지 테스트해요.
-- line range read가 `max_bytes`를 지키는지 테스트해요.
+- line range read가 `offset_line`과 `limit_lines`를 지키는지 테스트해요.
 - `shell_run`이 command, cwd, exit code, stdout, stderr, timeout을 구조화해서 돌려주는지 테스트해요.
 - LSP symbol scan이 `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리를 건너뛰는지 테스트해요.
 

@@ -38,9 +38,6 @@ func TestWorkspaceReadWriteSearchAndPathBoundary(t *testing.T) {
 	if err := w.WriteFile("b.txt", "x"); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	if err := w.WriteFile("large.txt", strings.Repeat("x", MaxFileWriteBytes+1)); err == nil || !strings.Contains(err.Error(), "content") {
-		t.Fatalf("large write는 거부해야 해요: %v", err)
-	}
 }
 
 func TestWorkspaceListAndGlobUseBoundedEnvelope(t *testing.T) {
@@ -374,12 +371,12 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	if err := w.WriteFile("src/utf8.txt", "가나다라마"); err != nil {
 		t.Fatal(err)
 	}
-	part, err = w.ReadFileRange("src/utf8.txt", ReadOptions{MaxBytes: 4})
+	part, err = w.ReadFileRange("src/utf8.txt", ReadOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if part != "가" || !utf8.ValidString(part) {
-		t.Fatalf("max_bytes는 UTF-8 문자를 중간에서 자르면 안 돼요: %q", part)
+	if part != "가나다라마" || !utf8.ValidString(part) {
+		t.Fatalf("read should return the full UTF-8 content: %q", part)
 	}
 	glob, err := w.Glob("src/*.txt")
 	if err != nil || len(glob) != 2 || glob[0] != "src/a.txt" || glob[1] != "src/utf8.txt" {
@@ -395,12 +392,6 @@ func TestWorkspaceReadRangeGlobGrepAndPatch(t *testing.T) {
 	matches, err = w.Grep("needle", GrepOptions{PathGlob: "src/**", MaxMatches: 1, Offset: 1})
 	if err != nil || len(matches) != 1 || matches[0].Path != "src/b.txt" {
 		t.Fatalf("offset matches=%#v err=%v", matches, err)
-	}
-	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{MaxBytes: -1}); err == nil || !strings.Contains(err.Error(), "max_bytes") {
-		t.Fatalf("negative max_bytes는 거부해야 해요: %v", err)
-	}
-	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{MaxBytes: MaxFileReadBytes + 1}); err == nil || !strings.Contains(err.Error(), "max_bytes") {
-		t.Fatalf("large max_bytes는 거부해야 해요: %v", err)
 	}
 	if _, err := w.ReadFileRange("src/a.txt", ReadOptions{OffsetLine: -1}); err == nil || !strings.Contains(err.Error(), "offset_line") {
 		t.Fatalf("negative offset_line은 거부해야 해요: %v", err)
@@ -476,8 +467,8 @@ func TestWorkspaceApplyPatchBoundsPayloadAndResult(t *testing.T) {
 	if err := w.WriteFile("small.txt", "small\n"); err != nil {
 		t.Fatal(err)
 	}
-	original := "old" + strings.Repeat("x", MaxFileWriteBytes-len("old"))
-	if err := w.WriteFile("large.txt", original); err != nil {
+	content := "old" + strings.Repeat("x", 1024-len("old"))
+	if err := w.WriteFile("large.txt", content); err != nil {
 		t.Fatal(err)
 	}
 	patch := `*** Begin Patch
@@ -487,25 +478,25 @@ func TestWorkspaceApplyPatchBoundsPayloadAndResult(t *testing.T) {
 +new-content
 *** End Patch
 `
-	if err := w.ApplyPatch(patch); err == nil || !strings.Contains(err.Error(), "patched content") {
-		t.Fatalf("large patched content는 거부해야 해요: %v", err)
+	if err := w.ApplyPatch(patch); err != nil {
+		t.Fatalf("patch should be accepted without size limits: %v", err)
 	}
 	unchanged, err := os.ReadFile(filepath.Join(dir, "large.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(unchanged) != original {
-		t.Fatal("oversize patch result should not be written")
+	if !strings.HasPrefix(string(unchanged), "new-content") || !strings.Contains(string(unchanged), strings.Repeat("x", 10)) {
+		t.Fatalf("patch should update large content too: %q", unchanged)
 	}
 }
 
-func TestWorkspaceReadFileDefaultsToBoundedEnvelope(t *testing.T) {
+func TestWorkspaceReadFileDefaultsToFullContent(t *testing.T) {
 	dir := t.TempDir()
 	w, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := strings.Repeat("a", MaxFileReadBytes+utf8.UTFMax)
+	content := strings.Repeat("a", 1024)
 	if err := os.WriteFile(dir+"/large.txt", []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -513,8 +504,8 @@ func TestWorkspaceReadFileDefaultsToBoundedEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != MaxFileReadBytes {
-		t.Fatalf("default read should cap at %d bytes, got %d", MaxFileReadBytes, len(got))
+	if len(got) != len(content) {
+		t.Fatalf("default read should return full content, got %d", len(got))
 	}
 }
 

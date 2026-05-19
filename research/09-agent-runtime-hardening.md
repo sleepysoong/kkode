@@ -88,12 +88,12 @@ func (a *Agent) Stream(ctx context.Context, prompt string) (llm.EventStream, err
 
 | Tool | 역할 |
 |---|---|
-| `workspace_read_file` | 파일을 읽어요 |
-| `workspace_write_file` | 허용된 path에 파일을 써요 |
-| `workspace_replace_in_file` | 파일 안의 첫 번째 matching text를 교체해요 |
-| `workspace_list` | 디렉터리를 나열해요 |
-| `workspace_search` | literal 문자열을 검색해요 |
-| `workspace_run_command` | 허용된 command prefix만 실행해요 |
+| `file_read` | 파일을 읽어요 |
+| `file_write` | 허용된 path에 파일을 써요 |
+| `file_edit` | 파일 안의 첫 번째 matching text를 교체해요 |
+| `file_list` | 디렉터리를 나열해요 |
+| `file_grep` | literal 문자열을 검색해요 |
+| `shell_run` | 허용된 command prefix만 실행해요 |
 
 중요한 점은 tool definition이 있어도 handler 단계에서 다시 `ApprovalPolicy`를 검사한다는 점이에요. 모델이 tool argument를 조작해도 `Resolve`, `AllowsWrite`, `AllowsCommand`에서 막아야해요.
 
@@ -119,7 +119,7 @@ go run ./cmd/kkode-agent \
 ## 남은 설계 TODO
 
 - [x] `TraceEvent`를 OpenTelemetry span으로 내보내는 exporter를 추가해야해요.
-- [x] `workspace_apply_patch` tool을 별도로 추가해서 큰 파일 전체 쓰기보다 안전한 patch 흐름을 제공해야해요.
+- [x] `file_apply_patch` tool을 별도로 추가해서 큰 파일 전체 쓰기보다 안전한 patch 흐름을 제공해야해요.
 - [x] command 실행 결과에 exit code, stderr, elapsed time을 구조화해서 남겨야해요.
 - [x] output guardrail을 substring에서 schema/policy 함수 기반으로 확장해야해요.
 - [x] Copilot custom agent definition과 `agent.Config` 사이 변환 helper를 추가해야해요.

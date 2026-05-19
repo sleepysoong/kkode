@@ -14,7 +14,7 @@
 - GitHub/CI automation
 - web/share surface
 
-현재는 `cmd/kkode-agent` 단발 실행만 있어요. 이것을 `kkode` 제품 CLI로 확장해야해요.
+현재는 `cmd/kkode-agent`와 `cmd/kkode-gateway`가 분리돼 있어요. 이것을 `kkode` 제품 CLI와 공용 backend로 더 잘 묶어야해요.
 
 ## OpenCode에서 배울 점
 
@@ -26,7 +26,7 @@ OpenCode 공식 intro는 terminal interface, desktop app, IDE extension을 제�
 
 Codex app-server 문서는 rich client가 authentication, conversation history, approvals, streamed agent events를 다루기 위해 JSON-RPC 2.0 app-server protocol을 쓴다고 설명해요. transport는 stdio와 websocket을 지원해요. SDK 문서는 CI/CD, 내부 도구, 앱 integration을 위해 local Codex agent를 programmatically control한다고 해요.
 
-즉, `kkode`도 `kkode serve`를 만들어 TUI/IDE/web이 같은 backend를 보게 해야해요.
+즉, `kkode`도 현재 gateway를 정리해서 `kkode serve` 같은 공용 backend를 TUI/IDE/web이 같이 보게 해야해요.
 
 ## Claude Code에서 배울 점
 
@@ -36,7 +36,7 @@ Claude Agent SDK는 CLI가 없어도 agent loop, context management, tools, perm
 
 ## 제안 명령 체계
 
-`cmd/kkode-agent`를 최종적으로 `cmd/kkode`로 승격하는 게 좋아요.
+`cmd/kkode-agent`와 `cmd/kkode-gateway`를 최종적으로 `cmd/kkode` 아래의 하위 명령으로 승격하는 게 좋아요.
 
 ```bash
 kkode                         # TUI 시작

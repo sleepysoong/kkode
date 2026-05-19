@@ -15,7 +15,6 @@ import (
 )
 
 const CheckpointDir = ".kkode/checkpoints"
-const MaxCheckpointSnapshotBytes = 16 << 20
 
 type FileCheckpoint struct {
 	Version   int                   `json:"version"`
@@ -93,9 +92,6 @@ func (w *Workspace) SaveCheckpoint(cp FileCheckpoint) error {
 	data, err := json.MarshalIndent(cp, "", "  ")
 	if err != nil {
 		return err
-	}
-	if len(data) > MaxCheckpointSnapshotBytes {
-		return fmt.Errorf("checkpoint payload must be <= %d bytes", MaxCheckpointSnapshotBytes)
 	}
 	return os.WriteFile(filepath.Join(dir, cp.ID+".json"), data, 0o644)
 }
@@ -275,17 +271,11 @@ func (w *Workspace) snapshotExistingPath(abs string, info os.FileInfo, cp *FileC
 	if strings.HasPrefix(rel, CheckpointDir+"/") {
 		return nil
 	}
-	if info.Size() > int64(MaxFileReadBytes) {
-		return fmt.Errorf("checkpoint file must be <= %d bytes: %s", MaxFileReadBytes, rel)
-	}
 	content, err := os.ReadFile(abs)
 	if err != nil {
 		return err
 	}
 	*totalBytes += len(content)
-	if *totalBytes > MaxCheckpointSnapshotBytes {
-		return fmt.Errorf("checkpoint snapshot must be <= %d bytes", MaxCheckpointSnapshotBytes)
-	}
 	addCheckpointEntry(cp, seen, FileCheckpointEntry{Path: rel, Exists: true, Kind: "file", Mode: uint32(info.Mode().Perm()), Size: info.Size(), ContentBase64: base64.StdEncoding.EncodeToString(content)})
 	return nil
 }
@@ -317,9 +307,6 @@ func (w *Workspace) restoreCheckpointEntry(entry FileCheckpointEntry) error {
 		content, err := base64.StdEncoding.DecodeString(entry.ContentBase64)
 		if err != nil {
 			return err
-		}
-		if len(content) > MaxFileWriteBytes {
-			return fmt.Errorf("restored content must be <= %d bytes: %s", MaxFileWriteBytes, rel)
 		}
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 			return err

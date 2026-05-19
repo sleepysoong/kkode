@@ -12,7 +12,7 @@
 - `providers/openai`, `providers/copilot`, `providers/codexcli`, `providers/omniroute` adapter가 있어요.
 - `agent.Agent`가 provider + workspace tools + guardrail + transcript + trace를 묶어요.
 - `workspace`는 read/write/replace/list/search/run_command/apply_patch/delete/move를 제공해요.
-- `cmd/kkode-agent`는 provider를 골라 단발성 실행을 해요.
+- `cmd/kkode-agent`와 `cmd/kkode-gateway`가 각각 agent CLI와 HTTP gateway를 제공해요.
 
 이것은 “agent engine prototype”에는 충분하지만, “CLI/TUI 제품”으로는 아직 P0 기능이 많이 비어 있어요.
 
@@ -23,7 +23,7 @@
 - OpenCode 공식 문서: tools, agents, permissions, LSP, MCP, CLI, SDK, OpenCode Go provider를 봤어요.
 - OpenAI Codex 공식 문서: config, sandbox/approval, skills, app-server, SDK를 봤어요.
 - Claude Code 공식 문서: permission, sandboxing, checkpointing, subagents, MCP, Agent SDK loop를 봤어요.
-- 우리 프로젝트 현재 구현: `llm`, `agent`, `workspace`, `providers`, `cmd/kkode-agent`를 직접 확인했어요.
+- 우리 프로젝트 현재 구현: `llm`, `agent`, `workspace`, `providers`, `cmd/kkode-agent`, `cmd/kkode-gateway`를 직접 확인했어요.
 
 ## 전체 갭 테이블
 

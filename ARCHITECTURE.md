@@ -21,43 +21,35 @@ kkode/
 ├── ARCHITECTURE.md                   # 현재 문서예요
 ├── go.mod
 ├── go.sum
-├── app/                             # CLI/gateway가 공유하는 provider/agent 조립 도우미예요
-│   ├── provider_registry.go          # provider spec, converter profile, source factory registry예요
-│   └── provider_conversion.go        # 실행 없이 provider 요청 preview를 만드는 변환 도우미예요
-├── agent/                           # 실제 coding agent loop와 guardrail/trace예요
-├── session/                         # SQLite session store와 resume/fork 상태예요
-├── runtime/                         # agent와 session store를 묶는 실행 runtime이에요
-├── prompts/                         # system/session/todo prompt 템플릿이에요
+├── app/                              # CLI/gateway가 공유하는 provider/agent 조립 도우미예요
+│   ├── app.go
+│   ├── mcp_defaults.go
+│   ├── project_instructions.go
+│   ├── provider_conversion.go
+│   ├── provider_registry.go
+│   └── provider_tools.go
+├── agent/                            # 실제 coding agent loop와 guardrail/trace예요
 ├── cmd/
 │   ├── kkode-agent/                  # provider 선택형 agent CLI예요
 │   └── kkode-gateway/                # HTTP gateway API server예요
+├── gateway/                          # session/run/event/files/tools/LSP/MCP HTTP API예요
 ├── llm/                              # provider-neutral core예요
-│   ├── model.go                      # 모델 registry와 pricing 타입이에요
-│   ├── conversion.go                 # provider 변환/호출 인터페이스와 adapter예요
-│   ├── pipeline.go                   # 요청→변환→source 호출→응답 변환 파이프라인이에요
-│   ├── prompt.go                     # 메시지 helper예요
-│   ├── redact.go                     # secret redaction helper예요
-│   ├── router.go                     # provider/model router예요
-│   ├── session.go                    # session provider 인터페이스예요
-│   ├── stream.go                     # streaming event 인터페이스예요
-│   ├── template.go                   # prompt template helper예요
-│   ├── tools.go                      # tool registry와 tool loop예요
-│   ├── types.go                      # 핵심 request/response/tool 타입이에요
-│   ├── usage.go                      # usage cost helper예요
-│   └── validate.go                   # request validation이에요
 ├── providers/
-│   ├── internal/httptransport/       # provider 공통 JSON HTTP transport helper예요
-│   ├── openai/                       # OpenAI-compatible Responses 변환/caller provider예요
-│   ├── copilot/                      # GitHub Copilot SDK adapter예요
-│   ├── codexcli/                     # Codex CLI subprocess 변환/caller adapter예요
-│   └── omniroute/                    # OmniRoute gateway adapter예요
-├── gateway/                         # session/run/event HTTP API와 OpenAPI 계약이에요
-├── workspace/                        # workspace file/write/replace/search/shell tool이에요
-├── tools/                            # 표준 file/web/shell tool 이름 adapter예요
-├── transcript/                       # transcript 저장소예요
-├── scripts/                          # 검증용 smoke scripts예요
+│   ├── codexcli/
+│   ├── copilot/
+│   ├── httpjson/
+│   ├── internal/httptransport/
+│   ├── omniroute/
+│   └── openai/
+├── prompts/                          # system/session/todo prompt 템플릿이에요
 ├── research/                         # 조사 문서와 TODO예요
-└── suggest/                          # 다음 구현 제안과 roadmap이에요
+├── runtime/                          # agent와 session store를 묶는 실행 runtime이에요
+├── scripts/                          # 검증용 smoke scripts예요
+├── session/                          # SQLite session/run/checkpoint/artifact/todo store예요
+├── suggest/                          # 다음 구현 제안과 roadmap이에요
+├── tools/                            # 표준 file/web/codeintel tool 이름 adapter예요
+├── transcript/                       # transcript 저장소예요
+└── workspace/                       # workspace file/write/search/shell/checkpoint helper예요
 ```
 
 ## 핵심 인터페이스
@@ -673,9 +665,9 @@ Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provi
 
 `GET /api/v1/stats`는 session provider/model/mode 분포를 `sessions_by_provider`, `sessions_by_model`, `sessions_by_mode`로 반환하고, session event type 분포를 `events_by_type`으로, todo 상태 분포를 `todos_by_status`로, artifact kind 분포를 `artifacts_by_kind`로 반환해요. Session event replay와 durable run/request event replay는 `type` query로, Todo 목록은 `status` query로 같은 bucket을 바로 조회할 수 있어요. artifact JSON content 저장량은 `artifact_bytes`와 `artifact_bytes_by_kind`로 반환해 durable output 저장 증가를 목록 scan 없이 볼 수 있어요. durable background replay 규모는 `run_events`로, replay type별 분포는 `run_events_by_type`으로 반환해요. Run row count는 status별 `runs`, provider별 `runs_by_provider`, model별 `runs_by_model`로 반환해요. 완료된 run timestamp에서 계산한 duration 합계/평균/최대/p95는 `run_duration`으로 반환하며 provider/model 기준 합계는 `run_duration_by_provider`, `run_duration_by_model`로 반환해요. `runs.usage_json`의 input/output/total/reasoning token 합계는 `run_usage`로 반환하며 provider/model 기준 합계는 `run_usage_by_provider`, `run_usage_by_model`로 반환해요. Resource manifest 규모는 kind별 `resources`와 enabled 상태별 `resources_by_enabled`로 반환해 inactive 실행 자산도 목록 scan 없이 볼 수 있어요. Dashboard adapter는 전체 run page를 스캔하지 않고 저장소 규모, run 상태 분포, durable replay 규모, resource 분포, latency, token 사용량을 한 응답에서 그릴 수 있어요.
 
-파일 content preview의 `max_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한하고, `workspace.ReadFileRange`는 `max_bytes` 생략 시에도 최대 8388608 byte까지만 읽으며 더 큰 명시값은 거부하고 UTF-8 안전 경계에서 잘라요.
+파일 content preview는 `offset_line`과 `limit_lines`로 범위를 줄이고, `workspace.ReadFileRange`는 더 이상 `max_bytes`를 받지 않아요. 실제 파일 길이는 `file_bytes`로 따로 계산하고, 응답에는 `content_bytes`와 `content_truncated`만 남겨요.
 
-Workspace write는 최종 content를 8388608 byte 이하로 제한하고, `ApplyPatch` 입력은 1048576 byte 이하로 제한하며, patch 결과 파일도 write envelope를 넘으면 적용 전에 거부해요.
+Workspace write는 content를 그대로 쓰고, `ApplyPatch` 입력은 1048576 byte 이하로 제한하며, patch 결과 파일도 write envelope를 넘으면 적용 전에 거부해요.
 
 LSP format preview는 입력 Go 파일을 8388608 byte까지 허용하고, formatted content preview도 `max_bytes`/UTF-8 안전 경계로 잘라 외부 adapter의 format preview 요청이 큰 파일에 과도한 gofmt 비용을 쓰지 않게 해요.
 
@@ -1117,7 +1109,7 @@ func Fetch(ctx context.Context, cfg WebConfig, rawURL string, maxBytes int64, ti
 
 | Tool | 역할 |
 |---|---|
-| `file_read` | 파일을 읽고 line range/max bytes를 지원해요 |
+| `file_read` | 파일을 읽고 line range를 지원해요 |
 | `file_write` | 파일을 써요 |
 | `file_delete` | 파일이나 디렉터리를 삭제해요 |
 | `file_move` | 파일이나 디렉터리를 이동하거나 이름을 바꿔요 |

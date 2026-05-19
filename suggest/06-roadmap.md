@@ -48,7 +48,7 @@
 ### 작업
 
 - 권한 기능은 만들지 않고 YOLO 실행 정책을 유지해요.
-- `workspace_read_file` line range를 지원해요.
+- `workspace_read_file`은 현재 `offset_line`과 `limit_lines`를 지원해요.
 - `file_glob`, `file_grep`, `file_apply_patch`, `file_delete`, `file_move`를 유지해요.
 - command result를 구조화해요.
 

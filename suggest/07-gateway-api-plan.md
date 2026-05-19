@@ -34,10 +34,11 @@
 - `session.SQLiteStore`: session/turn/event/todo/checkpoint 저장소예요.
 - `runtime.Runtime`: agent + session store 실행 wrapper예요.
 - `agent.Agent`: provider/tool loop 실행 단위예요.
-- `tools.FileTools`: `file_read`, `file_write`, `file_delete`, `file_move`, `file_edit`, `file_apply_patch`, `file_glob`, `file_grep`, `shell_run`이에요.
+- `tools.FileTools`: `file_read`, `file_write`, `file_delete`, `file_move`, `file_edit`, `file_apply_patch`, `file_restore_checkpoint`, `file_prune_checkpoints`, `file_list`, `file_glob`, `file_grep`, `shell_run`이에요.
 - `tools.WebTools`: `web_fetch`예요.
 - `providers/*`: OpenAI, Copilot SDK, Codex CLI, OmniRoute provider adapter예요.
 - `cmd/kkode-agent`: 단발 CLI + SQLite session 연결이에요.
+- `cmd/kkode-gateway`: HTTP gateway API server예요.
 
 아직 남은 것:
 
@@ -380,7 +381,7 @@ run.cancelled
 
 ```http
 GET  /api/v1/files?project_root=/repo&path=.
-GET  /api/v1/files/content?project_root=/repo&path=README.md
+GET  /api/v1/files/content?project_root=/repo&path=README.md&offset_line=1&limit_lines=40
 PUT  /api/v1/files/content
 POST /api/v1/files/delete
 POST /api/v1/files/move
@@ -419,10 +420,10 @@ POST /api/v1/tools/call
 {
   "session_id": "sess_...",
   "tool": "web_fetch",
-  "arguments": {
-    "url": "https://example.com",
-    "max_bytes": 65536
-  }
+    "arguments": {
+      "url": "https://example.com",
+      "max_bytes": 65536
+    }
 }
 ```
 
@@ -669,7 +670,7 @@ func ToEventDTO(ev session.Event) EventDTO
 - `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}` 구현해요.
 - `POST /api/v1/runs`는 일단 동기 실행 후 결과를 반환해요.
 - `GET /api/v1/sessions/{id}/events`는 저장된 event JSON을 반환해요.
-- `cmd/kkode serve` 또는 `cmd/kkode-gateway`를 추가해요.
+- `cmd/kkode serve` 또는 `cmd/kkode-gateway`를 유지/통합해요.
 
 완료 기준:
 

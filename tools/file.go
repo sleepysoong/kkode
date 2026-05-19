@@ -14,7 +14,7 @@ import (
 func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 	strict := true
 	defs := []llm.Tool{
-		{Kind: llm.ToolFunction, Name: "file_read", Description: "workspace 파일을 읽어요. offset_line, limit_lines, max_bytes로 범위를 줄일 수 있어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "offset_line": nonNegativeIntegerSchema(), "limit_lines": nonNegativeIntegerSchema(), "max_bytes": nonNegativeIntegerSchema()}, []string{"path"})},
+		{Kind: llm.ToolFunction, Name: "file_read", Description: "workspace 파일을 읽어요. offset_line과 limit_lines로 범위를 줄일 수 있어요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "offset_line": nonNegativeIntegerSchema(), "limit_lines": nonNegativeIntegerSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "file_write", Description: "workspace 파일을 써요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "content": stringSchema()}, []string{"path", "content"})},
 		{Kind: llm.ToolFunction, Name: "file_delete", Description: "workspace 파일이나 디렉터리를 삭제해요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"path": stringSchema(), "recursive": booleanSchema()}, []string{"path"})},
 		{Kind: llm.ToolFunction, Name: "file_move", Description: "workspace 파일이나 디렉터리를 이동하거나 이름을 바꿔요", Strict: &strict, Parameters: objectSchemaRequired(map[string]any{"source": stringSchema(), "destination": stringSchema(), "overwrite": booleanSchema()}, []string{"source", "destination"})},
@@ -32,12 +32,11 @@ func FileTools(ws *workspace.Workspace) ([]llm.Tool, llm.ToolRegistry) {
 			Path       string `json:"path"`
 			OffsetLine int    `json:"offset_line"`
 			LimitLines int    `json:"limit_lines"`
-			MaxBytes   int    `json:"max_bytes"`
 		}) (string, error) {
 			if ws == nil {
 				return "", fmt.Errorf("workspace is nil")
 			}
-			return ws.ReadFileRange(in.Path, workspace.ReadOptions{OffsetLine: in.OffsetLine, LimitLines: in.LimitLines, MaxBytes: in.MaxBytes})
+			return ws.ReadFileRange(in.Path, workspace.ReadOptions{OffsetLine: in.OffsetLine, LimitLines: in.LimitLines})
 		}),
 		"file_write": llm.JSONToolHandler(func(ctx context.Context, in struct {
 			Path    string `json:"path"`

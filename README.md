@@ -4,6 +4,23 @@
 
 기본 호환 기준은 **OpenAI Responses API**로 잡았어요. 그래서 단순 chat message만 다루지 않고 reasoning item, tool call, tool output, provider raw item을 최대한 보존해요. 이렇게 해야 tool loop, account rotation, Copilot/Codex 같은 agent runtime을 같은 앱 안에서 안전하게 이어 붙일 수 있어요.
 
+## 코드 구조 한눈에 보기
+
+`kkode`의 현재 디렉터리는 대략 이렇게 나뉘어요.
+
+- `app/` — provider spec, converter, 기본 request, default MCP, project instruction 조립
+- `agent/` — 실제 tool loop, guardrail, trace, OTel
+- `runtime/` + `session/` — run/session 저장, resume/fork, checkpoint, artifact, todo
+- `gateway/` — HTTP API, OpenAPI, preview, diagnostics, files/tools/LSP/git/MCP/skill/subagent surface
+- `workspace/` — 파일 시스템 작업, checkpoint, glob/grep, shell command 실행
+- `tools/` — 표준 file/web/codeintel tool 이름과 JSON handler 어댑터
+- `llm/` — provider-neutral core request/response/type/pipeline
+- `providers/` — openai/copilot/codexcli/omniroute/httpjson adapter
+- `cmd/kkode-agent`, `cmd/kkode-gateway` — CLI와 gateway 진입점
+- `prompts/` — system/session/todo prompt 템플릿
+- `transcript/` — transcript 저장소
+- `scripts/`, `research/`, `suggest/` — 검증, 조사, 로드맵 문서
+
 
 ## 프로젝트 틀과 작동 플로우
 
@@ -255,6 +272,7 @@ erDiagram
 - stdio MCP frame의 `Content-Length`도 8388608 byte를 넘으면 본문 할당 전에 거부하고, stdio MCP stderr는 최대 1048576 byte까지만 오류 context로 보존해요.
 - Skill preview의 `max_bytes`는 기본 65536 byte, 최대 1048576 byte로 제한해서 큰 SKILL.md/README.md도 외부 adapter가 bounded preview로 다루게 해요.
 - `project_root`는 `limits.max_project_root_bytes`, session id는 `limits.max_session_id_bytes`, turn id는 `limits.max_turn_id_bytes`, run id는 `limits.max_run_id_bytes`, File API의 query/body path는 `limits.max_file_path_bytes`, glob/grep pattern과 grep `path_glob`는 `limits.max_file_pattern_bytes`, file checkpoint id는 `limits.max_file_checkpoint_id_bytes`, session checkpoint id는 `limits.max_checkpoint_id_bytes`, MCP/skill/subagent resource id는 `limits.max_resource_id_bytes`, artifact id는 `limits.max_artifact_id_bytes`, todo id는 `limits.max_todo_id_bytes` 안에서만 받으므로 외부 adapter가 workspace 선택, session/turn/run 조회, 파일 탐색, 검색, 체크포인트 필터/복구, 실행 자산 선택, artifact 조회, todo 변경을 실행 전에 같은 byte envelope로 맞출 수 있어요.
+- 참고로 files API는 `project_root`/`path`/`pattern`/file checkpoint id에 대해 길이 envelope보다 non-empty와 workspace boundary 검사를 먼저 적용해요. session checkpoint id와 artifact id는 별도 session layer에서 byte/charset 검증을 유지해요.
 - Capabilities discovery는 `limits.max_subagent_preview_prompt_bytes`, `limits.max_prompt_template_name_bytes`, `limits.max_prompt_text_bytes`, `limits.max_transcript_markdown_bytes`, `limits.max_git_diff_bytes`, `limits.max_git_path_bytes`도 노출해서 subagent/prompt/transcript/git preview 요청을 실행 전에 bounded 값으로 맞추게 해요.
 - Run/provider preflight discovery는 `limits.max_run_preview_bytes`, `limits.max_run_output_tokens`, `limits.max_provider_test_preview_bytes`, `limits.max_provider_test_result_bytes`도 노출하고 초과 요청을 거부해서 debug 화면이 대형 preview/result budget이나 generation budget으로 gateway/provider runtime을 압박하지 않게 해요.
 - Provider live smoke는 `limits.max_provider_test_output_tokens`와 `limits.max_provider_test_timeout_ms`도 노출하고 초과 요청을 거부해서 provider debug 호출이 과도한 생성량이나 장시간 대기로 runtime을 점유하지 않게 해요. `max_result_bytes`를 생략해도 live smoke 결과 text와 streaming 누적 text는 8388608 byte envelope 안에서만 보존해요.
@@ -266,8 +284,7 @@ erDiagram
 - 직접 tool 호출의 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte이고, `web_max_bytes`도 최대 8388608 byte로 제한하며, `web_fetch` arguments의 `max_bytes`는 이 configured envelope를 넘을 수 없어서 adapter가 큰 tool/web output을 bounded envelope로 다루게 해요. `web_fetch` body도 UTF-8 안전 byte 경계에서 잘라 한글/이모지 응답이 깨지지 않게 해요.
 - `GET /api/v1/tools/{tool}` 상세 조회와 `POST /api/v1/tools/call` 직접 호출의 tool 이름은 모두 `limits.max_tool_call_name_bytes` envelope 안에서 먼저 검증해요.
 - `GET /api/v1/git/status`, `/git/diff`, `/git/log`는 웹 패널이 변경 파일, diff, 최근 commit을 바로 렌더링하게 해요. status 응답은 `total_entries`, `limit`, `offset`, `next_offset`, `entries_truncated`, `output_truncated`를 포함하고, diff 응답은 `diff_bytes`, `truncated`를 포함하며, log 응답은 `limit`, `offset`, `next_offset`, `commits_truncated`를 포함해서 변경 파일이나 commit이 많은 repo도 안전하게 표시하게 해요. git stdout/stderr byte 제한도 UTF-8 문자 경계를 보존해요.
-- `GET /api/v1/files`, `GET/PUT /api/v1/files/content`, `POST /api/v1/files/delete`, `POST /api/v1/files/move`, `POST /api/v1/files/patch`, `POST /api/v1/files/restore`, `GET/DELETE /api/v1/files/checkpoints/{checkpoint_id}`, `GET /api/v1/files/checkpoints`, `POST /api/v1/files/checkpoints/prune`, `GET /api/v1/files/glob`, `GET /api/v1/files/grep`는 웹 패널 파일 브라우저용 목록/읽기/쓰기/delete/move/patch/restore/checkpoint/glob/검색 API예요. 파일 목록 응답은 최대 5000개 entry envelope 안에서 `total_entries`, `limit`, `offset`, `next_offset`, `entries_truncated`를 포함해서 큰 디렉터리를 page처럼 안전하게 렌더링하게 해요. 파일 content 응답은 `content_bytes`, `file_bytes`, `content_truncated`를 포함해 대용량 preview 여부를 표시하고, 쓰기/delete/move/patch 응답은 변경 전 `.kkode/checkpoints` file snapshot의 `checkpoint_id`를 돌려줘서 adapter가 shell command를 조립하지 않고 파일 tree를 갱신하거나 restore할 수 있게 하며, checkpoint_id는 restore/detail/delete에서 128 byte 이하로 먼저 검증해요. checkpoint 목록/상세/delete/prune API는 snapshot 원문 content 없이 id, 생성 시각, path metadata와 삭제 결과만 보여주고 `path`, `limit`, `offset`으로 특정 파일의 checkpoint history만 좁혀요. patch 응답은 `patch_bytes`로 적용한 patch request 크기를 알려주며, `max_bytes`로 잘릴 때도 UTF-8 문자 경계를 깨지 않으며, glob 응답은 최대 5000개 match envelope 안에서 `total_paths`, `limit`, `offset`, `next_offset`, `paths_truncated`로 더 많은 결과가 있는지 알려줘요. grep 응답은 최대 1000개 match envelope 안에서 `limit`, `offset`, `next_offset`, `result_truncated`로 검색 결과 page 상태를 표시하고, 내부적으로 workspace 경계를 재사용해요.
-- 파일 content preview의 `max_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한하고, workspace reader도 `max_bytes` 생략 시 최대 8388608 byte까지만 읽어서 큰 파일 preview가 메모리를 과점하지 않게 해요. Workspace write는 최종 content를 8388608 byte 이하로 제한하고, `ApplyPatch` 입력은 1048576 byte 이하로 제한해요.
+- `GET /api/v1/files`, `GET/PUT /api/v1/files/content`, `POST /api/v1/files/delete`, `POST /api/v1/files/move`, `POST /api/v1/files/patch`, `POST /api/v1/files/restore`, `GET/DELETE /api/v1/files/checkpoints/{checkpoint_id}`, `GET /api/v1/files/checkpoints`, `POST /api/v1/files/checkpoints/prune`, `GET /api/v1/files/glob`, `GET /api/v1/files/grep`는 웹 패널 파일 브라우저용 목록/읽기/쓰기/delete/move/patch/restore/checkpoint/glob/검색 API예요. 파일 목록 응답은 최대 5000개 entry envelope 안에서 `total_entries`, `limit`, `offset`, `next_offset`, `entries_truncated`를 포함해서 큰 디렉터리를 page처럼 안전하게 렌더링하게 해요. 파일 content 응답은 `content_bytes`, `file_bytes`, `content_truncated`를 포함해 대용량 preview 여부를 표시하고, 쓰기/delete/move/patch 응답은 변경 전 `.kkode/checkpoints` file snapshot의 `checkpoint_id`를 돌려줘서 adapter가 shell command를 조립하지 않고 파일 tree를 갱신하거나 restore할 수 있게 하며, file checkpoint id는 restore/detail/delete에서 비어있지 않은 값만 확인해요. checkpoint 목록/상세/delete/prune API는 snapshot 원문 content 없이 id, 생성 시각, path metadata와 삭제 결과만 보여주고 `path`, `limit`, `offset`으로 특정 파일의 checkpoint history만 좁혀요. patch 응답은 `patch_bytes`로 적용한 patch request 크기를 알려주고, glob 응답은 최대 5000개 match envelope 안에서 `total_paths`, `limit`, `offset`, `next_offset`, `paths_truncated`로 더 많은 결과가 있는지 알려줘요. grep 응답은 최대 1000개 match envelope 안에서 `limit`, `offset`, `next_offset`, `result_truncated`로 검색 결과 page 상태를 표시하고, 내부적으로 workspace 경계를 재사용해요. 파일 content preview는 `offset_line`과 `limit_lines`로 범위를 조절하고 `workspace.ReadFileRange`는 `max_bytes`를 받지 않아요.
 - `gateway/openapi.yaml`에 현재 API 계약을 기록해요.
 
 ### App support
@@ -418,9 +435,9 @@ curl -X POST http://127.0.0.1:41234/api/v1/mcp/servers/mcp_.../tools/echo/call \
   -d '{"arguments":{"text":"ping"}}'
 curl -X POST http://127.0.0.1:41234/api/v1/tools/call \
   -H 'Content-Type: application/json' \
-  -d '{"project_root":"/home/user/kkode","tool":"file_read","arguments":{"path":"README.md","max_bytes":4096}}'
+  -d '{"project_root":"/home/user/kkode","tool":"file_read","arguments":{"path":"README.md","offset_line":1,"limit_lines":40}}'
 curl 'http://127.0.0.1:41234/api/v1/files?project_root=/home/user/kkode&path=.'
-curl 'http://127.0.0.1:41234/api/v1/files/content?project_root=/home/user/kkode&path=README.md&max_bytes=4096'
+curl 'http://127.0.0.1:41234/api/v1/files/content?project_root=/home/user/kkode&path=README.md&offset_line=1&limit_lines=40'
 curl -X POST http://127.0.0.1:41234/api/v1/sessions/sess_.../todos \
   -H 'Content-Type: application/json' \
   -d '{"content":"웹 패널에서 상태를 확인해요","status":"in_progress"}'
