@@ -220,9 +220,8 @@ func TestOpenAPIOperationParametersAreUnique(t *testing.T) {
 func TestOpenAPIExposesAdapterListFilters(t *testing.T) {
 	parameters := readOpenAPIOperationParameters(t)
 	required := map[string][]string{
-		"get /api/v1/runs":                       {"query:turn_id"},
-		"get /api/v1/requests/{request_id}/runs": {"query:turn_id"},
-		"get /api/v1/files/checkpoints":          {"query:path"},
+		"get /api/v1/runs":    {"query:turn_id"},
+		"get /api/v1/sessions": {"query:project_root"},
 	}
 	for op, wantNames := range required {
 		available := map[string]bool{}
