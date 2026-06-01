@@ -210,44 +210,14 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch parts[0] {
-	case "openapi.yaml":
-		s.handleOpenAPI(w, r, parts)
-	case "version":
-		s.handleVersion(w, r, parts)
 	case "providers":
 		s.handleProviders(w, r, parts)
 	case "models":
 		s.handleModels(w, r, parts)
-	case "prompts":
-		s.handlePrompts(w, r, parts)
-	case "capabilities":
-		s.handleCapabilities(w, r, parts)
-	case "diagnostics":
-		s.handleDiagnostics(w, r, parts)
-	case "stats":
-		s.handleStats(w, r, parts)
 	case "sessions":
 		s.handleSessions(w, r, parts)
 	case "runs":
 		s.handleRuns(w, r, parts)
-	case "artifacts":
-		s.handleArtifacts(w, r, parts)
-	case "requests":
-		s.handleRequests(w, r, parts)
-	case "mcp":
-		s.handleMCP(w, r, parts)
-	case "skills":
-		s.handleSkills(w, r, parts)
-	case "subagents":
-		s.handleSubagents(w, r, parts)
-	case "lsp":
-		s.handleLSP(w, r, parts)
-	case "tools":
-		s.handleTools(w, r, parts)
-	case "files":
-		s.handleFiles(w, r, parts)
-	case "git":
-		s.handleGit(w, r, parts)
 	default:
 		writeError(w, r, http.StatusNotFound, "not_found", "API endpoint를 찾을 수 없어요")
 	}
@@ -1087,10 +1057,6 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 		writeError(w, r, http.StatusNotFound, "not_found", "session endpoint를 찾을 수 없어요")
 		return
 	}
-	if len(parts) == 2 && parts[1] == "import" {
-		s.importSession(w, r)
-		return
-	}
 	sessionID := parts[1]
 	if err := validateSessionIDText(sessionID); err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_session", err.Error())
@@ -1102,50 +1068,6 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request, parts []
 	}
 	if len(parts) == 2 {
 		writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodGet)
-		return
-	}
-	if len(parts) == 3 && parts[2] == "events" && r.Method == http.MethodGet {
-		s.getSessionEvents(w, r, sessionID)
-		return
-	}
-	if len(parts) == 3 && parts[2] == "events" {
-		writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodGet)
-		return
-	}
-	if len(parts) == 3 && parts[2] == "transcript" {
-		s.getSessionTranscript(w, r, sessionID)
-		return
-	}
-	if len(parts) == 3 && parts[2] == "export" {
-		s.exportSession(w, r, sessionID)
-		return
-	}
-	if len(parts) >= 3 && parts[2] == "turns" {
-		s.handleSessionTurns(w, r, sessionID, parts[3:])
-		return
-	}
-	if len(parts) >= 3 && parts[2] == "todos" {
-		s.handleSessionTodos(w, r, sessionID, parts[3:])
-		return
-	}
-	if len(parts) >= 3 && parts[2] == "checkpoints" {
-		s.handleSessionCheckpoints(w, r, sessionID, parts[3:])
-		return
-	}
-	if len(parts) >= 3 && parts[2] == "artifacts" {
-		s.handleSessionArtifacts(w, r, sessionID, parts[3:])
-		return
-	}
-	if len(parts) == 3 && parts[2] == "compact" {
-		s.compactSession(w, r, sessionID)
-		return
-	}
-	if len(parts) == 3 && parts[2] == "fork" && r.Method == http.MethodPost {
-		s.forkSession(w, r, sessionID)
-		return
-	}
-	if len(parts) == 3 && parts[2] == "fork" {
-		writeMethodNotAllowed(w, r, "지원하지 않는 sessions method예요", http.MethodPost)
 		return
 	}
 	writeError(w, r, http.StatusNotFound, "not_found", "session endpoint를 찾을 수 없어요")
@@ -1492,22 +1414,6 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request, parts []stri
 	}
 	if len(parts) < 2 {
 		writeError(w, r, http.StatusNotFound, "not_found", "run endpoint를 찾을 수 없어요")
-		return
-	}
-	if len(parts) == 2 && parts[1] == "preview" && r.Method == http.MethodPost {
-		s.previewRun(w, r)
-		return
-	}
-	if len(parts) == 2 && parts[1] == "preview" {
-		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodPost)
-		return
-	}
-	if len(parts) == 2 && parts[1] == "validate" && r.Method == http.MethodPost {
-		s.validateRun(w, r)
-		return
-	}
-	if len(parts) == 2 && parts[1] == "validate" {
-		writeMethodNotAllowed(w, r, "지원하지 않는 runs method예요", http.MethodPost)
 		return
 	}
 	runID := parts[1]

@@ -1,12 +1,8 @@
 package gateway
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -37,31 +33,6 @@ func Beta() {}
 	}
 }
 
-func TestHandleLSPRejectsUnsupportedMethodAs405(t *testing.T) {
-	store := openTestStore(t)
-	srv := newTestServer(t, store, "")
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/lsp/symbols?project_root=.", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("POST /lsp/symbols는 405여야 해요: %d %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleLSPUsesWorkspaceValidation(t *testing.T) {
-	root := t.TempDir()
-	file := filepath.Join(root, "not-dir")
-	writeFile(t, file, "x")
-	store := openTestStore(t)
-	srv := newTestServer(t, store, "")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/symbols?project_root="+file, nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_workspace") {
-		t.Fatalf("LSP도 workspace 검증 오류를 써야 해요: %d %s", rec.Code, rec.Body.String())
-	}
-}
-
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -89,28 +60,6 @@ func Build() {}
 	}
 	if _, err := scanGoDocumentSymbols(root, "../outside.go", 200); err == nil {
 		t.Fatal("project_root 밖 path는 거부해야 해요")
-	}
-}
-
-func TestHandleLSPDocumentSymbols(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "main.go"), `package main
-func Main() {}
-`)
-	store := openTestStore(t)
-	srv := newTestServer(t, store, "")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/lsp/document-symbols?project_root="+root+"&path=main.go", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
-	}
-	var got LSPSymbolListResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Symbols) != 1 || got.Symbols[0].Name != "Main" {
-		t.Fatalf("document symbol 응답이 이상해요: %+v", got)
 	}
 }
 
