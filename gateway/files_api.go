@@ -666,10 +666,6 @@ func (s *Server) grepFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_grep", "pattern이 필요해요")
 		return
 	}
-	if pattern == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_grep", "pattern이 필요해요")
-		return
-	}
 	limit, ok := queryLimitParam(w, r, "max_matches", 100, workspace.MaxGrepMatches, "invalid_file_grep")
 	if !ok {
 		return
@@ -729,10 +725,6 @@ func (s *Server) globFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_glob", "pattern이 필요해요")
 		return
 	}
-	if pattern == "" {
-		writeError(w, r, http.StatusBadRequest, "invalid_file_glob", "pattern이 필요해요")
-		return
-	}
 	paths, err := ws.Glob(pattern)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "glob_files_failed", err.Error())
@@ -772,20 +764,6 @@ func fileGrepMatchDTOs(matches []workspace.SearchMatch) []FileGrepMatchDTO {
 func validateFilePathText(label string, value string) error {
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("%s가 필요해요", label)
-	}
-	return nil
-}
-
-func validateFilePatternText(label string, value string) error {
-	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%s가 필요해요", label)
-	}
-	return nil
-}
-
-func validateFileCheckpointIDText(value string) error {
-	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("checkpoint_id가 필요해요")
 	}
 	return nil
 }
