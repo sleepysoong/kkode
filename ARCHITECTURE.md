@@ -564,6 +564,7 @@ Run 목록 API는 `GET /api/v1/runs?turn_id=...`에서 turn 필터를 지원해�
 GET  /healthz
 GET  /readyz
 GET  /api/v1
+GET  /api/v1/openapi.yaml
 GET  /api/v1/providers
 GET  /api/v1/providers/{provider}
 POST /api/v1/providers/{provider}/test
