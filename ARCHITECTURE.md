@@ -496,6 +496,8 @@ _ = tr.SaveRedacted(".kkode/transcript.json")
 ```go
 type Config struct {
     Store                session.Store
+    StatePath            string
+    MinStateFreeBytes    int64
     Version              string
     Commit               string
     APIKey               string
@@ -503,15 +505,28 @@ type Config struct {
     CORSOrigins          []string
     RequestIDGenerator   func() string
     MaxRequestBytes      int64
+    MaxConcurrentRuns    int
+    RunTimeout           time.Duration
+    RunMaxIterations     int
+    RunWebMaxBytes       int64
     AccessLogger         AccessLogger
     Providers            []ProviderDTO
+    DefaultMCPServers    []ResourceDTO
+    DiagnosticChecks     []DiagnosticCheckDTO
     Features             []FeatureDTO
     ResourceStore        session.ResourceStore
     RunStarter           RunStarter
+    RunPreviewer         RunPreviewer
+    RunValidator         RunValidator
+    ProviderTester       ProviderTester
+    RunRuntimeStats      RunRuntimeStatsGetter
     RunGetter            RunGetter
     RunLister            RunLister
+    RunCounter           RunCounter
     RunCanceler          RunCanceler
+    RunEventLister       RunEventLister
     RunSubscriber        RunEventSubscriber
+    RunEventSubscriber   RunEventStreamSubscriber
     Now                  func() time.Time
 }
 
