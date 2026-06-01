@@ -329,7 +329,7 @@ go run ./cmd/kkode-agent \
 
 ## Gateway API 예제
 
-로컬 웹 패널이나 Discord adapter가 session state를 읽게 하려면 gateway를 실행해요. 기본 listen 주소는 localhost라 개발 중에는 안전하게 시작할 수 있어요. `/readyz`는 SQLite store ping과 run starter/previewer/validator/provider tester와 run 조회/취소/event stream wiring을 함께 확인해서 배포 readiness probe로 쓸 수 있고, health/ready 응답은 OpenAPI DTO로 고정돼요. `/api/v1/diagnostics.state_disk`는 `-state` DB가 있는 filesystem의 여유 공간을 보고, 기본 100MiB보다 낮으면 warning으로 표시해요. 이 기준은 `KKODE_MIN_STATE_FREE_BYTES` 또는 `-min-state-free-bytes`로 조절하고 0이면 비활성화해요.
+로컬 웹 패널이나 Discord adapter가 session state를 읽게 하려면 gateway를 실행해요. 기본 listen 주소는 localhost라 개발 중에는 안전하게 시작할 수 있어요. `/readyz`는 SQLite store ping과 run starter wiring을 함께 확인해서 배포 readiness probe로 쓸 수 있어요.
 
 ```bash
 go run ./cmd/kkode-gateway \
@@ -377,12 +377,10 @@ curl -X POST http://127.0.0.1:41234/api/v1/sessions \
 
 ```bash
 curl 'http://127.0.0.1:41234/api/v1'
-curl 'http://127.0.0.1:41234/api/v1/openapi.yaml'
 curl 'http://127.0.0.1:41234/api/v1/models?provider=openai'
-curl 'http://127.0.0.1:41234/api/v1/prompts'
 ```
 
-저장해둔 MCP server, skill, subagent manifest를 골라 background run에 붙일 수 있어요. 응답은 즉시 `202 Accepted`와 `run_id`를 돌려주고, 실제 agent 실행은 gateway 내부 goroutine에서 이어져요.
+background run을 시작하면 즉시 `202 Accepted`와 `run_id`를 돌려주고, 실제 agent 실행은 gateway 내부 goroutine에서 이어져요.
 
 ```bash
 curl -X POST http://127.0.0.1:41234/api/v1/runs \
@@ -392,36 +390,16 @@ curl -X POST http://127.0.0.1:41234/api/v1/runs \
     "prompt":"이 저장소 구조를 요약하고 다음 작업을 추천해줘",
     "provider":"copilot",
     "model":"gpt-5-mini",
-    "mcp_servers":["mcp_..."],
-    "skills":["skill_..."],
-    "subagents":["subagent_..."],
     "metadata":{"source":"web-panel"}
   }'
 ```
 
-run 상태와 상태 변경 SSE는 아래처럼 읽어요. `events_url`은 run event replay URL이라서 외부 패널이 그대로 따라가면 돼요.
+run 상태와 상태 변경 SSE는 아래처럼 읽어요.
 
 ```bash
 curl http://127.0.0.1:41234/api/v1/runs/run_...
 curl 'http://127.0.0.1:41234/api/v1/runs/run_.../events?after_seq=0&limit=200'
 curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true&after_seq=0'
-curl -X POST http://127.0.0.1:41234/api/v1/mcp/servers/mcp_.../tools/echo/call \
-  -H 'Content-Type: application/json' \
-  -d '{"arguments":{"text":"ping"}}'
-curl -X POST http://127.0.0.1:41234/api/v1/tools/call \
-  -H 'Content-Type: application/json' \
-  -d '{"project_root":"/home/user/kkode","tool":"file_read","arguments":{"path":"README.md","offset_line":1,"limit_lines":40}}'
-curl 'http://127.0.0.1:41234/api/v1/files?project_root=/home/user/kkode&path=.'
-curl 'http://127.0.0.1:41234/api/v1/files/content?project_root=/home/user/kkode&path=README.md&offset_line=1&limit_lines=40'
-curl -X POST http://127.0.0.1:41234/api/v1/sessions/sess_.../todos \
-  -H 'Content-Type: application/json' \
-  -d '{"content":"웹 패널에서 상태를 확인해요","status":"in_progress"}'
-curl -X POST http://127.0.0.1:41234/api/v1/sessions/sess_.../checkpoints \
-  -H 'Content-Type: application/json' \
-  -d '{"turn_id":"turn_...","payload":{"summary":"복구 지점이에요"}}'
-curl 'http://127.0.0.1:41234/api/v1/sessions/sess_.../turns?limit=50'
-curl http://127.0.0.1:41234/api/v1/sessions/sess_.../events
-curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
 ```
 
 OpenAPI 계약은 `gateway/openapi.yaml`을 참고해요. `go test ./gateway`에는 feature catalog endpoint가 OpenAPI paths와 `/api/v1` bootstrap operations에 계속 존재하는지 확인하는 계약 테스트도 들어 있어요.
