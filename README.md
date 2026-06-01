@@ -133,7 +133,7 @@ sequenceDiagram
     and 외부 adapter polling/replay
         UI->>G: GET /api/v1/runs/{run_id}
         G-->>UI: RunDTO status
-        UI->>G: GET /api/v1/sessions/{id}/events?stream=true
+        UI->>G: GET /api/v1/runs/{run_id}/events?stream=true
         G-->>UI: SSE event replay
     end
 ```

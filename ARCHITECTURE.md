@@ -541,7 +541,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 `RunQuery`는 `session_id`, `turn_id`, `status`, `provider`, `model`, `request_id`, `idempotency_key`, `limit`, `offset`을 받아 외부 adapter가 run dashboard나 turn detail에서 본 provider/model/turn bucket을 그대로 목록 조회로 좁힐 수 있게 해요.
 
-Run 목록 API는 일반 `GET /api/v1/runs?turn_id=...`와 request-scoped `GET /api/v1/requests/{request_id}/runs?turn_id=...` 양쪽에서 turn 필터를 지원하고 `total_runs`를 반환해서 adapter가 전체 run 목록을 스캔하지 않고 turn detail과 page count를 채우게 해요.
+Run 목록 API는 `GET /api/v1/runs?turn_id=...`에서 turn 필터를 지원해서 adapter가 전체 run 목록을 스캔하지 않고 turn detail을 좁힐 수 있게 해요.
 
 현재 endpoint는 다음과 같아요. 스트리밍 코딩 에이전트를 위한 핵심 API만 유지하고 있어요.
 
@@ -574,7 +574,7 @@ Run event replay와 request correlation event replay는 같은 incremental curso
 Manifest 저장/import 경계에서는 MCP server, skill, subagent config를 검증한 뒤 identifier-like 문자열과 목록을 canonical 값으로 정리해요. 이 때문에 export, preview, run assembly가 같은 resource 값을 사용하고 외부 adapter는 공백/중복이 제거된 manifest 계약을 기준으로 UI cache와 diff를 만들 수 있어요.
 
 ```bash
-curl -N 'http://127.0.0.1:41234/api/v1/sessions/sess_.../events?stream=true&after_seq=0'
+curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true&after_seq=0'
 ```
 
 `cmd/kkode-gateway`는 기본적으로 `127.0.0.1:41234`에 bind해요. `/readyz`는 `session.HealthChecker`를 구현한 store ping과 run starter wiring을 확인해서 SQLite 연결이 닫히거나 필수 runtime 경계가 빠진 경우 503을 반환하고, health/ready 성공 응답은 OpenAPI DTO로 고정해요. `0.0.0.0` 같은 remote bind는 `--api-key` 또는 `--api-key-env`가 없으면 거부해야해요.
