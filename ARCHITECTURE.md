@@ -543,149 +543,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 Run 목록 API는 일반 `GET /api/v1/runs?turn_id=...`와 request-scoped `GET /api/v1/requests/{request_id}/runs?turn_id=...` 양쪽에서 turn 필터를 지원하고 `total_runs`를 반환해서 adapter가 전체 run 목록을 스캔하지 않고 turn detail과 page count를 채우게 해요.
 
-현재 endpoint는 다음과 같아요.
+현재 endpoint는 다음과 같아요. 스트리밍 코딩 에이전트를 위한 핵심 API만 유지하고 있어요.
 
 ```text
 GET  /healthz
 GET  /readyz
 GET  /api/v1
-GET  /api/v1/openapi.yaml
-GET  /api/v1/version
-GET  /api/v1/capabilities
-GET  /api/v1/diagnostics
 GET  /api/v1/providers
 GET  /api/v1/providers/{provider}
 POST /api/v1/providers/{provider}/test
 GET  /api/v1/models
-GET  /api/v1/stats
-GET  /api/v1/prompts
-GET  /api/v1/prompts/{template_name}
-POST /api/v1/prompts/{template_name}/render
-GET  /api/v1/tools
-GET  /api/v1/tools/{tool}
-POST /api/v1/tools/call
-GET  /api/v1/files
-GET  /api/v1/files/content
-PUT  /api/v1/files/content
-POST /api/v1/files/delete
-POST /api/v1/files/move
-POST /api/v1/files/patch
-POST /api/v1/files/restore
-GET  /api/v1/files/checkpoints
-POST /api/v1/files/checkpoints/prune
-GET  /api/v1/files/checkpoints/{checkpoint_id}
-DELETE /api/v1/files/checkpoints/{checkpoint_id}
-GET  /api/v1/files/glob
-GET  /api/v1/files/grep
-GET  /api/v1/git/status
-GET  /api/v1/git/diff
-GET  /api/v1/git/log
 POST /api/v1/sessions
 GET  /api/v1/sessions
 GET  /api/v1/sessions/{session_id}
-GET  /api/v1/sessions/{session_id}/turns
-GET  /api/v1/sessions/{session_id}/turns/{turn_id}
-POST /api/v1/sessions/import
-GET  /api/v1/sessions/{session_id}/export
-GET  /api/v1/sessions/{session_id}/transcript
-POST /api/v1/sessions/{session_id}/compact
-POST /api/v1/sessions/{session_id}/fork
-GET  /api/v1/sessions/{session_id}/events
-GET  /api/v1/sessions/{session_id}/checkpoints
-POST /api/v1/sessions/{session_id}/checkpoints
-GET  /api/v1/sessions/{session_id}/checkpoints/{checkpoint_id}
-GET  /api/v1/sessions/{session_id}/todos
-PUT  /api/v1/sessions/{session_id}/todos
-POST /api/v1/sessions/{session_id}/todos
-DELETE /api/v1/sessions/{session_id}/todos/{todo_id}
-GET  /api/v1/mcp/servers
-POST /api/v1/mcp/servers
-GET  /api/v1/mcp/servers/{resource_id}
-PUT  /api/v1/mcp/servers/{resource_id}
-DELETE /api/v1/mcp/servers/{resource_id}
-GET  /api/v1/mcp/servers/{resource_id}/tools
-GET  /api/v1/mcp/servers/{resource_id}/resources
-GET  /api/v1/mcp/servers/{resource_id}/resources/read
-GET  /api/v1/mcp/servers/{resource_id}/prompts
-POST /api/v1/mcp/servers/{resource_id}/prompts/{prompt_name}/get
-POST /api/v1/mcp/servers/{resource_id}/tools/{tool_name}/call
-GET  /api/v1/skills
-POST /api/v1/skills
-GET  /api/v1/skills/{resource_id}
-PUT  /api/v1/skills/{resource_id}
-DELETE /api/v1/skills/{resource_id}
-GET  /api/v1/skills/{resource_id}/preview
-GET  /api/v1/subagents
-POST /api/v1/subagents
-GET  /api/v1/subagents/{resource_id}
-PUT  /api/v1/subagents/{resource_id}
-DELETE /api/v1/subagents/{resource_id}
-GET  /api/v1/subagents/{resource_id}/preview
-GET  /api/v1/lsp/symbols
-GET  /api/v1/lsp/document-symbols
-GET  /api/v1/lsp/definitions
-GET  /api/v1/lsp/references
-GET  /api/v1/lsp/rename-preview
-GET  /api/v1/lsp/format-preview
-GET  /api/v1/lsp/diagnostics
-GET  /api/v1/lsp/hover
-GET  /api/v1/runs
 POST /api/v1/runs
+GET  /api/v1/runs
 GET  /api/v1/runs/{run_id}
+POST /api/v1/runs/{run_id}/cancel
 GET  /api/v1/runs/{run_id}/events
 GET  /api/v1/runs/{run_id}/transcript
-GET  /api/v1/requests/{request_id}/runs
-GET  /api/v1/requests/{request_id}/events
-GET  /api/v1/requests/{request_id}/transcript
-POST /api/v1/runs/{run_id}/cancel
 POST /api/v1/runs/{run_id}/retry
 ```
 
+`GET /api/v1`은 adapter bootstrap용 discovery index예요. `links` map과 `{name, method, path}` 형태의 `operations` 배열을 함께 반환해서 외부 adapter가 OpenAPI를 다운로드하기 전에도 health/readiness/session/run endpoint를 바로 알 수 있게 해요. `Config.CORSOrigins`는 별도 웹 패널 origin의 preflight와 bearer auth 호출을 허용하고 브라우저가 `X-Request-Id`와 `X-Idempotent-Replay` 응답 header를 읽게 해요. 모든 gateway 응답은 `X-Request-Id`를 보존하거나 생성하고, 실패 응답은 `ErrorEnvelope{error:{code,message,request_id,details}}` 형태로 반환해요. `accessLogMiddleware`는 선택적으로 request id, method, path, status, byte 수, duration을 JSONL로 stderr에 남겨요.
+
 `SessionQuery`는 `project_root`, `provider`, `model`, `mode`, `limit`, `offset`을 받아 dashboard의 session provider/model/mode bucket을 목록 조회로 좁혀요.
-
-`GET /api/v1`은 adapter bootstrap용 discovery index라서 하위 호환용 `links` map과 `{name, method, path}` 형태의 `operations` 배열을 함께 반환해요. 외부 adapter는 health/readiness/OpenAPI/capabilities/session/run/transcript/event/preview URL뿐 아니라 `POST /api/v1/runs`, `PUT /api/v1/files/content`, `DELETE /api/v1/sessions/{session_id}/todos/{todo_id}` 같은 write/action route method도 OpenAPI 다운로드 전부터 추론 없이 알 수 있어요. `Config.CORSOrigins`는 별도 웹 패널 origin의 preflight와 bearer auth 호출을 허용하고 브라우저가 `X-Request-Id`와 `X-Idempotent-Replay` 응답 header를 읽게 해요. `requestIDMiddleware`는 모든 응답에 `X-Request-Id`를 붙이고 client가 보낸 ID를 공개 `ErrorEnvelope` DTO에도 보존해서 Discord/Slack/web adapter 로그와 오류 처리를 같은 요청으로 묶게 해요. `securityHeadersMiddleware`는 모든 HTTP 응답에 `X-Content-Type-Options: nosniff`를 붙여 브라우저 기반 패널에서 content sniffing을 줄여요. `accessLogMiddleware`는 선택적으로 `AccessLogEntry`를 발행해서 host app이 request id, method, path, status, byte 수, duration을 structured log나 metric으로 재사용하게 해요. `startRun`/`validateRun`/`previewRun`/`retryRun`은 같은 request id를 `RunDTO.Metadata["request_id"]`에 주입하고, 기본 MCP 이름은 `RunDTO.Metadata["default_mcp_servers"]`에 정렬된 쉼표 목록으로 남겨서 durable replay와 외부 adapter 실행 자산 표시가 명시 resource ID만 보고 흔들리지 않게 해요. `GET /api/v1/openapi.yaml`은 gateway가 실행 중인 API 계약을 그대로 제공하고 모든 operation에 표준 `ErrorEnvelope` response reference를 포함해서 SDK 생성과 adapter smoke test에 쓸 수 있게 해요. `GET /api/v1/capabilities`는 외부 adapter가 gateway의 구현/연결 상태, provider capability key catalog, `요청 → 변환 → API/source 호출 → 응답 변환` pipeline catalog, 기본 Serena/Context7 MCP manifest, `limits.max_request_bytes`, `limits.max_request_id_bytes`, `limits.max_idempotency_key_bytes`, `limits.max_tool_call_name_bytes`, `limits.max_tool_call_id_bytes`, `limits.max_tool_call_argument_bytes`, `limits.max_tool_call_output_bytes`, `limits.max_tool_call_web_bytes`, `limits.max_shell_timeout_ms`, `limits.max_shell_output_bytes`, `limits.max_shell_stderr_bytes`, `limits.max_concurrent_runs`, `limits.run_timeout_seconds`, `limits.max_mcp_http_response_bytes`, `limits.max_mcp_probe_name_bytes`, `limits.max_mcp_probe_uri_bytes`, `limits.max_mcp_probe_argument_bytes`, `limits.max_mcp_probe_output_bytes`, `limits.max_file_content_bytes`, `limits.max_workspace_file_read_bytes`, `limits.max_workspace_file_write_bytes`, `limits.max_workspace_list_entries`, `limits.max_workspace_glob_matches`, `limits.max_workspace_grep_matches`, `limits.max_workspace_patch_bytes`, `limits.max_skill_preview_bytes`, `limits.max_lsp_format_input_bytes`, `limits.max_lsp_format_preview_bytes`, `limits.max_run_prompt_bytes`, `limits.max_run_selector_items`, `limits.max_run_context_blocks` 같은 운영 제한값을 discovery할 수 있게 해요. 각 provider의 capability map은 true 값만 노출하므로, 외부 adapter는 `provider_capabilities` catalog를 기준으로 빠진 key를 false처럼 해석하면 돼요. `provider_pipeline`은 preview/test/run UI가 같은 단계 이름을 쓰게 해줘요. `GET /api/v1/diagnostics`는 store ping, state DB filesystem 여유 공간, run starter/previewer/validator/provider tester와 run 조회/취소/event stream 연결, provider auth 상태, provider/default MCP 개수, Serena/Context7 기본 MCP 상태, 동시 run 제한, run timeout, 현재 queued/running/cancelling queue 상태 같은 배포 진단값을 한 번에 보여주고, provider auth나 필수 runtime wiring 같은 hard check가 실패하면 `ok=false`, `failing_checks`, 필요한 env 힌트를 반환해요. Serena 실행 command가 없거나 state DB filesystem 여유 공간이 `KKODE_MIN_STATE_FREE_BYTES`/`-min-state-free-bytes`보다 낮은 경우는 `warning` check로 노출해서 운영자가 원인을 볼 수 있지만 gateway readiness를 실패시키지는 않고, 필수 runtime wiring이 빠지면 `missing_runtime_wiring` 목록과 `/readyz` 오류 details에도 같은 목록을 담아요. default MCP discovery/preview 응답은 header/env secret 값을 마스킹해요. `GET /api/v1/providers`와 `GET /api/v1/providers/{provider}`는 provider별 alias, auth env 힌트, converter/caller/source/operation 변환 profile을 포함하고, `POST /api/v1/providers/{provider}/test`는 session 없이 provider 요청 변환 preview와 선택적 `live=true` smoke 결과를 반환해서 provider debug 화면이 실행 전 인증/변환 문제를 확인하게 해요. `timeout_ms`를 주면 live smoke context를 그 시간 안에 끊고, 0이면 기본 60초를 사용해요. `max_result_bytes`를 주면 secret 마스킹 뒤 결과 text를 UTF-8 안전 byte 경계에서 잘라 `text_bytes`와 `text_truncated`로 알려줘요. provider test 실패는 `ok=false`, 안정적인 `code`, 사람이 읽는 `message`를 함께 반환해 외부 adapter가 문자열 파싱 없이 분기하게 해요. `live=true`에서 인증 환경변수가 없으면 source 호출 전에 `provider_auth_missing`으로 중단하고 변환 preview는 계속 보여줘요. provider/capabilities discovery는 provider 이름순으로 정렬하고 `total_providers`, `limit`, `offset`, `next_offset`, `result_truncated` page metadata를 제공하며, `GET /api/v1/models`는 provider 이름순 안에서 기본 모델을 먼저 둔 뒤 나머지를 정렬하고 `total_models`, `limit`, `offset`, `next_offset`, `result_truncated` page metadata를 제공해서 모델 선택 UI와 provider debug 화면의 cache/diff가 config 주입 순서나 큰 catalog에 흔들리지 않게 해요. `GET /api/v1/stats`는 dashboard adapter가 sessions/turns/events/todos/checkpoints/runs/resources 카운트와 `total_runs`, `total_resources`를 한 번에 읽게 해요. `GET /api/v1/prompts` 계열은 system/session/todo prompt template 목록, 원문, 렌더링 preview를 제공하고 prompt list pagination metadata와 `max_text_bytes`, `text_bytes`, `text_truncated` preview metadata를 함께 내려서 외부 패널이 prompt 설정 화면을 만들 수 있게 해요. `GET /api/v1/tools`, `GET /api/v1/tools/{tool}`, `POST /api/v1/tools/call`은 표준 file/shell/web/codeintel tool surface를 API로 직접 노출하고, 같은 local tool surface를 agent run에도 붙여 provider tool call에서 `lsp_*` codeintel 도구와 선택된 MCP server용 `mcp_call`을 실행하게 하며, `enabled_tools`/`disabled_tools`로 run 단위 선택을 적용하고, tool list pagination metadata와 tool별 `category`, UI 표시용 `effects`, `output_format`, JSON Schema `parameters`, 안전한 `example_arguments`, `requires_workspace`를 알려주며, `web_fetch`는 `project_root` 없이도 실행하고, LSP codeintel tool은 symbols/definitions/references/hover/diagnostics를 JSON output으로 반환하며, 직접 tool 호출은 tool 이름, call id, arguments JSON 크기를 먼저 제한하고, `timeout_ms`로 전체 시간을 제한하며, `max_output_bytes`로 큰 output을 adapter 친화적으로 자를 수 있게 해요. `GET /api/v1/git/status`, `/diff`, `/log`는 패널이 변경사항과 commit 흐름을 명령 조립 없이 렌더링하게 해요. status 응답은 `total_entries`, `limit`, `entries_truncated`, `output_truncated`를 포함하고 log 응답은 `limit`, `commits_truncated`를 포함해서 변경 파일이나 commit이 많은 repo도 bounded list처럼 다루게 해요. git stdout/stderr byte 제한도 UTF-8 문자 경계를 보존해서 한글 commit/diff와 오류가 깨지지 않게 해요. `GET /api/v1/files`, `GET/PUT /api/v1/files/content`, `POST /api/v1/files/patch`, `GET /api/v1/files/glob`, `GET /api/v1/files/grep`는 웹 패널 파일 브라우저와 검색 UI가 쓰기 쉬운 전용 wrapper예요. 파일 목록 응답은 최대 5000개 entry envelope 안에서 `total_entries`, `limit`, `offset`, `next_offset`, `entries_truncated`로 큰 디렉터리의 page 상태를 알려줘요. 파일 content 응답은 `content_bytes`, `file_bytes`, `content_truncated`를 포함해서 대용량 preview 상태를 명확히 보여주고, patch 응답은 `patch_bytes`로 적용한 patch request 크기를 알려주며, `max_bytes` 제한은 UTF-8 문자 경계를 보존해서 한글/이모지 preview가 깨지지 않게 해요. glob 응답은 최대 5000개 match envelope 안에서 `total_paths`, `limit`, `offset`, `next_offset`, `paths_truncated`로 page 상태를 알려주고, grep 응답은 최대 1000개 match envelope 안에서 `limit`, `result_truncated`로 검색 결과 잘림 상태를 알려줘요. 이 endpoint도 권한 프롬프트 없이 project root 기준으로 즉시 실행해요. MCP server, skill, subagent는 `session.ResourceStore`와 `resources` SQLite table에 manifest로 저장해요. MCP stdio/http manifest는 `/api/v1/mcp/servers/{resource_id}/tools`, `/resources`, `/prompts`로 `initialize` 뒤 `tools/list`, `resources/list`, `prompts/list` probe를 실행할 수 있고, live MCP catalog 응답은 `limit`, `offset`, `next_offset`, `result_truncated`로 page 상태를 알려주며, MCP tool 목록은 `input_schema`, schema 기반 `example_arguments`, `category/effects/output_format`을 함께 반환하며, `/resources/read`, `/prompts/{prompt_name}/get`, `/tools/{tool_name}/call`로 resource/prompt/tool 동작을 직접 검증할 수 있어요. MCP resource/prompt preview는 URI/이름/arguments와 max byte 제한, 원본 byte/truncated metadata를 제공하고, MCP tool 직접 호출은 `max_output_bytes`, `result_bytes`, `result_truncated`를 제공해서 큰 text/blob/output payload를 웹/Discord adapter가 안전하게 렌더링하게 해요. `GET /api/v1/skills/{resource_id}/preview`는 저장된 skill directory의 `SKILL.md` 또는 `README.md`를 읽고 `markdown_bytes`, `markdown_truncated`로 잘림 상태를 알려주며 외부 패널 preview로 돌려줘요. Skill manifest는 `path` 또는 `directory`가 실제 존재하고 directory일 때 `SKILL.md`/`README.md`/`skill.md` 중 하나가 있어야 run에 연결돼요. `GET /api/v1/subagents/{resource_id}/preview`는 subagent prompt, tools, MCP server alias/id, skill 참조를 실행 전 확인하고 `max_prompt_bytes`, `prompt_bytes`, `prompt_truncated`로 큰 prompt preview를 안전하게 잘라요. Subagent manifest는 `mcp_server_ids`로 저장된 MCP resource를 재사용하거나 `mcp_servers`에 legacy command 문자열 또는 stdio/http MCP object를 inline으로 넣을 수 있어요. `RunStartRequest.mcp_servers`, `skills`, `subagents`는 저장된 manifest ID 목록이고, `RunStartRequest.context_blocks`는 Discord thread 요약이나 웹 패널 임시 지침처럼 저장 resource 없이 이번 run에만 붙일 provider-neutral context예요. gateway는 이 context를 실행/영속화 전에 secret 마스킹하고 UTF-8 안전 byte 경계에서 길이와 개수를 제한하며, run prompt와 실행 자산 selector도 queue 전에 제한해요. `cmd/kkode-gateway`는 이 둘을 `app.ProviderOptions`로 변환해서 Copilot 같은 provider 설정에 연결해요. 동시에 요청 context, skill markdown, subagent prompt/tools/skills/MCP 요약을 `ContextBlocks`로 만들어 agent system prompt에 붙이므로 OpenAI-compatible, Codex CLI, OmniRoute 같은 provider도 같은 실행 자산을 참고해요. `POST /api/v1/runs/preview`는 이 context를 `context_blocks`와 `context_truncated`로 노출해서 웹 패널이 실행 전에 실제 추가 지침을 확인하게 해요. 선택한 manifest가 `enabled=false`이면 provider를 만들기 전에 오류를 반환해서 비활성 실행 자산이 조용히 섞이지 않게 해요. `GET /api/v1/lsp/symbols`는 files/git API와 같은 workspace root 검증을 거친 뒤 Go parser 기반 workspace symbol index를 반환하고, `GET /api/v1/lsp/document-symbols`는 파일 하나의 outline을 반환해요. `GET /api/v1/lsp/definitions`와 `GET /api/v1/lsp/references`는 `symbol` 이름 또는 `path,line,column` 커서 위치에서 찾은 Go 식별자를 기준으로 definition/reference 위치와 excerpt를 반환해서 외부 패널의 go-to-definition/reference view를 만들 수 있게 해요. `GET /api/v1/lsp/rename-preview`는 같은 symbol/cursor query와 `new_name`을 받아 파일을 수정하지 않고 rename 후보 edit 목록을 반환해요. `GET /api/v1/lsp/format-preview`는 Go 파일을 쓰지 않고 gofmt 결과와 변경 여부, UTF-8 안전 content preview를 반환해요. `GET /api/v1/lsp/diagnostics`는 Go parser diagnostic을 반환하고, `GET /api/v1/lsp/hover`는 같은 `symbol` 또는 cursor query로 symbol signature와 doc comment를 반환해요. LSP list 응답은 `limit`과 `result_truncated`를 포함해서 코드 탐색 결과가 더 있는지 표시해요. LSP scan은 공통 `walkParsedGoFiles` helper로 `node_modules`, `vendor`, `.omx` 같은 무거운 디렉터리를 건너뛰며 `limit`에 도달하면 scan을 조기 중단해요. 이 manifest의 `config`에는 stdio/http MCP 설정, skill path/prompt, subagent prompt/tools/skills 같은 provider별 설정을 담아요. `POST /api/v1/runs/preview`는 실행 없이 provider/model/default MCP/선택 manifest/base request tool 조립 결과와 `llm.Request -> RequestConverter -> ProviderRequest` 변환 preview를 돌려줘서 외부 adapter가 UI 확인 단계와 provider debug 화면을 만들 수 있게 해요. `preview_stream=true`면 `ProviderPipeline.PrepareStream` 경로를 사용해서 SSE/SDK streaming payload도 실제 호출 없이 확인하게 해요. preview의 body/raw/context JSON은 secret 마스킹과 `max_preview_bytes` 길이 제한을 적용하고 UTF-8 문자 경계를 보존해요. `POST /api/v1/runs/validate`는 같은 preflight를 실행하지만 queue를 만들지 않고 `ok/code/message/existing_run` 결과만 반환해요. `POST /api/v1/runs`는 `RunValidator`로 session/provider/resource/workspace/provider-factory preflight를 먼저 통과한 뒤 즉시 `queued` 상태의 `RunDTO`를 반환하고, `AsyncRunManager`가 concurrency slot을 얻은 뒤 goroutine에서 실제 `RunStarter`를 실행해요. run context가 취소되거나 timeout되면 starter가 뒤늦게 성공 응답을 반환해도 최종 상태는 `cancelled`로 고정해서 외부 adapter의 취소 표시가 완료 상태로 뒤집히지 않게 해요. `Idempotency-Key` header 또는 `metadata.idempotency_key`가 있으면 session+key 기반 결정적 run id를 쓰고, SQLite insert-only claim이나 같은 프로세스에서 관리 중인 run과 같으면 새 작업을 만들지 않고 기존 run을 `200` + `X-Idempotent-Replay: true`로 반환해요. `KKODE_MAX_CONCURRENT_RUNS`/`-max-concurrent-runs`는 동시에 running 상태로 진입하는 run 수를 제한하고 초과분은 queued 상태로 대기해요. `KKODE_RUN_TIMEOUT`/`-run-timeout`은 running run이 provider/tool context를 너무 오래 점유하지 않도록 실행 시간을 제한해요. `/api/v1/diagnostics.run_runtime`은 현재 process-local tracked/queued/running/cancelling/terminal run 수와 slot 점유량을 보여줘요. run 상태는 `session.RunStore`와 `runs` SQLite table에도 저장돼요. gateway 시작 시 `RecoverStaleRuns`가 소유자가 사라진 `queued/running/cancelling` run을 `failed`로 닫고 durable run event를 남겨요. run 레코드는 provider/model/MCP/skills/subagents/context_blocks 선택을 함께 저장해서 retry가 같은 실행 맥락을 복원해요. `RunEventBus`는 같은 프로세스 안의 run 상태 변경과 agent/tool progress event를 `/api/v1/runs/{run_id}/events?stream=true` SSE로 전달하고, idle 중에는 `heartbeat_ms` 또는 기본 15초 주기로 `: heartbeat` comment를 보내고, `session.RunEventStore`는 같은 상태 변경과 progress event를 `run_events` SQLite table에 저장해요. SQLite store는 `session.RunSnapshotStore.SaveRunWithEvent`로 run snapshot과 durable event를 같은 transaction에 저장해서 replay 누락을 줄여요. `turns(session_id, ordinal)`, `events(session_id, ordinal)`, `run_events(run_id, seq)`는 unique sequence를 강제하고 `retrySQLiteSequence`가 짧게 재시도해서 동시 append 경합을 완화해요. 외부 Discord/Slack/web adapter는 session turns/transcript API, run transcript API, request transcript API로 대화 히스토리와 run/request-scoped 결과를 렌더링하고, transcript markdown은 max byte 제한과 원본 byte/truncated metadata로 Discord/web preview를 안전하게 자르며, session export/import API로 raw session snapshot, run이 참조한 MCP/skill/subagent resources, counts가 포함된 복구/이관/debug bundle을 저장하거나 복원하며, export preview는 `include_raw=false`와 turn/event/checkpoint/run limit 및 truncation metadata로 큰 session payload를 줄일 수 있고, 공유/debug 용도에서는 `redact=true`로 raw_session을 제외하고 secret 패턴을 마스킹하며, session compact API로 오래된 turn을 summary로 압축하고 `total_turns`, `compacted_turns`, `preserved_turns`, `summary_bytes`, `checkpoint_created` metadata를 확인하며, session checkpoint API로 복구용 snapshot payload를 저장하고, session todo API로 진행 상태를 직접 보정하고 todo list pagination metadata로 status UI polling payload를 줄이거나, `GET /api/v1/runs/{run_id}`로 `queued/running/completed/failed/cancelled` 상태를 확인하고, `GET /api/v1/runs?request_id=...`, `GET /api/v1/runs?idempotency_key=...` 또는 `GET /api/v1/requests/{request_id}/runs`로 특정 외부 요청에서 파생된 run을 다시 찾고, `GET /api/v1/requests/{request_id}/events`로 관련 run event를 한 응답에서 모으거나 `stream=true` SSE로 live update를 받고, `GET /api/v1/requests/{request_id}/transcript`로 같은 request id에서 파생된 run transcript를 묶어서 렌더링하고, SQLite의 `idx_runs_request_id_updated` expression index로 metadata JSON 필터 비용을 줄이고, `events_url`이 가리키는 run event replay도 읽으면 돼요. session `/events`는 `after_seq`/`limit` 기반 저장 event replay이고, session turn/event list JSON 응답은 `limit`, `result_truncated`, 필요한 경우 `next_after_seq`를 제공하며, session/checkpoint/resource manifest list와 run/request run list JSON 응답은 `limit`, `offset`, `next_offset`, `result_truncated`를 제공해서 외부 adapter가 다음 page와 replay cursor를 안전하게 계산하게 해요. run `/events`와 request correlation `/events`는 durable replay와 live 상태/progress 변경을 함께 제공하고, SSE는 replay 전에 live subscription을 준비해서 replay/live 경계의 terminal update 누락을 줄여요. `RunEventBus`는 subscriber buffer가 꽉 차도 terminal update는 오래된 update 하나를 밀어내고 보존해요. SQLite `TimelineStore`는 session 전체를 로드하지 않고 `ListTurns`, `LoadTurn`, `ListEvents`로 필요한 범위만 읽어서 긴 세션 패널 렌더링 비용을 줄여요. `TurnEventStore`는 새 turn, event, session state를 한 transaction으로 저장해서 새 turn 하나 때문에 기존 turns/events/todos를 통째로 지우고 다시 쓰지 않게 해요. `IncrementalStore`는 이 원자 경로가 없는 store를 위한 호환 fallback이에요.
-
-Legacy `workspace_*` tool surface도 `workspace_list`, `workspace_glob`, `workspace_search`의 `limit`과 `[result_truncated]` marker를 지원해서 오래된 caller가 표준 `file_*` surface로 완전히 이동하기 전에도 큰 text list를 bounded output으로 다루게 해요.
-
-Live MCP catalog API는 probe 결과를 page로 자르기 전에 전체 항목 수를 알고 있으므로 `/api/v1/mcp/servers/{id}/tools`, `/resources`, `/prompts` 응답에 각각 `total_tools`, `total_resources`, `total_prompts`도 함께 내려요. 외부 adapter는 이 값과 `limit`, `offset`, `next_offset`, `result_truncated`를 같이 써서 큰 MCP tool/resource/prompt 선택 UI의 총량과 다음 page를 추론 없이 표시할 수 있어요.
-
-Session checkpoint 목록 API는 `turn_id`, `limit`, `offset` query와 `total_checkpoints` 응답값을 제공해서 외부 adapter가 session 전체 checkpoint를 스캔하지 않고 turn-scoped restore/debug view를 만들게 해요.
-
-파일 쓰기 전용 API와 표준 `file_write`/`file_edit`/`file_delete`/`file_move`/`file_apply_patch` tool은 실행 전에 `.kkode/checkpoints` file snapshot을 만들고 `checkpoint_id`를 반환해요. `POST /api/v1/files/restore`와 `file_restore_checkpoint` tool은 같은 checkpoint payload를 복구해서 외부 adapter가 권한 프롬프트 없이도 undo UI를 붙일 수 있게 해요. `GET /api/v1/files/checkpoints` 계열은 snapshot 원문 content 없이 id, 생성 시각, entry 수, path metadata만 노출하고 `path`, `limit`, `offset`으로 특정 파일의 checkpoint history만 page처럼 좁히며, delete/prune endpoint와 `file_prune_checkpoints` tool로 오래된 file checkpoint를 정리해요.
-
-Skill preview의 `max_bytes`는 기본 65536 byte, 최대 1048576 byte로 제한해서 저장된 SKILL.md/README.md를 외부 adapter용 bounded preview로만 반환해요.
-
-Subagent preview의 `max_prompt_bytes`, prompt 원문/렌더링의 `max_text_bytes`, transcript의 `max_markdown_bytes`, git diff의 `max_bytes` 최대값은 `/capabilities.limits`에도 노출해서 외부 adapter가 preview 요청을 실행 전에 같은 byte envelope로 맞추게 해요.
-
-Run preview와 provider test의 `max_preview_bytes`/`max_result_bytes`도 최대 8388608 byte로 제한하고 `/capabilities.limits`에 노출해서 preflight/debug 호출이 대형 payload budget으로 gateway를 압박하지 않게 해요.
-
-CLI와 gateway run prompt는 공통 `app.MaxAgentPromptBytes` 262144 byte envelope를 써요. gateway는 `/capabilities.limits.max_run_prompt_bytes`로 노출하고, `kkode-agent`는 stdin prompt를 같은 크기 + 1 byte까지만 읽은 뒤 초과를 거부해서 pipe 입력이 unbounded memory read가 되지 않게 해요.
-
-Run 요청의 `max_output_tokens`는 최대 32768 token까지 허용하고 provider `llm.Request.MaxOutputTokens`로 전달하며 SQLite run record와 retry 요청에 보존해요. 완료된 run은 provider `llm.Response.Usage`를 `runs.usage_json`과 `RunDTO.usage`에 보존하고, `started_at`/`ended_at`에서 계산한 `duration_ms`를 `RunDTO`에 노출해서 run list/detail/event/export 응답만으로 adapter가 token dashboard, 비용 ledger, latency view를 만들 수 있어요. Provider live smoke의 `max_output_tokens`는 최대 8192 token, `timeout_ms`는 최대 300000ms로 제한하고 `/capabilities.limits`에 노출해서 provider debug 호출이 장시간 generation으로 runtime slot을 오래 점유하지 않게 해요.
-
-`GET /api/v1/stats`는 session provider/model/mode 분포를 `sessions_by_provider`, `sessions_by_model`, `sessions_by_mode`로 반환하고, session event type 분포를 `events_by_type`으로, todo 상태 분포를 `todos_by_status`로, artifact kind 분포를 `artifacts_by_kind`로 반환해요. Session event replay와 durable run/request event replay는 `type` query로, Todo 목록은 `status` query로 같은 bucket을 바로 조회할 수 있어요. artifact JSON content 저장량은 `artifact_bytes`와 `artifact_bytes_by_kind`로 반환해 durable output 저장 증가를 목록 scan 없이 볼 수 있어요. durable background replay 규모는 `run_events`로, replay type별 분포는 `run_events_by_type`으로 반환해요. Run row count는 status별 `runs`, provider별 `runs_by_provider`, model별 `runs_by_model`로 반환해요. 완료된 run timestamp에서 계산한 duration 합계/평균/최대/p95는 `run_duration`으로 반환하며 provider/model 기준 합계는 `run_duration_by_provider`, `run_duration_by_model`로 반환해요. `runs.usage_json`의 input/output/total/reasoning token 합계는 `run_usage`로 반환하며 provider/model 기준 합계는 `run_usage_by_provider`, `run_usage_by_model`로 반환해요. Resource manifest 규모는 kind별 `resources`와 enabled 상태별 `resources_by_enabled`로 반환해 inactive 실행 자산도 목록 scan 없이 볼 수 있어요. Dashboard adapter는 전체 run page를 스캔하지 않고 저장소 규모, run 상태 분포, durable replay 규모, resource 분포, latency, token 사용량을 한 응답에서 그릴 수 있어요.
-
-파일 content preview는 `offset_line`과 `limit_lines`로 범위를 줄이고, `workspace.ReadFileRange`는 더 이상 `max_bytes`를 받지 않아요. 실제 파일 길이는 `file_bytes`로 따로 계산하고, 응답에는 `content_bytes`와 `content_truncated`만 남겨요.
-
-Workspace write는 content를 그대로 쓰고, `ApplyPatch` 입력은 1048576 byte 이하로 제한하며, patch 결과 파일도 write envelope를 넘으면 적용 전에 거부해요.
-
-LSP format preview는 입력 Go 파일을 8388608 byte까지 허용하고, formatted content preview도 `max_bytes`/UTF-8 안전 경계로 잘라 외부 adapter의 format preview 요청이 큰 파일에 과도한 gofmt 비용을 쓰지 않게 해요.
-
-직접 tool 호출의 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte이고, `web_max_bytes`도 최대 8388608 byte로 제한해서 권한 프롬프트 없는 adapter tool 실행 응답이 bounded envelope를 유지하게 해요.
-
-`shell_run`과 legacy `workspace_run_command`의 `timeout_ms`는 workspace 계층에서 최대 300000ms로 제한해요. 같은 계층에서 stdout은 최대 8388608 byte, stderr는 최대 1048576 byte까지만 보존해서 agent/provider tool call이 direct tool API 출력 제한을 우회해 메모리를 과점하지 못하게 해요. 명령 실행 자체가 시작된 뒤에는 non-zero exit나 timeout도 tool transport 오류로 바꾸지 않고 `exit_code`, `stdout`, `stderr`, `duration_ms`, `timed_out`가 들어 있는 JSON `CommandResult`로 반환해요. 잘못된 `timeout_ms`나 executable lookup 실패처럼 실행 전 검증에 실패한 경우만 tool 오류로 처리해요.
-
-Provider live smoke의 `max_result_bytes`를 생략해도 결과 text와 streaming 누적 text는 8388608 byte envelope 안에서만 보존해요.
-
-OmniRoute A2A helper는 artifact content를 합칠 때 최대 8388608 byte envelope 안에서만 text를 보존해서 bounded HTTP body를 다시 unbounded provider text로 복제하지 않아요.
-
-Gateway artifact API는 큰 tool output, diff, generated preview를 session event payload와 분리해서 SQLite `artifacts` table에 저장해요. `session.ArtifactStore`는 `SaveArtifact`, `LoadArtifact`, `ListArtifacts`, `DeleteArtifact`를 노출하고, SQLite store는 `ArtifactPruneStore`로 session별 최신 N개 retention을 제공해요. gateway는 `GET/POST /api/v1/sessions/{session_id}/artifacts`, `POST /api/v1/sessions/{session_id}/artifacts/prune`, `GET/DELETE /api/v1/artifacts/{artifact_id}`로 session/run/turn scoped JSON content를 다뤄요. List 응답은 metadata와 `content_bytes`, `total_artifacts`를 반환하고, detail 응답은 `max_content_bytes`로 bounded placeholder를 반환해요. Direct `POST /api/v1/tools/call`도 `artifact_session_id`가 있고 output이 잘렸거나 `store_artifact=true`면 전체 tool output을 artifact로 승격해서 외부 adapter가 짧은 응답과 원본 조회 경로를 동시에 갖게 해요. Session export/import도 `artifacts`와 `artifact_limit`/`artifacts_truncated`를 포함해서 복구 bundle이 산출물을 잃지 않게 해요.
-
-`web_fetch` tool argument의 `max_bytes`는 `WebConfig.MaxBytes`로 정해진 configured envelope를 넘으면 거부해서 agent run과 direct tool call 모두 배포자가 정한 web body 상한을 우회하지 못하게 해요. body truncation은 UTF-8 안전 byte 경계를 보존해서 외부 adapter가 한글/이모지 web 응답을 깨진 문자열로 받지 않게 해요.
-
-MCP prompt/tool 직접 검증의 `max_message_bytes`와 `max_output_bytes`는 기본 1048576 byte, 최대 8388608 byte로 제한해서 저장된 stdio/http MCP 서버 응답도 bounded adapter envelope로 반환해요. HTTP MCP body reader도 명시 상한이 없으면 8388608 byte envelope를 기본으로 써요.
-
-stdio MCP frame의 `Content-Length`는 8388608 byte를 넘으면 본문 할당 전에 거부하고, stdio MCP stderr는 최대 1048576 byte까지만 오류 context에 보존해요.
 
 Run event replay와 request correlation event replay는 같은 incremental cursor 계약을 공유해요. JSON과 SSE 요청은 durable event를 읽기 전에 `after_seq`를 검증하고, adapter가 polling을 이어가야 하면 JSON 응답에 `next_after_seq`를 노출해요.
 
