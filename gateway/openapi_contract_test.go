@@ -42,6 +42,14 @@ func TestAPIIndexLinksExistInOpenAPI(t *testing.T) {
 	}
 }
 
+func TestAPIIndexExcludesProviderTestEndpoint(t *testing.T) {
+	for name, path := range APIIndexLinks() {
+		if strings.Contains(name, "provider_test") || strings.Contains(path, "/providers/{provider}/test") {
+			t.Fatalf("provider test endpoint is not part of the minimal gateway API: %s=%s", name, path)
+		}
+	}
+}
+
 func TestFeatureCatalogEndpointsExistInAPIIndexLinks(t *testing.T) {
 	linkMethods := apiIndexLinkMethods()
 	indexEndpoints := map[string]bool{}
@@ -313,9 +321,6 @@ func coreDTOSchemaCases() []dtoSchemaCase {
 		{schema: "RunRuntimeStats", dto: RunRuntimeStatsDTO{}},
 		{schema: "Limit", dto: LimitDTO{}},
 		{schema: "ProviderListResponse", dto: ProviderListResponse{}},
-		{schema: "ProviderTestRequest", dto: ProviderTestRequest{}},
-		{schema: "ProviderTestResponse", dto: ProviderTestResponse{}},
-		{schema: "ProviderTestResult", dto: ProviderTestResultDTO{}},
 		{schema: "Provider", dto: ProviderDTO{}},
 		{schema: "Conversion", dto: ConversionDTO{}},
 		{schema: "Route", dto: RouteDTO{}},

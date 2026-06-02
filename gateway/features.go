@@ -6,7 +6,7 @@ import "sort"
 func DefaultFeatureCatalog() []FeatureDTO {
 	return []FeatureDTO{
 		{Name: "operations", Status: "implemented", Description: "배포 health/readiness probe, API bootstrap discovery, OpenAPI 다운로드를 제공해요.", Endpoints: []string{"GET /healthz", "GET /readyz", "GET /api/v1", "GET /api/v1/openapi.yaml"}},
-		{Name: "providers", Status: "implemented", Description: "provider 목록, alias, model, auth, 변환 profile discovery와 provider 단독 preflight/test를 제공해요.", Endpoints: []string{"GET /api/v1/providers", "GET /api/v1/providers/{provider}", "POST /api/v1/providers/{provider}/test"}},
+		{Name: "providers", Status: "implemented", Description: "provider 목록, alias, model, auth, 변환 profile discovery를 제공해요.", Endpoints: []string{"GET /api/v1/providers", "GET /api/v1/providers/{provider}"}},
 		{Name: "models", Status: "implemented", Description: "외부 adapter가 provider별 모델 선택 UI를 만들 수 있게 model catalog를 제공해요.", Endpoints: []string{"GET /api/v1/models"}},
 		{Name: "sessions", Status: "implemented", Description: "session 생성, 목록, 상세를 제공해요.", Endpoints: []string{"GET /api/v1/sessions", "POST /api/v1/sessions", "GET /api/v1/sessions/{session_id}"}},
 		{Name: "background_runs", Status: "implemented", Description: "run을 즉시 접수하고 background 상태 조회, 취소, live SSE event, transcript, 재시도를 제공해요.", Endpoints: []string{"GET /api/v1/runs", "POST /api/v1/runs", "GET /api/v1/runs/{run_id}", "GET /api/v1/runs/{run_id}/events", "GET /api/v1/runs/{run_id}/transcript", "POST /api/v1/runs/{run_id}/cancel", "POST /api/v1/runs/{run_id}/retry"}},
@@ -57,7 +57,6 @@ func APIIndexLinks() map[string]string {
 		"openapi":         "/api/v1/openapi.yaml",
 		"providers":       "/api/v1/providers",
 		"provider_detail": "/api/v1/providers/{provider}",
-		"provider_test":   "/api/v1/providers/{provider}/test",
 		"models":          "/api/v1/models",
 		"sessions":        "/api/v1/sessions",
 		"session_create":  "/api/v1/sessions",
@@ -93,7 +92,6 @@ func APIIndexOperations() []APIIndexOperationDTO {
 
 func apiIndexLinkMethods() map[string]string {
 	return map[string]string{
-		"provider_test":  "POST",
 		"session_create": "POST",
 		"run_start":      "POST",
 		"run_retry":      "POST",
