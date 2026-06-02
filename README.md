@@ -255,7 +255,7 @@ erDiagram
 ### Gateway API: `gateway/`
 
 - `gateway.Server`는 `net/http` 기반 API server예요. 외부 의존성 없이 `/api/v1` REST surface를 만들어요. 스트리밍 코딩 에이전트를 위한 핵심 API만 유지하고 있어요.
-- `GET /healthz`, `GET /readyz`, `GET /api/v1`을 제공해요.
+- `GET /healthz`, `GET /readyz`, `GET /api/v1`, `GET /api/v1/openapi.yaml`을 제공해요.
 - **Providers**: `GET /api/v1/providers`, `GET /api/v1/providers/{provider}`, `POST /api/v1/providers/{provider}/test`는 provider alias, 모델 catalog, 기본 모델, capability, auth 상태를 제공해요. provider test는 기본적으로 live 호출 없이 변환 preview만 반환하고 `live=true`일 때만 실제 provider smoke를 실행해요.
 - **Models**: `GET /api/v1/models`은 provider별 모델 catalog를 반환해요.
 - **Sessions**: `POST /api/v1/sessions`, `GET /api/v1/sessions`, `GET /api/v1/sessions/{id}`는 session 생성, 목록, 조회예요. session 목록은 `project_root`, `provider`, `model`, `mode`, `limit`, `offset`으로 필터링할 수 있어요.
@@ -402,7 +402,7 @@ curl 'http://127.0.0.1:41234/api/v1/runs/run_.../events?after_seq=0&limit=200'
 curl -N 'http://127.0.0.1:41234/api/v1/runs/run_.../events?stream=true&after_seq=0'
 ```
 
-OpenAPI 계약은 `gateway/openapi.yaml`을 참고해요. `go test ./gateway`에는 feature catalog endpoint가 OpenAPI paths와 `/api/v1` bootstrap operations에 계속 존재하는지 확인하는 계약 테스트도 들어 있어요.
+OpenAPI 계약은 `gateway/openapi.yaml`에 있고 gateway 실행 중에는 `GET /api/v1/openapi.yaml`로 받을 수 있어요. `go test ./gateway`에는 feature catalog endpoint가 OpenAPI paths와 `/api/v1` bootstrap operations에 계속 존재하는지 확인하는 계약 테스트도 들어 있어요.
 
 ## 빠른 검증
 

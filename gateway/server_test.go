@@ -411,6 +411,25 @@ func TestGatewaySecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestOpenAPIYAML_whenRequestedThroughGateway(t *testing.T) {
+	store := openTestStore(t)
+	srv := newTestServer(t, store, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "application/yaml; charset=utf-8" {
+		t.Fatalf("content type = %q", contentType)
+	}
+	if !strings.Contains(rec.Body.String(), "openapi: 3.0.3") {
+		t.Fatalf("openapi yaml response does not contain spec header: %s", rec.Body.String())
+	}
+}
+
 func TestGatewayRequestIDHeaderAndErrorEnvelope(t *testing.T) {
 	store := openTestStore(t)
 	srv, err := New(Config{Store: store, Version: "test", RequestIDGenerator: func() string { return "req_test" }})
@@ -1734,4 +1753,3 @@ func exportSessionForTest(t *testing.T, store *session.SQLiteStore, sessionID st
 	}
 	return exported
 }
-

@@ -5,7 +5,7 @@ import "sort"
 // DefaultFeatureCatalog는 외부 adapter가 사용할 수 있는 gateway 기능 표면을 알려줘요.
 func DefaultFeatureCatalog() []FeatureDTO {
 	return []FeatureDTO{
-		{Name: "operations", Status: "implemented", Description: "배포 health/readiness probe와 API bootstrap discovery를 제공해요.", Endpoints: []string{"GET /healthz", "GET /readyz", "GET /api/v1"}},
+		{Name: "operations", Status: "implemented", Description: "배포 health/readiness probe, API bootstrap discovery, OpenAPI 다운로드를 제공해요.", Endpoints: []string{"GET /healthz", "GET /readyz", "GET /api/v1", "GET /api/v1/openapi.yaml"}},
 		{Name: "providers", Status: "implemented", Description: "provider 목록, alias, model, auth, 변환 profile discovery와 provider 단독 preflight/test를 제공해요.", Endpoints: []string{"GET /api/v1/providers", "GET /api/v1/providers/{provider}", "POST /api/v1/providers/{provider}/test"}},
 		{Name: "models", Status: "implemented", Description: "외부 adapter가 provider별 모델 선택 UI를 만들 수 있게 model catalog를 제공해요.", Endpoints: []string{"GET /api/v1/models"}},
 		{Name: "sessions", Status: "implemented", Description: "session 생성, 목록, 상세를 제공해요.", Endpoints: []string{"GET /api/v1/sessions", "POST /api/v1/sessions", "GET /api/v1/sessions/{session_id}"}},
@@ -54,6 +54,7 @@ func APIIndexLinks() map[string]string {
 		"health":          "/healthz",
 		"ready":           "/readyz",
 		"api_index":       "/api/v1",
+		"openapi":         "/api/v1/openapi.yaml",
 		"providers":       "/api/v1/providers",
 		"provider_detail": "/api/v1/providers/{provider}",
 		"provider_test":   "/api/v1/providers/{provider}/test",
@@ -92,7 +93,7 @@ func APIIndexOperations() []APIIndexOperationDTO {
 
 func apiIndexLinkMethods() map[string]string {
 	return map[string]string{
-		"provider_test": "POST",
+		"provider_test":  "POST",
 		"session_create": "POST",
 		"run_start":      "POST",
 		"run_retry":      "POST",
