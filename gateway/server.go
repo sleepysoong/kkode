@@ -25,9 +25,6 @@ type RunPreviewer func(ctx context.Context, req RunStartRequest) (*RunPreviewRes
 // RunValidator는 background queue에 넣기 전에 빠른 실행 전 검증을 수행해요.
 type RunValidator func(ctx context.Context, req RunStartRequest) error
 
-// ProviderTester는 provider 단독 preflight/preview/선택적 live smoke를 실행해요.
-type ProviderTester func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error)
-
 // RunRuntimeStatsGetter는 diagnostics가 process-local run queue 상태를 읽는 경계예요.
 type RunRuntimeStatsGetter func() RunRuntimeStats
 
@@ -56,7 +53,6 @@ type Config struct {
 	RunStarter           RunStarter
 	RunPreviewer         RunPreviewer
 	RunValidator         RunValidator
-	ProviderTester       ProviderTester
 	RunRuntimeStats      RunRuntimeStatsGetter
 	RunGetter            RunGetter
 	RunLister            RunLister
@@ -198,18 +194,6 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts []string) {
-	if len(parts) == 3 && parts[2] == "test" {
-		if r.Method != http.MethodPost {
-			writeMethodNotAllowed(w, r, "provider test는 POST만 지원해요", http.MethodPost)
-			return
-		}
-		if err := validateProviderNameText(parts[1]); err != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid_provider", err.Error())
-			return
-		}
-		s.testProvider(w, r, parts[1])
-		return
-	}
 	if len(parts) == 2 {
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w, r, "provider 상세는 GET만 지원해요", http.MethodGet)
@@ -246,57 +230,6 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request, parts [
 	}
 	page, returned, truncated := pageSlice(providers, limit, offset)
 	writeJSON(w, ProviderListResponse{Providers: page, TotalProviders: len(providers), Limit: limit, Offset: offset, NextOffset: nextOffset(offset, returned, truncated), ResultTruncated: truncated})
-}
-
-func (s *Server) testProvider(w http.ResponseWriter, r *http.Request, providerName string) {
-	if _, ok := findProvider(s.cfg.Providers, providerName); !ok {
-		writeError(w, r, http.StatusNotFound, "provider_not_found", "provider를 찾을 수 없어요")
-		return
-	}
-	if s.cfg.ProviderTester == nil {
-		writeError(w, r, http.StatusNotImplemented, "provider_tester_missing", "이 gateway에는 ProviderTester가 연결되지 않았어요")
-		return
-	}
-	var req ProviderTestRequest
-	if _, err := decodeOptionalJSON(r, &req); err != nil {
-		writeJSONDecodeError(w, r, err)
-		return
-	}
-	req.Model = strings.TrimSpace(req.Model)
-	req.Metadata = sanitizeRunMetadata(req.Metadata)
-	if err := validateProviderTestRequest(req); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid_provider_test", err.Error())
-		return
-	}
-	resp, err := s.cfg.ProviderTester(r.Context(), providerName, req)
-	if err != nil {
-		writeError(w, r, http.StatusBadRequest, "provider_test_failed", err.Error())
-		return
-	}
-	writeJSON(w, resp)
-}
-
-func validateProviderTestRequest(req ProviderTestRequest) error {
-	switch {
-	case req.MaxPreviewBytes < 0:
-		return errors.New("max_preview_bytes는 0 이상이어야 해요")
-	case req.MaxPreviewBytes > MaxProviderTestPreviewBytes:
-		return fmt.Errorf("max_preview_bytes는 %d 이하여야 해요", MaxProviderTestPreviewBytes)
-	case req.MaxOutputTokens < 0:
-		return errors.New("max_output_tokens는 0 이상이어야 해요")
-	case req.MaxOutputTokens > MaxProviderTestOutputTokens:
-		return fmt.Errorf("max_output_tokens는 %d 이하여야 해요", MaxProviderTestOutputTokens)
-	case req.MaxResultBytes < 0:
-		return errors.New("max_result_bytes는 0 이상이어야 해요")
-	case req.MaxResultBytes > MaxProviderTestResultBytes:
-		return fmt.Errorf("max_result_bytes는 %d 이하여야 해요", MaxProviderTestResultBytes)
-	case req.TimeoutMS < 0:
-		return errors.New("timeout_ms는 0 이상이어야 해요")
-	case req.TimeoutMS > MaxProviderTestTimeoutMS:
-		return fmt.Errorf("timeout_ms는 %d 이하여야 해요", MaxProviderTestTimeoutMS)
-	default:
-		return validateRunMetadata(req.Metadata)
-	}
 }
 
 func validateProviderNameText(value string) error {
@@ -415,9 +348,6 @@ func (s *Server) missingRuntimeWiring() []string {
 	}
 	if s.cfg.RunValidator == nil {
 		missing = append(missing, "run_validator")
-	}
-	if s.cfg.ProviderTester == nil {
-		missing = append(missing, "provider_tester")
 	}
 	if s.cfg.RunGetter == nil {
 		missing = append(missing, "run_getter")
@@ -578,13 +508,6 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request, sessionID st
 		return
 	}
 	writeJSON(w, toSessionDTO(sess))
-}
-
-func validateTurnIDText(id string) error {
-	if id == "" {
-		return fmt.Errorf("turn_id가 필요해요")
-	}
-	return validateOptionalIDFilter("turn_id", id, maxRunIDBytes)
 }
 
 func validateRunIDText(id string) error {
@@ -1116,30 +1039,6 @@ func trimCheckpoints(checkpoints []session.Checkpoint, limit int) ([]session.Che
 	return checkpoints, len(checkpoints), truncated
 }
 
-func trimTurns(turns []TurnDTO, limit int) ([]TurnDTO, bool, int) {
-	truncated := len(turns) > limit
-	if truncated {
-		turns = turns[:limit]
-	}
-	next := 0
-	if truncated && len(turns) > 0 {
-		next = turns[len(turns)-1].Seq
-	}
-	return turns, truncated, next
-}
-
-func trimSessionEvents(events []EventDTO, limit int) ([]EventDTO, bool, int) {
-	truncated := len(events) > limit
-	if truncated {
-		events = events[:limit]
-	}
-	next := 0
-	if truncated && len(events) > 0 {
-		next = events[len(events)-1].Seq
-	}
-	return events, truncated, next
-}
-
 func trimRunEvents(events []RunEventDTO, limit int) ([]RunEventDTO, bool, int) {
 	truncated := len(events) > limit
 	if truncated {
@@ -1327,28 +1226,6 @@ func decodeJSON(r *http.Request, out any) error {
 		return err
 	}
 	return nil
-}
-
-func decodeOptionalJSON(r *http.Request, out any) (bool, error) {
-	if r.Body == nil {
-		return false, nil
-	}
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(out); err != nil {
-		if err == io.EOF {
-			return false, nil
-		}
-		return false, err
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		if err == nil {
-			return true, errors.New("JSON body에는 하나의 값만 있어야 해요")
-		}
-		return true, err
-	}
-	return true, nil
 }
 
 func splitPath(path string) []string {

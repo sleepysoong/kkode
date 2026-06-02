@@ -5,14 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -138,7 +134,7 @@ func TestGatewayReadyRejectsMissingRuntimeWiring(t *testing.T) {
 		name, _ := item.(string)
 		missing[name] = true
 	}
-	if !missing["run_starter"] || !missing["run_previewer"] || !missing["run_validator"] || !missing["provider_tester"] || !missing["run_getter"] || !missing["run_lister"] || !missing["run_canceler"] || !missing["run_event_lister"] || !missing["run_subscriber"] || !missing["run_event_subscriber"] {
+	if !missing["run_starter"] || !missing["run_previewer"] || !missing["run_validator"] || !missing["run_getter"] || !missing["run_lister"] || !missing["run_canceler"] || !missing["run_event_lister"] || !missing["run_subscriber"] || !missing["run_event_subscriber"] {
 		t.Fatalf("ready 오류 details가 이상해요: %+v", envelope.Error.Details)
 	}
 }
@@ -879,9 +875,6 @@ func newReadyTestServer(t *testing.T, store session.Store) *Server {
 		RunValidator: func(ctx context.Context, req RunStartRequest) error {
 			return nil
 		},
-		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
-			return &ProviderTestResponse{OK: true, Provider: provider}, nil
-		},
 		RunGetter: func(ctx context.Context, runID string) (*RunDTO, error) {
 			return &RunDTO{ID: runID}, nil
 		},
@@ -1144,92 +1137,11 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 		t.Fatalf("긴 provider detail name은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	var testedProvider string
-	var testedProviderReq ProviderTestRequest
-	srv, err = New(Config{
-		Store:     store,
-		Providers: []ProviderDTO{{Name: "openai", Aliases: []string{"openai-compatible"}}},
-		ProviderTester: func(ctx context.Context, provider string, req ProviderTestRequest) (*ProviderTestResponse, error) {
-			testedProvider = provider
-			testedProviderReq = req
-			return &ProviderTestResponse{OK: true, Provider: "openai", Model: req.Model, Message: "ok", ProviderRequest: &ProviderRequestPreviewDTO{Provider: "openai", Operation: "responses.create"}}, nil
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":" gpt-5-mini ","prompt":"ping","metadata":{" trace-id ":" abc ","empty":" "}}`))
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("provider test status = %d body = %s", rec.Code, rec.Body.String())
-	}
-	var testResp ProviderTestResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &testResp); err != nil {
-		t.Fatal(err)
-	}
-	if testedProvider != "openai-compatible" || !testResp.OK || testResp.Model != "gpt-5-mini" || testResp.ProviderRequest == nil || testResp.ProviderRequest.Operation != "responses.create" {
-		t.Fatalf("provider test 응답이 이상해요: provider=%s resp=%+v", testedProvider, testResp)
-	}
-	if testedProviderReq.Metadata["trace-id"] != "abc" || testedProviderReq.Metadata[" trace-id "] != "" || testedProviderReq.Metadata["empty"] != "" {
-		t.Fatalf("provider test metadata 정규화가 필요해요: %+v", testedProviderReq.Metadata)
-	}
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/"+strings.Repeat("x", maxRunProviderModelBytes+1)+"/test", strings.NewReader(`{}`))
-	rec = httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "provider") {
-		t.Fatalf("긴 provider test name은 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(`{"model":"gpt-5-mini","unknown":true}`))
-	rec = httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("provider test unknown field는 400이어야 해요: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	var errBody ErrorEnvelope
-	if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
-		t.Fatal(err)
-	}
-	if errBody.Error.Code != "invalid_json" {
-		t.Fatalf("provider test JSON 오류는 표준 invalid_json이어야 해요: %+v", errBody)
-	}
-
-	invalidProviderTests := []struct {
-		name  string
-		body  string
-		field string
-	}{
-		{name: "max preview bytes", body: `{"max_preview_bytes":-1}`, field: "max_preview_bytes"},
-		{name: "large max preview bytes", body: `{"max_preview_bytes":` + strconv.Itoa(MaxProviderTestPreviewBytes+1) + `}`, field: "max_preview_bytes"},
-		{name: "max output tokens", body: `{"max_output_tokens":-1}`, field: "max_output_tokens"},
-		{name: "large max output tokens", body: `{"max_output_tokens":` + strconv.Itoa(MaxProviderTestOutputTokens+1) + `}`, field: "max_output_tokens"},
-		{name: "max result bytes", body: `{"max_result_bytes":-1}`, field: "max_result_bytes"},
-		{name: "large max result bytes", body: `{"max_result_bytes":` + strconv.Itoa(MaxProviderTestResultBytes+1) + `}`, field: "max_result_bytes"},
-		{name: "timeout", body: `{"timeout_ms":-1}`, field: "timeout_ms"},
-		{name: "large timeout", body: `{"timeout_ms":` + strconv.Itoa(MaxProviderTestTimeoutMS+1) + `}`, field: "timeout_ms"},
-		{name: "metadata", body: `{"metadata":{"bad key":"value"}}`, field: "metadata"},
-	}
-	for _, tc := range invalidProviderTests {
-		req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(tc.body))
-		rec = httptest.NewRecorder()
-		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("provider test %s invalid request는 400이어야 해요: status=%d body=%s", tc.name, rec.Code, rec.Body.String())
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
-			t.Fatal(err)
-		}
-		if errBody.Error.Code != "invalid_provider_test" || !strings.Contains(errBody.Error.Message, tc.field) {
-			t.Fatalf("provider test %s 오류가 이상해요: %+v", tc.name, errBody)
-		}
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/providers/openai-compatible/test", strings.NewReader(``))
-	rec = httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("provider test 빈 body는 기본 요청으로 처리해야 해요: status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("provider test endpoint는 공개 API에서 제거돼야 해요: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/providers/missing", nil)
@@ -1237,16 +1149,6 @@ func TestGatewayModelsDiscovery(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("없는 provider는 404여야 해요: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-}
-
-func writeTestFile(t *testing.T, path string, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -1651,105 +1553,4 @@ func TestBoundedBufferPreservesUTF8(t *testing.T) {
 	}
 }
 
-func runTestGit(t *testing.T, root string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v failed: %v\n%s", args, err, out)
-	}
-}
 
-func hasGitPath(entries []GitStatusEntryDTO, path string) bool {
-	for _, entry := range entries {
-		if entry.Path == path {
-			return true
-		}
-	}
-	return false
-}
-
-func hasTool(tools []ToolDTO, name string) bool {
-	return findTool(tools, name).Name != ""
-}
-
-func findTool(tools []ToolDTO, name string) ToolDTO {
-	for _, tool := range tools {
-		if tool.Name == name {
-			return tool
-		}
-	}
-	return ToolDTO{}
-}
-
-func checkpointIDFromToolOutput(t *testing.T, output string) string {
-	t.Helper()
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "checkpoint_id:") {
-			id := strings.TrimSpace(strings.TrimPrefix(line, "checkpoint_id:"))
-			if id != "" {
-				return id
-			}
-		}
-	}
-	t.Fatalf("tool output did not include checkpoint_id: %q", output)
-	return ""
-}
-
-func hasResourceDTO(resources []ResourceDTO, id string) bool {
-	for _, resource := range resources {
-		if resource.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-func quotedStringList(prefix string, count int) string {
-	items := make([]string, 0, count)
-	for i := 0; i < count; i++ {
-		items = append(items, fmt.Sprintf("%q", fmt.Sprintf("%s_%d", prefix, i)))
-	}
-	return strings.Join(items, ",")
-}
-
-func quotedStringMap(keyPrefix string, value string, count int) string {
-	items := make([]string, 0, count)
-	for i := 0; i < count; i++ {
-		items = append(items, fmt.Sprintf("%q:%q", fmt.Sprintf("%s%d", keyPrefix, i), value))
-	}
-	return strings.Join(items, ",")
-}
-
-func exportSessionForTest(t *testing.T, store *session.SQLiteStore, sessionID string) SessionExportResponse {
-	t.Helper()
-	srv, err := New(Config{
-		Store: store,
-		RunLister: func(ctx context.Context, q RunQuery) ([]RunDTO, error) {
-			runs, err := store.ListRuns(ctx, session.RunQuery{SessionID: q.SessionID, Limit: q.Limit})
-			if err != nil {
-				return nil, err
-			}
-			out := make([]RunDTO, 0, len(runs))
-			for _, run := range runs {
-				out = append(out, *runDTOFromSession(run))
-			}
-			return out, nil
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID+"/export", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
-	}
-	var exported SessionExportResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &exported); err != nil {
-		t.Fatal(err)
-	}
-	return exported
-}
